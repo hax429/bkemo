@@ -30,6 +30,10 @@ out/
 .next/
 .tauri
 
+# Source-deployment artifacts (see DEPLOYMENT.md)
+.blinko
+server/public
+
 # IDEs and editors
 .vscode/
 !.vscode/extensions.json
