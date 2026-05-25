@@ -1,0 +1,126 @@
+name: Blinko
+options:
+  bundleIdPrefix: me.hax429.blinko
+  deploymentTarget:
+    iOS: 14.0
+fileGroups: [../../src]
+configs:
+  debug: debug
+  release: release
+settingGroups:
+  app:
+    base:
+      PRODUCT_NAME: Blinko
+      PRODUCT_BUNDLE_IDENTIFIER: me.hax429.blinko
+targetTemplates:
+  app:
+    type: application
+    sources:
+      - path: Sources
+    scheme:
+      environmentVariables:
+        RUST_BACKTRACE: full
+        RUST_LOG: info
+    settings:
+      groups: [app]
+targets:
+  Blinko_iOS:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+      - path: Assets.xcassets
+      - path: Externals
+      - path: Blinko_iOS
+      - path: assets
+        buildPhase: resources
+        type: folder
+      - path: LaunchScreen.storyboard
+    info:
+      path: Blinko_iOS/Info.plist
+      properties:
+        LSRequiresIPhoneOS: true
+        UILaunchStoryboardName: LaunchScreen
+        UIRequiredDeviceCapabilities: [arm64, metal]
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        CFBundleShortVersionString: 1.8.7
+        CFBundleVersion: "1.8.7"
+        NSCameraUsageDescription: Blinko uses the camera to attach photos to notes
+        NSMicrophoneUsageDescription: Blinko uses the microphone for voice note recording
+        NSPhotoLibraryUsageDescription: Blinko accesses your photo library to attach images to notes
+        NSPhotoLibraryAddUsageDescription: Blinko saves images to your photo library
+    entitlements:
+      path: Blinko_iOS/Blinko_iOS.entitlements
+    scheme:
+      environmentVariables:
+        RUST_BACKTRACE: full
+        RUST_LOG: info
+    settings:
+      base:
+        ENABLE_BITCODE: false
+        ARCHS: [arm64]
+        VALID_ARCHS: arm64 
+        LIBRARY_SEARCH_PATHS[arch=x86_64]: $(inherited) $(PROJECT_DIR)/Externals/x86_64/$(CONFIGURATION) $(SDKROOT)/usr/lib/swift $(TOOLCHAIN_DIR)/usr/lib/swift/$(PLATFORM_NAME) $(TOOLCHAIN_DIR)/usr/lib/swift-5.0/$(PLATFORM_NAME)
+        LIBRARY_SEARCH_PATHS[arch=arm64]: $(inherited) $(PROJECT_DIR)/Externals/arm64/$(CONFIGURATION) $(SDKROOT)/usr/lib/swift $(TOOLCHAIN_DIR)/usr/lib/swift/$(PLATFORM_NAME) $(TOOLCHAIN_DIR)/usr/lib/swift-5.0/$(PLATFORM_NAME)
+        ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES: true
+        EXCLUDED_ARCHS[sdk=iphoneos*]: x86_64
+      groups: [app]
+    dependencies:
+      - framework: libapp.a
+        embed: false
+      - sdk: CoreGraphics.framework
+      - sdk: Metal.framework
+      - sdk: MetalKit.framework
+      - sdk: QuartzCore.framework
+      - sdk: Security.framework
+      - sdk: UIKit.framework
+      - sdk: WebKit.framework
+    preBuildScripts:
+      - script: |
+          exec >> /tmp/blinko-xcode-build.log 2>&1
+          echo "=== BUILD START $(date) CONFIGURATION=${CONFIGURATION} ==="
+          export PATH="/Users/hax429/.bun/bin:/Users/hax429/.cargo/bin:$PATH"
+          . "$HOME/.cargo/env" 2>/dev/null || true
+
+          ADDR_FILE="/tmp/me.hax429.blinko-server-addr"
+          LIB_OUT="$SRCROOT/Externals/arm64/$CONFIGURATION/libapp.a"
+
+          if [ -f "$ADDR_FILE" ]; then
+            echo "Coordination server found — running tauri ios xcode-script"
+            cd /Users/hax429/Developer/blinko/app
+            bun /Users/hax429/Developer/blinko/node_modules/.bin/tauri ios xcode-script -v --platform ${PLATFORM_DISPLAY_NAME:?} --sdk-root ${SDKROOT:?} --framework-search-paths "${FRAMEWORK_SEARCH_PATHS:?}" --header-search-paths "${HEADER_SEARCH_PATHS:?}" --gcc-preprocessor-definitions "${GCC_PREPROCESSOR_DEFINITIONS:-}" --configuration ${CONFIGURATION:?} ${FORCE_COLOR} ${ARCHS:?}
+            echo "=== BUILD END (tauri) exit=$? ==="
+          else
+            echo "No coordination server — using pre-built library"
+            if [ ! -f "$LIB_OUT" ]; then
+              echo "ERROR: $LIB_OUT not found. Run: cargo build --target aarch64-apple-ios --release in app/src-tauri, then copy libapp_lib.a to Externals/arm64/release/libapp.a"
+              exit 1
+            fi
+            echo "Found pre-built $LIB_OUT"
+            if [ "$CONFIGURATION" = "release" ]; then
+              ASSETS_SRC="/Users/hax429/Developer/blinko/dist/public"
+              ASSETS_DST="$SRCROOT/assets"
+              if [ -d "$ASSETS_SRC" ]; then
+                echo "Copying frontend assets from $ASSETS_SRC to $ASSETS_DST"
+                rm -rf "$ASSETS_DST"
+                mkdir -p "$ASSETS_DST"
+                cp -r "$ASSETS_SRC/." "$ASSETS_DST/"
+              else
+                echo "WARNING: Frontend dist not found at $ASSETS_SRC"
+              fi
+            fi
+            echo "=== BUILD END (pre-built) exit=0 ==="
+          fi
+        name: Build Rust Code
+        basedOnDependencyAnalysis: false
+        outputFiles:
+          - $(SRCROOT)/Externals/x86_64/${CONFIGURATION}/libapp.a
+          - $(SRCROOT)/Externals/arm64/${CONFIGURATION}/libapp.a

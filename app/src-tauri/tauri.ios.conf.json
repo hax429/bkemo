@@ -1,0 +1,22 @@
+{
+    "build": {
+      "beforeDevCommand": "bun run dev:vite",
+      "devUrl": "https://bk.hax429.me"
+    },
+    "app": {
+      "windows": [
+        {
+          "title": "Blinko",
+          "fullscreen": true,
+          "focus": true,
+          "resizable": false
+        }
+      ]
+    },
+    "bundle": {
+      "iOS": {
+        "minimumSystemVersion": "14.0",
+        "developmentTeam": "5L7AP54366"
+      }
+    }
+  }

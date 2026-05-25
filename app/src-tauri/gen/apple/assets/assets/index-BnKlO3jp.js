@@ -1,0 +1,1 @@
+import{r as o,j as r}from"./react-vendor-BrzjgqFa.js";import{o as e}from"./index-BIa7lT2R.js";import s from"./hub-8hMyxzlq.js";import"./ui-components-BinG6wnG.js";import"./utils-CbF7ws5K.js";const i=e(()=>(o.useEffect(()=>{},[]),r.jsx("div",{className:"flex flex-col h-[100vh] w-full bg-secondbackground",children:r.jsx(s,{})})));export{i as default};
