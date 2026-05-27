@@ -93,27 +93,83 @@ export const BlinkoEditor = observer(({ mode, onSended, onHeightChange, isInDial
 
   useEffect(() => {
     blinko.isCreateMode = mode == 'create'
+
     if (mode == 'create') {
-      if (isInDialog) {
-        document.documentElement.style.setProperty('--min-editor-height', `50vh`)
-      }
       const local = blinko.createContentStorage.value
       if (local && local.content != '') {
         blinko.noteContent = local.content
       }
     } else {
-      document.documentElement.style.setProperty('--min-editor-height', `unset`)
       try {
-        if (!blinko.curSelectedNote) return;
-        const local = blinko.editContentStorage.list?.find(i => Number(i.id) == Number(blinko.curSelectedNote!.id))
-        if (local && local?.content != '') {
-          blinko.curSelectedNote.content = local.content
+        if (blinko.curSelectedNote) {
+          const local = blinko.editContentStorage.list?.find(i => Number(i.id) == Number(blinko.curSelectedNote!.id))
+          if (local && local?.content != '') {
+            blinko.curSelectedNote.content = local.content
+          }
         }
       } catch (error) {
         console.error(error)
       }
     }
   }, [mode])
+
+  // Sizing strategy for --min-editor-height:
+  //   - Mobile dialog (create or edit): size dynamically to visualViewport so the
+  //     sheet always fits with both vditor toolbar and bottom send row visible,
+  //     keyboard open or closed.
+  //   - Desktop dialog (create only): pin to 50vh.
+  //   - Otherwise (fullscreen, inline, edit-on-desktop): keep fluid (unset).
+  useEffect(() => {
+    const isMobile = typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches;
+
+    if (isInDialog && isMobile) {
+      // Measure the iOS safe-area-top so we know how much of the visualViewport is
+      // occupied by the status bar / notch. visualViewport.height ignores that on
+      // viewport-fit=cover layouts, so without subtracting it the sheet ends up
+      // taller than the *useful* visible area and the top of the sheet gets pushed
+      // off-screen.
+      const probe = document.createElement('div');
+      probe.style.cssText = 'position:fixed;visibility:hidden;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom);';
+      document.body.appendChild(probe);
+      const probeStyles = window.getComputedStyle(probe);
+      const safeTop = parseFloat(probeStyles.paddingTop) || 0;
+      const safeBottom = parseFloat(probeStyles.paddingBottom) || 0;
+      document.body.removeChild(probe);
+
+      const updateHeight = () => {
+        const vv = window.visualViewport;
+        const visible = vv ? vv.height : window.innerHeight;
+        // Overhead components, in pixels:
+        //   safeTop           — status bar / notch (~47-59px on iPhones with notch)
+        //   safeBottom        — home indicator (when present, not absorbed by keyboard)
+        //   sheet header      — 56
+        //   card padding y    — 16
+        //   vditor toolbar    — 44
+        //   bottom action row — 56
+        //   safety margin     — 16
+        const keyboardOpen = vv ? window.innerHeight - vv.height - vv.offsetTop > 10 : false;
+        const overhead = safeTop + (keyboardOpen ? 0 : safeBottom) + 56 + 16 + 44 + 56 + 16;
+        const editorHeight = Math.max(120, Math.round(visible - overhead));
+        document.documentElement.style.setProperty('--min-editor-height', `${editorHeight}px`);
+        document.documentElement.style.setProperty('--max-editor-height', `${editorHeight}px`);
+      };
+      updateHeight();
+      window.visualViewport?.addEventListener('resize', updateHeight);
+      window.visualViewport?.addEventListener('scroll', updateHeight);
+      return () => {
+        window.visualViewport?.removeEventListener('resize', updateHeight);
+        window.visualViewport?.removeEventListener('scroll', updateHeight);
+        document.documentElement.style.removeProperty('--max-editor-height');
+      };
+    }
+
+    document.documentElement.style.removeProperty('--max-editor-height');
+    if (isInDialog && mode === 'create') {
+      document.documentElement.style.setProperty('--min-editor-height', `50vh`)
+    } else {
+      document.documentElement.style.setProperty('--min-editor-height', `unset`)
+    }
+  }, [mode, isInDialog])
 
   // Use Tauri hotkey hook
 

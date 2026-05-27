@@ -415,15 +415,14 @@ export class EditorStore {
 
   isShowEditorToolbar(isPc: boolean) {
     const blinko = RootStore.Get(BlinkoStore)
-    let showToolbar = true
-    if (blinko.config.value?.toolbarVisibility) {
-      showToolbar = blinko.config.value?.toolbarVisibility == 'always-show-toolbar' ? true : (
-        blinko.config.value?.toolbarVisibility == 'hide-toolbar-on-mobile' ?
-          (isPc ? true : false)
-          : false
-      )
-    }
-    return showToolbar
+    const vis = blinko.config.value?.toolbarVisibility;
+    // 'always-hide-toolbar' is the only setting that actually hides on mobile.
+    // 'hide-toolbar-on-mobile' is intentionally a no-op here: hiding the markdown
+    // toolbar on mobile makes the editor unusable (no way to format text or insert
+    // links/lists), so we always show it. Users who really want it gone can pick
+    // 'always-hide-toolbar' in Preferences.
+    if (vis === 'always-hide-toolbar') return false;
+    return true;
   }
 
   adjustMobileEditorHeight = () => {

@@ -14,6 +14,14 @@ edition = "2021"
 name = "app_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+[features]
+# Tauri's custom URL scheme handler (tauri://localhost) for production builds.
+# Without this feature active at compile time, tauri-build/build.rs sets cfg(dev) and the
+# runtime loads `devUrl` (https://bk.hax429.me) instead of `frontendDist`. `tauri build`
+# enables this automatically; bare `cargo build --release` does NOT — must be passed via
+# `--features custom-protocol`. Removing this re-introduces the dev-mode-in-release bug.
+custom-protocol = ["tauri/custom-protocol"]
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 

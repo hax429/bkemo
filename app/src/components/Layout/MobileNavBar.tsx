@@ -5,7 +5,6 @@ import { BaseStore } from "@/store/baseStore";
 import { BlinkoStore } from "@/store/blinkoStore";
 import { getFixedHeaderBackground, SideBarItem } from "./index";
 import { useTranslation } from "react-i18next";
-import { useSwiper } from "@/lib/hooks";
 import { motion } from "framer-motion";
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 
@@ -17,7 +16,6 @@ export const MobileNavBar = observer(({ onItemClick }: MobileNavBarProps) => {
   const base = RootStore.Get(BaseStore);
   const { t } = useTranslation();
   const blinkoStore = RootStore.Get(BlinkoStore);
-  const isVisible = useSwiper();
   const location = useLocation();
   const [searchParams] = useSearchParams();
 
@@ -36,19 +34,13 @@ export const MobileNavBar = observer(({ onItemClick }: MobileNavBarProps) => {
 
   return (
     <motion.div
-      className="blinko-bottom-bar h-[60px] flex w-full px-3 py-2 gap-1 bg-background block md:hidden overflow-hidden fixed bottom-0 z-50"
-      animate={{ y: isVisible ? 0 : 100 }}
-      transition={{
-        type: "spring",
-        damping: 25,
-        stiffness: 300,
-        mass: 0.8,
-        bounce: 0.3
-      }}
+      className="blinko-bottom-bar flex w-full px-3 pt-2 gap-1 bg-background block md:hidden overflow-hidden fixed bottom-0 z-50"
       style={{
         background: getFixedHeaderBackground(),
         backdropFilter: 'blur(20px)',
-        WebkitBackdropFilter: 'blur(20px)'
+        WebkitBackdropFilter: 'blur(20px)',
+        height: 'calc(60px + env(safe-area-inset-bottom))',
+        paddingBottom: 'calc(8px + env(safe-area-inset-bottom))'
       }}
     >
       {mobileItems.map((i, index) => (

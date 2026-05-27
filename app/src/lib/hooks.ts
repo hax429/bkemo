@@ -39,6 +39,33 @@ export const useConfigSetting = (configKey: keyof BlinkoStore['config']['value']
 };
 
 
+/**
+ * Tracks the on-screen keyboard height via the visualViewport API.
+ * On iOS WKWebView `position: fixed` does not reposition reliably when the
+ * keyboard opens, so consumers must manually offset their layout by this value
+ * (e.g. paddingBottom or translateY).
+ */
+export const useKeyboardOffset = () => {
+  const [offset, setOffset] = useState(0);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () => {
+      const keyboardHeight = window.innerHeight - vv.height - vv.offsetTop;
+      setOffset(keyboardHeight > 10 ? keyboardHeight : 0);
+    };
+    vv.addEventListener('resize', update);
+    vv.addEventListener('scroll', update);
+    update();
+    return () => {
+      vv.removeEventListener('resize', update);
+      vv.removeEventListener('scroll', update);
+    };
+  }, []);
+  return offset;
+};
+
 export const useSwiper = (threshold = 50) => {
   const [isVisible, setIsVisible] = useState(true);
   const touchStartY = useRef(0);

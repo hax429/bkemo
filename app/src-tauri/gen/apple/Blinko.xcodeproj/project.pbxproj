@@ -14,7 +14,6 @@
 		366AD36BB55FDF802A758F79 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A6088AF628C447660D431B60 /* Assets.xcassets */; };
 		72A7B26B51B69E4069DF51E3 /* UIKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AD7122A988525D7FFF2DFE31 /* UIKit.framework */; };
 		826F5156DCDDF687A60EDE00 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 174C12AD9407A28A0DF2BA13 /* LaunchScreen.storyboard */; };
-		B6C2572EB79EF51ADFB5A260 /* libapp.a in Resources */ = {isa = PBXBuildFile; fileRef = 9743F9F80321C1DE96DFDA73 /* libapp.a */; };
 		BB5AE28A15FC6A9336F300E1 /* WebKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0535CCC4355A02F80C794076 /* WebKit.framework */; };
 		C8343CBCB3895D6063D19BAE /* main.mm in Sources */ = {isa = PBXBuildFile; fileRef = 735A048AF9DB80857BD8269A /* main.mm */; };
 		FAAB7FE548F3F7D97A79E668 /* QuartzCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FF34E6F10CEF1E14A7B63423 /* QuartzCore.framework */; };
@@ -44,6 +43,7 @@
 		A7334B547E190D6F3DA96348 /* MetalKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MetalKit.framework; path = System/Library/Frameworks/MetalKit.framework; sourceTree = SDKROOT; };
 		AA99EBF657BB945BAA510D15 /* hotkey.rs */ = {isa = PBXFileReference; lastKnownFileType = text; path = hotkey.rs; sourceTree = "<group>"; };
 		AD7122A988525D7FFF2DFE31 /* UIKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UIKit.framework; path = System/Library/Frameworks/UIKit.framework; sourceTree = SDKROOT; };
+		CF03F8B49F7AC22DFCC623A2 /* libapp.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = libapp.a; sourceTree = "<group>"; };
 		D2799DFE5498B35CF36B4086 /* Blinko.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Blinko.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		D96ECF06456BBF91E3254521 /* window.rs */ = {isa = PBXFileReference; lastKnownFileType = text; path = window.rs; sourceTree = "<group>"; };
 		DAAA1229548CBE1670FB08CE /* assets */ = {isa = PBXFileReference; lastKnownFileType = folder; path = assets; sourceTree = SOURCE_ROOT; };
@@ -70,6 +70,14 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		065F61E223F4E907D544CA67 /* release */ = {
+			isa = PBXGroup;
+			children = (
+				CF03F8B49F7AC22DFCC623A2 /* libapp.a */,
+			);
+			path = release;
+			sourceTree = "<group>";
+		};
 		41487D1189005B5AE2963F6C /* src */ = {
 			isa = PBXGroup;
 			children = (
@@ -179,6 +187,7 @@
 			isa = PBXGroup;
 			children = (
 				4974D7625C29A57FEE4FF427 /* debug */,
+				065F61E223F4E907D544CA67 /* release */,
 			);
 			path = arm64;
 			sourceTree = "<group>";
@@ -250,7 +259,6 @@
 				366AD36BB55FDF802A758F79 /* Assets.xcassets in Resources */,
 				826F5156DCDDF687A60EDE00 /* LaunchScreen.storyboard in Resources */,
 				1C1303A158CEF765066718B1 /* assets in Resources */,
-				B6C2572EB79EF51ADFB5A260 /* libapp.a in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -276,7 +284,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "exec >> /tmp/blinko-xcode-build.log 2>&1\necho \"=== BUILD START $(date) CONFIGURATION=${CONFIGURATION} ===\"\nexport PATH=\"/Users/hax429/.bun/bin:/Users/hax429/.cargo/bin:$PATH\"\n. \"$HOME/.cargo/env\" 2>/dev/null || true\n\nADDR_FILE=\"/tmp/me.hax429.blinko-server-addr\"\nLIB_OUT=\"$SRCROOT/Externals/arm64/$CONFIGURATION/libapp.a\"\n\nif [ -f \"$ADDR_FILE\" ]; then\n  echo \"Coordination server found — running tauri ios xcode-script\"\n  cd /Users/hax429/Developer/blinko/app\n  bun /Users/hax429/Developer/blinko/node_modules/.bin/tauri ios xcode-script -v --platform ${PLATFORM_DISPLAY_NAME:?} --sdk-root ${SDKROOT:?} --framework-search-paths \"${FRAMEWORK_SEARCH_PATHS:?}\" --header-search-paths \"${HEADER_SEARCH_PATHS:?}\" --gcc-preprocessor-definitions \"${GCC_PREPROCESSOR_DEFINITIONS:-}\" --configuration ${CONFIGURATION:?} ${FORCE_COLOR} ${ARCHS:?}\n  echo \"=== BUILD END (tauri) exit=$? ===\"\nelse\n  echo \"No coordination server — using pre-built library\"\n  if [ ! -f \"$LIB_OUT\" ]; then\n    echo \"ERROR: $LIB_OUT not found. Run: cargo build --target aarch64-apple-ios --release in app/src-tauri, then copy libapp_lib.a to Externals/arm64/release/libapp.a\"\n    exit 1\n  fi\n  echo \"Found pre-built $LIB_OUT\"\n  if [ \"$CONFIGURATION\" = \"release\" ]; then\n    ASSETS_SRC=\"/Users/hax429/Developer/blinko/dist/public\"\n    ASSETS_DST=\"$SRCROOT/assets\"\n    if [ -d \"$ASSETS_SRC\" ]; then\n      echo \"Copying frontend assets from $ASSETS_SRC to $ASSETS_DST\"\n      rm -rf \"$ASSETS_DST\"\n      mkdir -p \"$ASSETS_DST\"\n      cp -r \"$ASSETS_SRC/.\" \"$ASSETS_DST/\"\n    else\n      echo \"WARNING: Frontend dist not found at $ASSETS_SRC\"\n    fi\n  fi\n  echo \"=== BUILD END (pre-built) exit=0 ===\"\nfi\n";
+			shellScript = "exec >> /tmp/blinko-xcode-build.log 2>&1\necho \"=== BUILD START $(date) CONFIGURATION=${CONFIGURATION} ===\"\nexport PATH=\"/Users/hax429/.bun/bin:/Users/hax429/.cargo/bin:$PATH\"\n. \"$HOME/.cargo/env\" 2>/dev/null || true\n\nADDR_FILE=\"/tmp/me.hax429.blinko-server-addr\"\nLIB_OUT=\"$SRCROOT/Externals/arm64/$CONFIGURATION/libapp.a\"\n\nif [ -f \"$ADDR_FILE\" ]; then\n  echo \"Coordination server found — running tauri ios xcode-script\"\n  cd /Users/hax429/Developer/blinkos/app\n  bun /Users/hax429/Developer/blinkos/node_modules/.bin/tauri ios xcode-script -v --platform ${PLATFORM_DISPLAY_NAME:?} --sdk-root ${SDKROOT:?} --framework-search-paths \"${FRAMEWORK_SEARCH_PATHS:?}\" --header-search-paths \"${HEADER_SEARCH_PATHS:?}\" --gcc-preprocessor-definitions \"${GCC_PREPROCESSOR_DEFINITIONS:-}\" --configuration ${CONFIGURATION:?} ${FORCE_COLOR} ${ARCHS:?}\n  echo \"=== BUILD END (tauri) exit=$? ===\"\nelse\n  echo \"No coordination server — using pre-built library\"\n  if [ ! -f \"$LIB_OUT\" ]; then\n    echo \"ERROR: $LIB_OUT not found. Run: cargo build --target aarch64-apple-ios --release in app/src-tauri, then copy libapp_lib.a to Externals/arm64/release/libapp.a\"\n    exit 1\n  fi\n  echo \"Found pre-built $LIB_OUT\"\n  if [ \"$CONFIGURATION\" = \"release\" ]; then\n    ASSETS_SRC=\"/Users/hax429/Developer/blinkos/dist/public\"\n    ASSETS_DST=\"$SRCROOT/assets\"\n    if [ -d \"$ASSETS_SRC\" ]; then\n      echo \"Copying frontend assets from $ASSETS_SRC to $ASSETS_DST\"\n      rm -rf \"$ASSETS_DST\"\n      mkdir -p \"$ASSETS_DST\"\n      cp -r \"$ASSETS_SRC/.\" \"$ASSETS_DST/\"\n    else\n      echo \"WARNING: Frontend dist not found at $ASSETS_SRC\"\n    fi\n  fi\n  echo \"=== BUILD END (pre-built) exit=0 ===\"\nfi\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -427,6 +435,7 @@
 					"\".\"",
 				);
 				INFOPLIST_FILE = Blinko_iOS/Info.plist;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -473,6 +482,7 @@
 					"\".\"",
 				);
 				INFOPLIST_FILE = Blinko_iOS/Info.plist;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",

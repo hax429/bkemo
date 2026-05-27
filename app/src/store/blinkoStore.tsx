@@ -202,7 +202,7 @@ export class BlinkoStore implements Store {
         metadata
       } = params;
 
-      if (!this.isOnline) {
+      const saveOffline = (reason: 'offline' | 'fallback') => {
         if (!id) {
           const now = new Date();
           const offlineNote: OfflineNote = {
@@ -223,7 +223,11 @@ export class BlinkoStore implements Store {
             metadata: metadata || {}
           };
           this.saveOfflineNote(offlineNote);
-          showToast && RootStore.Get(ToastPlugin).success(i18n.t("create-successfully") + '-' + i18n.t("offline-status"));
+          if (showToast) {
+            const toast = RootStore.Get(ToastPlugin);
+            const msg = i18n.t("create-successfully") + ' - ' + i18n.t("offline-status");
+            reason === 'fallback' ? toast.warning(msg) : toast.success(msg);
+          }
           refresh && this.updateTicker++;
           return offlineNote;
         } else {
@@ -233,26 +237,54 @@ export class BlinkoStore implements Store {
           refresh && this.updateTicker++;
           return;
         }
+      };
+
+      if (!this.isOnline) {
+        return saveOffline('offline');
       }
 
-      const res = await api.notes.upsert.mutate({
-        content,
-        type,
-        isArchived,
-        isRecycle,
-        id,
-        attachments,
-        isTop,
-        isShare,
-        references,
-        createdAt: inputCreatedAt ? new Date(inputCreatedAt) : undefined,
-        updatedAt: inputUpdatedAt ? new Date(inputUpdatedAt) : undefined,
-        metadata
-      });
-      eventBus.emit('editor:clear')
-      showToast && RootStore.Get(ToastPlugin).success(id ? i18n.t("update-successfully") : i18n.t("create-successfully"))
-      refresh && this.updateTicker++
-      return res
+      // navigator.onLine can lie on iOS WKWebView. Race the upsert against a short
+      // timeout so we fail fast and fall back to the offline queue instead of hanging
+      // for the full 5-minute trpc timeout.
+      try {
+        const res = await Promise.race([
+          api.notes.upsert.mutate({
+            content,
+            type,
+            isArchived,
+            isRecycle,
+            id,
+            attachments,
+            isTop,
+            isShare,
+            references,
+            createdAt: inputCreatedAt ? new Date(inputCreatedAt) : undefined,
+            updatedAt: inputUpdatedAt ? new Date(inputUpdatedAt) : undefined,
+            metadata
+          }),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('upsert-timeout')), 15000)
+          )
+        ]);
+        eventBus.emit('editor:clear')
+        showToast && RootStore.Get(ToastPlugin).success(id ? i18n.t("update-successfully") : i18n.t("create-successfully"))
+        refresh && this.updateTicker++
+        return res
+      } catch (error) {
+        const msg = (error as Error)?.message ?? '';
+        const looksLikeNetworkFailure =
+          msg === 'upsert-timeout' ||
+          msg.includes('Load failed') ||
+          msg.includes('Failed to fetch') ||
+          msg.includes('NetworkError') ||
+          msg.includes('aborted');
+        if (looksLikeNetworkFailure) {
+          console.warn('[upsertNote] online save failed, falling back to offline:', msg);
+          RootStore.Get(BaseStore).setOnlineStatus(false);
+          return saveOffline('fallback');
+        }
+        throw error;
+      }
     }
   })
 

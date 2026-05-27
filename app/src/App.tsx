@@ -53,18 +53,26 @@ const HomeRedirect = () => {
   
   useEffect(() => {
     const redirectToDefaultPage = async () => {
-      await blinko.config.call();
-      const defaultHomePage = blinko.config.value?.defaultHomePage;
-      const currentPath = searchParams.get('path');
-      const isDirectNavigation = location.key === 'default';
-      if (currentPath || !defaultHomePage || defaultHomePage === 'blinko' || !isDirectNavigation) {
+      try {
+        await blinko.config.call();
+        const defaultHomePage = blinko.config.value?.defaultHomePage;
+        const currentPath = searchParams.get('path');
+        const isDirectNavigation = location.key === 'default';
+        if (currentPath || !defaultHomePage || defaultHomePage === 'blinko' || !isDirectNavigation) {
+          return;
+        }
+        navigate(`/?path=${defaultHomePage}`, { replace: true });
+      } catch (error) {
+        // Offline or backend unreachable — fall through to render HomePage with whatever
+        // is cached (noteCache.ts / offlineNoteStorage). Without this, the unhandled
+        // rejection from config.call() skips setLoading(false) and the user sees an
+        // infinite LoadingPage.
+        console.warn('config.call() failed, continuing without redirect:', error);
+      } finally {
         setLoading(false);
-        return;
       }
-      
-      navigate(`/?path=${defaultHomePage}`, { replace: true });
     };
-    
+
     redirectToDefaultPage();
   }, [navigate, searchParams, location]);
   

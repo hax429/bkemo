@@ -270,7 +270,7 @@ const Editor = observer(({ content, onChange, onSend, isSendLoading, originFiles
             ))}
 
           {!showTopToolbar && (
-            <div className='flex w-full items-center gap-1 mt-auto'>
+            <div className='flex w-full items-center gap-1 mt-auto pt-3 px-1 sticky bottom-0 bg-background z-10 border-t border-divider md:border-t-0 md:pt-2'>
               {renderToolbar()}
               {renderRightToolbar()}
             </div>

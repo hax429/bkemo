@@ -67,8 +67,8 @@ export const BlinkoAddButton = observer(() => {
     width: BUTTON_SIZE.CENTER,
     height: BUTTON_SIZE.CENTER,
     position: 'fixed',
-    right: 40,
-    bottom: 110,
+    right: 20,
+    bottom: 'calc(76px + env(safe-area-inset-bottom))',
     zIndex: 50
   }}>
     <motion.div

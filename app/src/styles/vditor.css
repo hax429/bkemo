@@ -60,7 +60,7 @@
   padding-right: 10px !important;
   background-color: transparent;
   color: var(--foreground);
-  max-height: 70vh;
+  max-height: var(--max-editor-height, 70vh);
   min-height: var(--min-editor-height);
   padding-top: 5px;
   padding-bottom: 5px;

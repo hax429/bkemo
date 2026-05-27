@@ -2,7 +2,7 @@ import { Button, Modal, ModalBody, ModalContent, ModalHeader } from "@heroui/rea
 import { observer } from "mobx-react-lite";
 import { DialogStore } from ".";
 import { RootStore } from "@/store/root";
-import { useHistoryBack, useIsIOS } from "@/lib/hooks";
+import { useHistoryBack, useIsIOS, useKeyboardOffset } from "@/lib/hooks";
 import { useMediaQuery } from "usehooks-ts";
 import { motion } from "motion/react";
 import { Icon } from '@/components/Common/Iconify/icons';
@@ -38,12 +38,33 @@ const CloseButton = ({ onClose }: { onClose: () => void }) => (
   </motion.div>
 );
 
+/** Sheet-style header with grab handle + close button. Used in the iOS bottom
+ *  sheet so the close target is anchored to the top of the sheet (not floating
+ *  above it, where it disappears behind the soft keyboard). */
+const SheetHeader = ({ onClose }: { onClose: () => void }) => (
+  <div className="w-full flex flex-col items-center gap-2 px-3 pt-2 pb-1">
+    <div className="w-10 h-1 rounded-full bg-default-300" />
+    <div className="w-full flex justify-end">
+      <motion.button
+        type="button"
+        onClick={onClose}
+        whileTap={{ scale: 0.9 }}
+        className="w-9 h-9 -mr-1 -mt-1 flex items-center justify-center rounded-full text-foreground bg-default-100/70 active:bg-default-200"
+        aria-label="Close"
+      >
+        <Icon icon="tabler:x" width="18" height="18" />
+      </motion.button>
+    </div>
+  </div>
+);
+
 const Dialog = observer(() => {
   const modal = RootStore.Get(DialogStore);
   const isPc = useMediaQuery('(min-width: 768px)')
   const { className, classNames, isOpen, placement, title, size, content, isDismissable, onlyContent = false, noPadding = false, showOnlyContentCloseButton = false, transparent = false } = modal;
   const Content = typeof content === 'function' ? content : () => content;
   const isIOS = useIsIOS()
+  const keyboardOffset = useKeyboardOffset()
   useHistoryBack({
     state: isOpen,
     onStateChange: () => modal.close(),
@@ -113,6 +134,7 @@ const Dialog = observer(() => {
         />
         <motion.div
           className={`${containerClass} ${isPc ? modalSizeClass : ''} `}
+          style={{ paddingBottom: keyboardOffset }}
           {...motionConfig}
           initial={{ opacity: 0, y: 100 }}
           animate={{ opacity: 1, y: 0 }}
@@ -138,17 +160,15 @@ const Dialog = observer(() => {
           )}
           {
             onlyContent && <motion.div
-              className="w-full pointer-events-auto "
+              className="w-full pointer-events-auto bg-background rounded-t-2xl shadow-2xl overflow-hidden"
+              style={{ paddingBottom: keyboardOffset > 0 ? 0 : 'env(safe-area-inset-bottom)' }}
               {...motionConfig}
             >
-              <div className="relative w-full">
-                {
-                  showOnlyContentCloseButton &&
-                  <CloseButton onClose={() => modal.close()} />
-                }
-                <div className="w-full">
-                  <Content />
-                </div>
+              {showOnlyContentCloseButton && (
+                <SheetHeader onClose={() => modal.close()} />
+              )}
+              <div className="w-full">
+                <Content />
               </div>
             </motion.div>
           }

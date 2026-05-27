@@ -31,6 +31,7 @@ targets:
       - path: Sources
       - path: Assets.xcassets
       - path: Externals
+        buildPhase: none
       - path: Blinko_iOS
       - path: assets
         buildPhase: resources
@@ -95,8 +96,8 @@ targets:
 
           if [ -f "$ADDR_FILE" ]; then
             echo "Coordination server found — running tauri ios xcode-script"
-            cd /Users/hax429/Developer/blinko/app
-            bun /Users/hax429/Developer/blinko/node_modules/.bin/tauri ios xcode-script -v --platform ${PLATFORM_DISPLAY_NAME:?} --sdk-root ${SDKROOT:?} --framework-search-paths "${FRAMEWORK_SEARCH_PATHS:?}" --header-search-paths "${HEADER_SEARCH_PATHS:?}" --gcc-preprocessor-definitions "${GCC_PREPROCESSOR_DEFINITIONS:-}" --configuration ${CONFIGURATION:?} ${FORCE_COLOR} ${ARCHS:?}
+            cd /Users/hax429/Developer/blinkos/app
+            bun /Users/hax429/Developer/blinkos/node_modules/.bin/tauri ios xcode-script -v --platform ${PLATFORM_DISPLAY_NAME:?} --sdk-root ${SDKROOT:?} --framework-search-paths "${FRAMEWORK_SEARCH_PATHS:?}" --header-search-paths "${HEADER_SEARCH_PATHS:?}" --gcc-preprocessor-definitions "${GCC_PREPROCESSOR_DEFINITIONS:-}" --configuration ${CONFIGURATION:?} ${FORCE_COLOR} ${ARCHS:?}
             echo "=== BUILD END (tauri) exit=$? ==="
           else
             echo "No coordination server — using pre-built library"
@@ -106,7 +107,7 @@ targets:
             fi
             echo "Found pre-built $LIB_OUT"
             if [ "$CONFIGURATION" = "release" ]; then
-              ASSETS_SRC="/Users/hax429/Developer/blinko/dist/public"
+              ASSETS_SRC="/Users/hax429/Developer/blinkos/dist/public"
               ASSETS_DST="$SRCROOT/assets"
               if [ -d "$ASSETS_SRC" ]; then
                 echo "Copying frontend assets from $ASSETS_SRC to $ASSETS_DST"

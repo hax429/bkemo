@@ -1,7 +1,9 @@
 {
     "build": {
       "beforeDevCommand": "bun run dev:vite",
-      "devUrl": "https://bk.hax429.me"
+      "devUrl": "https://bk.hax429.me",
+      "beforeBuildCommand": "bun run build:no-pwa",
+      "frontendDist": "../../dist/public"
     },
     "app": {
       "windows": [

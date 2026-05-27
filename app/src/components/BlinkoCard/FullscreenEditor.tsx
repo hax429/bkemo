@@ -14,6 +14,7 @@ import { MarkdownRender } from "@/components/Common/MarkdownRender";
 import { FilesAttachmentRender } from "../Common/AttachmentRender";
 import { ReferencesContent } from "./referencesContent";
 import { useTranslation } from "react-i18next";
+import { useKeyboardOffset } from "@/lib/hooks";
 
 interface FullscreenEditorProps {
   blinkoItem: BlinkoItem;
@@ -28,6 +29,7 @@ export const FullscreenEditor = observer(({ blinkoItem, isOpen, onClose }: Fulls
   const [viewMode, setViewMode] = useState<string>('wysiwyg');
   const [editorMode, setEditorMode] = useState<'preview' | 'edit'>('preview');
   const editorContainerRef = useRef<HTMLDivElement>(null);
+  const keyboardOffset = useKeyboardOffset();
   
   // Clean up fullscreen editor state when closing
   const handleClose = () => {
@@ -190,16 +192,63 @@ export const FullscreenEditor = observer(({ blinkoItem, isOpen, onClose }: Fulls
         bottom: 0
       }}
     >
-      <div className="h-full flex">
-        <div 
+      <div className="h-full flex" style={{ paddingBottom: keyboardOffset }}>
+        <div
           ref={editorContainerRef}
-          className={`w-full mx-auto  h-full flex ${isPc ? 'flex-col px-4' : 'flex-col p-2'}`} 
+          className={`w-full mx-auto  h-full flex ${isPc ? 'flex-col px-4' : 'flex-col p-2'}`}
           style={{ maxWidth }}
           onClick={(e) => {
             // Stop propagation to prevent closing when clicking inside editor
             e.stopPropagation();
           }}
         >
+          {/* Mobile: top header with back, preview/edit toggle, and the portal target for the editor toolbar */}
+          {!isPc && (
+            <div
+              className="flex items-center justify-between gap-2 py-2 px-1 flex-shrink-0 border-b border-border bg-background"
+              style={{ paddingTop: 'calc(8px + env(safe-area-inset-top, 0px))' }}
+            >
+              <Button
+                isIconOnly
+                variant="light"
+                size="sm"
+                onPress={handleClose}
+                className="text-foreground hover:bg-default-100 flex-shrink-0"
+              >
+                <Icon icon="tabler:arrow-left" width={20} height={20} />
+              </Button>
+              {editorMode === 'edit' && (
+                <div
+                  id={`editor-top-toolbar-${blinkoItem.id}`}
+                  className="flex-1 flex items-center justify-end gap-1 overflow-x-auto"
+                />
+              )}
+              <div className="flex items-center gap-1 flex-shrink-0">
+                {editorMode === 'preview' ? (
+                  <Button
+                    isIconOnly
+                    variant="light"
+                    size="sm"
+                    onPress={handleSwitchToEdit}
+                    className="text-foreground hover:bg-default-100"
+                  >
+                    <Icon icon="tabler:edit" width={20} height={20} />
+                  </Button>
+                ) : (
+                  <Button
+                    isIconOnly
+                    variant="light"
+                    size="sm"
+                    onPress={handleSwitchToPreview}
+                    className="text-foreground hover:bg-default-100"
+                  >
+                    <Icon icon="tabler:eye" width={20} height={20} />
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Top header with back button and toolbar (PC only) */}
           {isPc && (
             <div className="flex items-center justify-between py-4 flex-shrink-0 border-b border-border">
@@ -249,7 +298,7 @@ export const FullscreenEditor = observer(({ blinkoItem, isOpen, onClose }: Fulls
             /* Preview mode - render with MarkdownRender */
             <div
               className="flex-1 overflow-y-auto min-h-0 py-4"
-              style={{ height: isPc ? 'calc(100vh - 100px)' : 'calc(100vh - 80px)' }}
+              style={isPc ? { height: 'calc(100vh - 100px)' } : undefined}
               onDoubleClick={handleSwitchToEdit}
             >
               <MarkdownRender
@@ -267,9 +316,9 @@ export const FullscreenEditor = observer(({ blinkoItem, isOpen, onClose }: Fulls
             </div>
           ) : (
             /* Edit mode - render with BlinkoEditor */
-            <div 
-              className={`flex-1 overflow-hidden flex flex-col min-h-0 ${isLongText ? 'editor-long-text' : ''}`} 
-              style={{ height: isPc ? 'calc(100vh - 100px)' : 'calc(100vh - 80px)', paddingBottom: isPc ? '20px' : '0' }}
+            <div
+              className={`flex-1 overflow-hidden flex flex-col min-h-0 ${isLongText ? 'editor-long-text' : ''}`}
+              style={isPc ? { height: 'calc(100vh - 100px)', paddingBottom: '20px' } : undefined}
             >
               <BlinkoEditor
                 key={`editor-${blinkoItem.id}`}
@@ -281,50 +330,7 @@ export const FullscreenEditor = observer(({ blinkoItem, isOpen, onClose }: Fulls
             </div>
           )}
 
-          {/* Bottom toolbar with back button (Mobile only) */}
-          {!isPc && (
-            <div className="flex items-center justify-between py-3 px-2 flex-shrink-0 border-t border-border bg-background" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
-              <Button
-                isIconOnly
-                variant="light"
-                size="sm"
-                onPress={handleClose}
-                className="text-foreground hover:bg-default-100"
-              >
-                <Icon icon="tabler:arrow-left" width={20} height={20} />
-              </Button>
-              <div className="flex-1 flex justify-end ml-2 gap-2">
-                {editorMode === 'preview' ? (
-                  <Tooltip content={t('edit')}>
-                    <Button
-                      isIconOnly
-                      variant="light"
-                      size="sm"
-                      onPress={handleSwitchToEdit}
-                      className="text-foreground hover:bg-default-100"
-                    >
-                      <Icon icon="tabler:edit" width={20} height={20} />
-                    </Button>
-                  </Tooltip>
-                ) : (
-                  <Tooltip content={t('preview')}>
-                    <Button
-                      isIconOnly
-                      variant="light"
-                      size="sm"
-                      onPress={handleSwitchToPreview}
-                      className="text-foreground hover:bg-default-100"
-                    >
-                      <Icon icon="tabler:eye" width={20} height={20} />
-                    </Button>
-                  </Tooltip>
-                )}
-                {editorMode === 'edit' && (
-                  <div id={`editor-top-toolbar-${blinkoItem.id}`} className="flex justify-end"></div>
-                )}
-              </div>
-            </div>
-          )}
+          {/* Mobile back/toggle controls and the portal target now live in the top header above. */}
         </div>
       </div>
     </div>

@@ -1,15 +1,22 @@
+const DEFAULT_TAURI_ENDPOINT = 'https://bk.hax429.me';
+
+function readSavedEndpoint(): string | null {
+    const raw = window.localStorage.getItem('blinkoEndpoint');
+    if (!raw) return null;
+    const cleaned = raw.replace(/"/g, '').trim();
+    return cleaned || null;
+}
 
 export function getBlinkoEndpoint(path: string = ''): string {
     try {
-        const blinkoEndpoint = window.localStorage.getItem('blinkoEndpoint')
         const isTauri = !!(window as any).__TAURI__;
-        if (isTauri && blinkoEndpoint) {
+        if (isTauri) {
+            const endpoint = readSavedEndpoint() ?? DEFAULT_TAURI_ENDPOINT;
             try {
-                const url = new URL(path, blinkoEndpoint.replace(/"/g, ''));
-                return url.toString();
+                return new URL(path, endpoint).toString();
             } catch (error) {
                 console.error(error);
-                return new URL(path, window.location.origin).toString();
+                return new URL(path, DEFAULT_TAURI_ENDPOINT).toString();
             }
         }
 
@@ -21,9 +28,7 @@ export function getBlinkoEndpoint(path: string = ''): string {
 }
 
 export function isTauriAndEndpointUndefined(): boolean {
-    const isTauri = !!(window as any).__TAURI__;
-    const blinkoEndpoint = window.localStorage.getItem('blinkoEndpoint')
-    return isTauri && !blinkoEndpoint;
+    return false;
 }
 
 export function saveBlinkoEndpoint(endpoint: string): void {
@@ -33,5 +38,6 @@ export function saveBlinkoEndpoint(endpoint: string): void {
 }
 
 export function getSavedEndpoint(): string {
-    return window.localStorage.getItem('blinkoEndpoint') || '';
+    const isTauri = typeof window !== 'undefined' && !!(window as any).__TAURI__;
+    return readSavedEndpoint() ?? (isTauri ? DEFAULT_TAURI_ENDPOINT : '');
 }
