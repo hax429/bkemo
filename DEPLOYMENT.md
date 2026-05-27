@@ -1,8 +1,10 @@
-# Blinko — Source Deployment Guide
+# bkemo — Source Deployment Guide
 
-This guide deploys Blinko **from source** (not from the prebuilt `blinkospace/blinko` Docker image). The result is a long-running process you can update with `git pull && bun run build:web && systemctl restart blinko`. The iOS / macOS Tauri shells load the frontend from your server URL, so a server rebuild also updates the mobile/desktop UI on next launch.
+This guide deploys bkemo **from source** as a long-running systemd-managed process you can update with `git pull && bun run build:web && systemctl restart bkemo`. The iOS / macOS Tauri shells load the frontend from your server URL, so a server rebuild also updates the mobile/desktop UI on next launch.
 
-For Docker-only deployment, see [`DEV.md`](./DEV.md). For mobile/desktop, see [`IOS.md`](./IOS.md).
+For mobile/desktop client builds, see [`IOS.md`](./IOS.md).
+
+> bkemo deploys from source only — there is no Docker image, no Compose file, and no Helm chart. The upstream [Blinko](https://github.com/blinkospace/blinko) project ships those if you'd rather run that.
 
 ---
 
@@ -12,9 +14,9 @@ For Docker-only deployment, see [`DEV.md`](./DEV.md). For mobile/desktop, see [`
 | ---------- | ------------- | --------------------------------------------------------------------- |
 | Bun        | **1.2.8**     | Pinned in `package.json` (`packageManager`). Later versions may work. |
 | Node.js    | ≥ 20          | Only needed as a fallback runtime; we use Bun.                        |
-| PostgreSQL | 14+           | Local install or a Docker container.                                  |
+| PostgreSQL | 14+           | Native install (apt, brew, etc.).                                     |
 | Linux host | systemd-based | Examples below assume Ubuntu / Debian.                                |
-| nginx      | any recent    | For TLS termination in front of Blinko (recommended).                 |
+| nginx      | any recent    | For TLS termination in front of bkemo (recommended).                  |
 
 Install the pinned Bun version into the deploying user's home (no `sudo` required):
 
@@ -27,27 +29,20 @@ curl -fsSL https://bun.sh/install | bash -s bun-v1.2.8
 
 ## 2. Provision PostgreSQL
 
-You have two reasonable options.
+Install PostgreSQL natively, then create a database and user. Point `DATABASE_URL` at it (see section 4). Schema migrations are applied later by `prisma migrate deploy` — no manual SQL needed.
 
-### 2a. Reuse the existing `blinko-postgres` Docker container (recommended when migrating from the Docker image)
-
-Keep the container running. Blinko will connect to it via the host port (default `5435` if you used the upstream `docker-compose.yml`):
-
+```bash
+# Debian/Ubuntu example
+sudo apt install postgresql
+sudo -u postgres createuser --pwprompt bkemo
+sudo -u postgres createdb -O bkemo bkemo
 ```
-DATABASE_URL=postgresql://postgres:<password>@localhost:5435/postgres
-```
-
-Do **not** touch the container or its data volume — that's your data of record.
-
-### 2b. Fresh PostgreSQL
-
-Create a database and user, then point `DATABASE_URL` at it. Schema migrations are applied later by `prisma migrate deploy`; no manual SQL needed.
 
 ## 3. Clone the source
 
 ```bash
-git clone https://github.com/hax429/blinkos.git /opt/blinko    # or wherever
-cd /opt/blinko
+git clone https://github.com/hax429/blinkos.git /opt/bkemo    # or wherever
+cd /opt/bkemo
 ```
 
 ## 4. Configure `.env`
@@ -59,7 +54,7 @@ NODE_ENV=production
 NEXTAUTH_URL=https://your.domain.tld
 NEXT_PUBLIC_BASE_URL=https://your.domain.tld
 NEXTAUTH_SECRET=<generate with: openssl rand -base64 32>
-DATABASE_URL=postgresql://postgres:<password>@localhost:5435/postgres
+DATABASE_URL=postgresql://bkemo:<password>@localhost:5432/bkemo
 DISABLE_SECURE_COOKIE=false
 TRUST_PROXY=1
 PORT=1111
@@ -108,40 +103,30 @@ bun dist/seed.js
 
 ## 8. Provide the `.blinko` data directory
 
-Blinko reads/writes user data — uploads, plugins, RAG vector store — under `.blinko/` **relative to `process.cwd()`** (see `server/routerTrpc/plugin.ts`). For an in-place install, leave it inside the repo:
+bkemo reads/writes user data — uploads, plugins, RAG vector store — under `.blinko/` **relative to `process.cwd()`** (see `server/routerTrpc/plugin.ts`). For an in-place install, leave it inside the repo:
 
 ```bash
 mkdir -p .blinko/{files,plugins,vector,pgdump}
 ```
 
-**When migrating from the Docker image**, point `.blinko` at the existing host volume so you keep all uploads and plugins:
-
-```bash
-# example: the old docker-compose mounted ./blinko:/app/.blinko
-ln -s /home/ubuntu/services/notes/blinko /opt/blinko/.blinko
-
-# fix ownership if it came from a docker container running as a different uid
-sudo chown -R $(id -u):$(id -g) /home/ubuntu/services/notes/blinko
-```
-
-`.blinko/` should be in `.gitignore` — it is user data, not source.
+`.blinko/` should be in `.gitignore` — it is user data, not source. The directory name is kept as `.blinko` for upstream-compatibility (the path is hardcoded server-side).
 
 ## 9. Run with systemd
 
-Create `/etc/systemd/system/blinko.service`:
+Create `/etc/systemd/system/bkemo.service`:
 
 ```ini
 [Unit]
-Description=Blinko (source build)
-After=network.target docker.service
-Wants=docker.service
+Description=bkemo (source build)
+After=network.target postgresql.service
+Wants=postgresql.service
 
 [Service]
 Type=simple
 User=ubuntu
 Group=ubuntu
-WorkingDirectory=/opt/blinko
-EnvironmentFile=/opt/blinko/.env
+WorkingDirectory=/opt/bkemo
+EnvironmentFile=/opt/bkemo/.env
 Environment=PATH=/home/ubuntu/.bun/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 ExecStart=/home/ubuntu/.bun/bin/bun dist/index.js
 Restart=always
@@ -158,15 +143,15 @@ Adjust `User`, `WorkingDirectory`, `EnvironmentFile`, and the `bun` path to matc
 
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable --now blinko
-sudo systemctl status blinko --no-pager
-journalctl -u blinko -f          # live logs
+sudo systemctl enable --now bkemo
+sudo systemctl status bkemo --no-pager
+journalctl -u bkemo -f           # live logs
 ```
 
 A healthy boot ends with:
 
 ```
-vite-express] Serving static files from /opt/blinko/server/public
+vite-express] Serving static files from /opt/bkemo/server/public
 🎉server start on port http://0.0.0.0:1111 - env: production
 ✨ Seed done! ✨
 ```
@@ -213,53 +198,24 @@ curl https://your.domain.tld/api/v1/public/site-info
 ## 11. Updating
 
 ```bash
-cd /opt/blinko
+cd /opt/bkemo
 git pull
 export PATH=$HOME/.bun/bin:$PATH
 bun install                                                # if deps changed
 bunx prisma migrate deploy --schema=prisma/schema.prisma   # if schema changed
 bun run build:web
 bun run build:seed
-sudo systemctl restart blinko
+sudo systemctl restart bkemo
 ```
 
 The iOS / macOS Tauri shells load the frontend from your server (see `app/src/lib/blinkoEndpoint.ts`), so restarting the server is all that's needed for those clients to pick up the new build on their next launch / network call.
 
-## 12. Migrating from the prebuilt Docker image
-
-If you're switching from `blinkospace/blinko:latest`:
-
-1. Stop only the app container; **leave Postgres running** so data isn't disturbed:
-
-   ```bash
-   docker stop blinko-website
-   docker update --restart=no blinko-website   # don't let it come back on reboot
-   ```
-
-2. Follow sections 3–9 above. In section 4, point `DATABASE_URL` at the running Postgres container's host port (default `localhost:5435`). In section 8, symlink the existing `./blinko` host volume into the source checkout.
-
-3. The first systemd start will apply any pending Prisma migrations against the existing DB. Verify with a row count:
-
-   ```bash
-   docker exec blinko-postgres psql -U postgres -d postgres -c "SELECT COUNT(*) FROM notes;"
-   ```
-
-4. **Rollback** (if you need to revert to the Docker image):
-
-   ```bash
-   sudo systemctl stop blinko
-   sudo systemctl disable blinko
-   docker update --restart=always blinko-website
-   docker start blinko-website
-   ```
-
-## 13. Troubleshooting
+## 12. Troubleshooting
 
 | Symptom                                                          | Cause / Fix                                                                                                                                                       |
 | ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `Unable to find package manager binary` from `turbo`             | `~/.bun/bin` not on `$PATH`. `export PATH=$HOME/.bun/bin:$PATH` before running any `bun run …`. The systemd unit sets this explicitly via `Environment=PATH=`.    |
 | `vite-express: Static files at .../server/public not found!`     | The `server/public` symlink is missing. Re-run section 6.                                                                                                         |
 | Server logs `port http://0.0.0.0:1111` even though you set `PORT` | Port is hardcoded in `server/index.ts:93`. Edit there and rebuild if you need a different port.                                                                   |
-| Uploads / plugins disappeared after switching to source          | `.blinko/` isn't pointing at the original host volume. Re-symlink as in section 8 and fix ownership.                                                              |
 | `prisma migrate deploy` says `No pending migrations to apply.`   | Expected when reusing an existing DB that's already current.                                                                                                      |
-| Permission denied writing into `.blinko/files/`                  | Container-era files are often owned by a different uid (e.g. `opc`). `sudo chown -R $(id -u):$(id -g) <data-dir>`.                                                |
+| Permission denied writing into `.blinko/files/`                  | The `.blinko/` data dir is owned by a different user than the systemd `User=`. `sudo chown -R $(id -u):$(id -g) .blinko`.                                         |
