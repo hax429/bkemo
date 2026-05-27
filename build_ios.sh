@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# build_ios.sh — iOS build prep + launch + offline-simulation helper for Blinko (Phase 4.5).
+# build_ios.sh — iOS build prep + launch + offline-simulation helper for bkemo (Phase 4.5).
 #
 # Subcommands:
 #   build                          (default)  prepare a device build, or run end-to-end sim build with --sim.
@@ -38,14 +38,14 @@ REPO_ROOT="${SCRIPT_DIR}"
 APP_DIR="${REPO_ROOT}/app"
 TAURI_DIR="${APP_DIR}/src-tauri"
 DIST_DIR="${REPO_ROOT}/dist/public"
-XCODEPROJ="${TAURI_DIR}/gen/apple/Blinko.xcodeproj"
-BUNDLE_ID="me.hax429.blinko"
-SCHEME="Blinko_iOS"
+XCODEPROJ="${TAURI_DIR}/gen/apple/bkemo.xcodeproj"
+BUNDLE_ID="me.hax429.bk"
+SCHEME="bkemo-ios"
 TARGET_HOST="bk.hax429.me"
-PF_RULES_FILE="/tmp/blinko-offline.pf.conf"
-PF_STATE_FILE="/tmp/blinko-offline.pf-was"   # contents: "enabled" or "disabled"
-PF_MARKER="# === Blinko offline block ==="
-WIFI_STATE_FILE="/tmp/blinko-offline-wifi.was-on"
+PF_RULES_FILE="/tmp/bkemo-offline.pf.conf"
+PF_STATE_FILE="/tmp/bkemo-offline.pf-was"   # contents: "enabled" or "disabled"
+PF_MARKER="# === bkemo offline block ==="
+WIFI_STATE_FILE="/tmp/bkemo-offline-wifi.was-on"
 
 # ── Colors / logging ──────────────────────────────────────────────────────────────────────────────
 if [[ -t 1 ]]; then
@@ -483,11 +483,11 @@ xcodebuild \
   -allowProvisioningUpdates \
   CODE_SIGNING_ALLOWED=NO \
   build \
-  | tee /tmp/blinko-xcodebuild.log \
+  | tee /tmp/bkemo-xcodebuild.log \
   | grep -E "^(===|\*\*|.*error:|.*warning:|Compile|Link|CopyFiles)" || true
 
-APP_PATH=$(find "${DERIVED_DATA}/Build/Products" -name "Blinko.app" -type d 2>/dev/null | head -1 || true)
-[[ -d "$APP_PATH" ]] || die "xcodebuild finished but Blinko.app not found. See /tmp/blinko-xcodebuild.log"
+APP_PATH=$(find "${DERIVED_DATA}/Build/Products" -name "bkemo.app" -type d 2>/dev/null | head -1 || true)
+[[ -d "$APP_PATH" ]] || die "xcodebuild finished but bkemo.app not found. See /tmp/bkemo-xcodebuild.log"
 t=$(( $(date +%s) - t0 ))
 ok "App built: ${APP_PATH}"
 elapsed "$t"
@@ -502,7 +502,7 @@ step "Done — debug recipes"
 cat <<EOF
 ${DIM}
 Safari Web Inspector:
-  Mac Safari → Develop → Simulator → Blinko → index.html
+  Mac Safari → Develop → Simulator → bkemo → index.html
 
 Simulate offline (more detail with: ./build_ios.sh offline -h):
   ./build_ios.sh offline on              # pfctl drop — matches iPhone airplane mode hang
@@ -514,6 +514,6 @@ Useful simctl one-liners:
   xcrun simctl terminate ${SIM_UDID} ${BUNDLE_ID}
   xcrun simctl launch ${SIM_UDID} ${BUNDLE_ID}
   xcrun simctl uninstall ${SIM_UDID} ${BUNDLE_ID}
-  xcrun simctl spawn ${SIM_UDID} log stream --predicate 'processImagePath CONTAINS "Blinko"'
+  xcrun simctl spawn ${SIM_UDID} log stream --predicate 'processImagePath CONTAINS "bkemo"'
 ${RESET}
 EOF

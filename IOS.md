@@ -1,4 +1,4 @@
-# Blinko iOS / macOS — Plan, Build & Verification
+# bkemo iOS / macOS — Plan, Build & Verification
 
 **Server:** `https://bk.hax429.me`
 **Stack:** Tauri v2 + React + Vditor (extending existing code; no rewrite)
@@ -252,8 +252,8 @@ xcodegen generate
 **Step 4 — Build and install via Xcode GUI:**
 1. Plug iPhone in over USB (or pair wirelessly: Window → Devices and Simulators → enable "Connect via network")
 2. On the iPhone, Settings → General → VPN & Device Management → trust the developer profile for team `5L7AP54366` (first time only)
-3. Open `app/src-tauri/gen/apple/Blinko.xcodeproj`
-4. Select scheme **Blinko_iOS**
+3. Open `app/src-tauri/gen/apple/bkemo.xcodeproj`
+4. Select scheme **bkemo-ios**
 5. Select **Gabriel Wang's iPhone** as destination
 6. Set Run configuration to **Release**: Product → Scheme → Edit Scheme → Run → Build Configuration → release
 7. **Product → Clean Build Folder** (⇧⌘K) if `libapp.a` or `dist/public/` was rebuilt
@@ -262,16 +262,16 @@ xcodegen generate
 **Step 5 — Verify offline cold-launch on the device (the whole point of Phase 4.5):**
 1. With network ON, open the app, sign in once. Endpoint field is pre-filled with `https://bk.hax429.me`.
 2. Pull-to-refresh the notes list so `noteCache.ts` (IndexedDB) gets populated.
-3. Force-quit Blinko (swipe up from the app switcher).
+3. Force-quit bkemo (swipe up from the app switcher).
 4. iPhone → Settings → Airplane Mode **ON**. Wait 5s.
-5. Re-open Blinko. **Expected:** shell renders within ~2s (no blank screen), cached notes visible.
+5. Re-open bkemo. **Expected:** shell renders within ~2s (no blank screen), cached notes visible.
 6. Create a new note while offline. **Expected:** note shows in the list immediately; under the hood it's in `localStorage.offlineNotes`.
 7. Airplane Mode **OFF**.
 8. Within 3s the `app:online` event fires; the new note appears on `https://bk.hax429.me` (verify in a desktop browser).
 
 If step 5 fails (blank screen):
 - `dist/public/index.html` was missing at build time → redo Step 0 → rebuild
-- WKWebView is hitting the network for something → check Safari → Develop → iPhone → Blinko console for failed requests (the **shell** itself must be 100% local; API calls to `bk.hax429.me` failing is fine, those are queued)
+- WKWebView is hitting the network for something → check Safari → Develop → iPhone → bkemo console for failed requests (the **shell** itself must be 100% local; API calls to `bk.hax429.me` failing is fine, those are queued)
 
 ### 5.2 iOS — simulator
 
@@ -289,13 +289,13 @@ To reproduce the airplane-mode boot path on the sim (the simulator shares the Ma
 sudo sh -c 'echo "127.0.0.1 bk.hax429.me" >> /etc/hosts'
 sudo dscacheutil -flushcache
 
-# In the simulator, kill and relaunch Blinko, or:
-xcrun simctl terminate booted me.hax429.blinko && xcrun simctl launch booted me.hax429.blinko
+# In the simulator, kill and relaunch bkemo, or:
+xcrun simctl terminate booted me.hax429.bk && xcrun simctl launch booted me.hax429.bk
 
 # Restore network when done:
 sudo sed -i '' '/bk.hax429.me/d' /etc/hosts && sudo dscacheutil -flushcache
 ```
-Attach Web Inspector: Mac Safari → Develop → Simulator → Blinko → `index.html`.
+Attach Web Inspector: Mac Safari → Develop → Simulator → bkemo → `index.html`.
 
 **5.2.b — Dev mode with hot reload (loads shell from `https://bk.hax429.me`, no offline test possible):**
 ```bash
@@ -311,8 +311,8 @@ Compiles Vite → Rust (`aarch64-apple-ios-sim`) → Swift plugin → launches t
 ```bash
 cd /Users/hax429/Developer/blinkos/app
 bun run tauri:desktop:build
-# Output: src-tauri/target/release/bundle/macos/Blinko.app
-open src-tauri/target/release/bundle/macos/Blinko.app
+# Output: src-tauri/target/release/bundle/macos/bkemo.app
+open src-tauri/target/release/bundle/macos/bkemo.app
 ```
 
 ### 5.4 OTA bundle (Phase 8, once 8b lands)
@@ -333,8 +333,8 @@ Deploying `dist/public/` to the server is the existing path — no extra step. T
 ```bash
 cd /Users/hax429/Developer/blinkos/app
 bun run tauri:ios:build
-open src-tauri/gen/apple/Blinko.xcodeproj
-# 1. Select Blinko_iOS scheme, "Any iOS Device (arm64)" destination
+open src-tauri/gen/apple/bkemo.xcodeproj
+# 1. Select bkemo-ios scheme, "Any iOS Device (arm64)" destination
 # 2. Product → Archive
 # 3. Distribute App → App Store Connect → Upload
 # 4. App Store Connect → TestFlight → add internal testers
@@ -348,19 +348,19 @@ bun run tauri:desktop:build
 # Sign
 codesign --force --deep \
   --sign "Developer ID Application: YOUR_NAME (TEAM_ID)" \
-  src-tauri/target/release/bundle/macos/Blinko.app
+  src-tauri/target/release/bundle/macos/bkemo.app
 
 # Notarize
 ditto -c -k --sequesterRsrc --keepParent \
-  src-tauri/target/release/bundle/macos/Blinko.app \
-  Blinko.zip
-xcrun notarytool submit Blinko.zip \
+  src-tauri/target/release/bundle/macos/bkemo.app \
+  bkemo.zip
+xcrun notarytool submit bkemo.zip \
   --apple-id bondi240827@gmail.com \
   --team-id 5L7AP54366 \
   --wait
 
 # Staple
-xcrun stapler staple src-tauri/target/release/bundle/macos/Blinko.app
+xcrun stapler staple src-tauri/target/release/bundle/macos/bkemo.app
 ```
 
 The Tauri updater config (`app/src-tauri/tauri.conf.json:104`) points at `https://github.com/blinkospace/blinko/releases/latest/download/latest.json` for macOS auto-updates.
@@ -384,7 +384,7 @@ The Tauri updater config (`app/src-tauri/tauri.conf.json:104`) points at `https:
 ### 6.1 Live iOS simulator logs
 
 ```bash
-xcrun simctl spawn booted log stream --predicate 'processImagePath CONTAINS "Blinko"'
+xcrun simctl spawn booted log stream --predicate 'processImagePath CONTAINS "bkemo"'
 ```
 
 ### 6.2 Tauri Rust + Swift output
@@ -402,7 +402,7 @@ cargo check --target aarch64-apple-ios-sim
 
 ### 6.4 Safari Web Inspector (JS / tRPC errors)
 
-Safari → Develop → Simulator → Blinko → main frame. From the console:
+Safari → Develop → Simulator → bkemo → main frame. From the console:
 
 ```javascript
 // Server endpoint
@@ -429,13 +429,13 @@ window.__blinkoSync?.()
 
 ```bash
 # Crash logs
-ls ~/Library/Logs/DiagnosticReports/ | grep Blinko
+ls ~/Library/Logs/DiagnosticReports/ | grep bkemo
 
 # Sandbox violations
-log show --predicate 'process == "Blinko"' --last 5m | grep -i "deny"
+log show --predicate 'process == "bkemo"' --last 5m | grep -i "deny"
 
 # Notarization status
-spctl -a -vvv /Applications/Blinko.app
+spctl -a -vvv /Applications/bkemo.app
 ```
 
 ### 6.5b Testing offline on a physical iPhone over USB
@@ -461,11 +461,11 @@ Tauri v2 Release builds keep `WKWebView.isInspectable = true`, so Web Inspector 
 **Test loop:**
 ```text
 1. Plug in. ⌘R from Xcode to install Release build.
-2. With Wi-Fi ON, open Blinko once → sign in → pull-to-refresh (populates noteCache.ts IndexedDB).
-3. Mac Safari → Develop → "<your iPhone>" → Blinko  (keep open)
+2. With Wi-Fi ON, open bkemo once → sign in → pull-to-refresh (populates noteCache.ts IndexedDB).
+3. Mac Safari → Develop → "<your iPhone>" → bkemo  (keep open)
 4. iPhone: Airplane Mode ON.
-5. iPhone: force-quit Blinko (swipe up in app switcher) so WKWebView drops cached connections.
-6. iPhone: re-open Blinko. Watch Safari console.
+5. iPhone: force-quit bkemo (swipe up in app switcher) so WKWebView drops cached connections.
+6. iPhone: re-open bkemo. Watch Safari console.
    Expected: shell renders within ~2s, cached notes visible.
 7. Create a note while offline → appears instantly (queues in localStorage.offlineNotes).
 8. Airplane Mode OFF → `app:online` event should fire within 3s; queue drains to bk.hax429.me.
@@ -498,7 +498,7 @@ The simulator shares the Mac's network — there is no in-sim airplane toggle. T
 ./build_ios.sh offline off             # restore every method (safe to run any time)
 ```
 
-The script automatically `terminate`+`launch`es Blinko on the booted simulator after toggling blocks, so WKWebView drops its connection cache without you having to swipe the app away.
+The script automatically `terminate`+`launch`es bkemo on the booted simulator after toggling blocks, so WKWebView drops its connection cache without you having to swipe the app away.
 
 **Manual recipes for each method** (in case you can't or don't want to use the script):
 
@@ -531,7 +531,7 @@ networksetup -setairportpower en0 on     # on
 ```
 
 **Reliability tips:**
-- WKWebView keeps its own connection cache. After toggling network state, always terminate + relaunch the app: `xcrun simctl terminate booted me.hax429.blinko && xcrun simctl launch booted me.hax429.blinko`
+- WKWebView keeps its own connection cache. After toggling network state, always terminate + relaunch the app: `xcrun simctl terminate booted me.hax429.bk && xcrun simctl launch booted me.hax429.bk`
 - `pfctl` rules apply to the IP, not the hostname. If `bk.hax429.me` rotates IPs (Cloudflare) the rule misses. Re-run `dig` + reload, or combine with `/etc/hosts`.
 - The simulator's launch screen briefly shows the app logo before JS runs. That's not the hang — wait 5+ seconds before deciding the WebView is stuck.
 
@@ -546,8 +546,8 @@ networksetup -setairportpower en0 on     # on
 | `failed to read CLI options: Connection refused` | Standalone Xcode build with no coordination server | `project.yml` build script's fallback covers this — make sure `libapp.a` is pre-built per §5.1 |
 | iOS keyboard covers editor | Missing safe-area CSS | Verify `@supports (-webkit-touch-callout: none)` block in `globals.css` |
 | `failed to read plugin permissions: ... /Users/.../<old-repo-name>/...: No such file or directory` | Cargo bakes absolute paths into the tauri plugin codegen under `target/`; renaming or moving the repo invalidates them | `cd app/src-tauri && rm -rf target` then rebuild. `cargo clean --target aarch64-apple-ios` alone is usually not enough because some plugin codegen lives outside the per-target dir. |
-| WKWebView loads remote URL (`bk.hax429.me`) even after `--release` build | `tauri/build.rs` sets `let dev = !has_feature("custom-protocol")` — and bare `cargo build --release` does NOT enable that feature unless you pass `--features custom-protocol`. Without it, the runtime sees `cfg(dev)` and loads `devUrl` (remote) instead of `frontendDist` (`tauri://localhost`). The standard Tauri v2 template includes `[features] custom-protocol = ["tauri/custom-protocol"]` with a "DO NOT REMOVE" comment for exactly this reason. Confirm by checking `target/.../build/Blinko-*/output` for `cargo:rustc-cfg=dev` — if present, dev mode is on. | (1) Ensure `app/src-tauri/Cargo.toml` has `[features] custom-protocol = ["tauri/custom-protocol"]`. (2) Build with `cargo build --target aarch64-apple-ios --release --features custom-protocol`. (3) `build_ios.sh` Step 1 now passes this flag automatically. |
-| Xcode build error: `Multiple commands produce '.../Blinko.app/libapp.a'` | After running `xcodegen generate` once `arm64/release/libapp.a` exists on disk, xcodegen finds *both* `arm64/debug/libapp.a` and `arm64/release/libapp.a` under the `Externals` source path and adds each as a Resources build file. Two Resources phases trying to deliver the same `libapp.a` to the `.app` root → conflict. | In `gen/apple/project.yml`, the `Externals` sources entry must be `- path: Externals` + `buildPhase: none` (linking goes via `LIBRARY_SEARCH_PATHS` + the `framework: libapp.a` dependency, not Resources). Then `xcodegen generate`, then wipe `~/Library/Developer/Xcode/DerivedData/Blinko-*` so the cached duplicated rule is gone, then ⌘R. |
+| WKWebView loads remote URL (`bk.hax429.me`) even after `--release` build | `tauri/build.rs` sets `let dev = !has_feature("custom-protocol")` — and bare `cargo build --release` does NOT enable that feature unless you pass `--features custom-protocol`. Without it, the runtime sees `cfg(dev)` and loads `devUrl` (remote) instead of `frontendDist` (`tauri://localhost`). The standard Tauri v2 template includes `[features] custom-protocol = ["tauri/custom-protocol"]` with a "DO NOT REMOVE" comment for exactly this reason. Confirm by checking `target/.../build/bkemo-*/output` for `cargo:rustc-cfg=dev` — if present, dev mode is on. | (1) Ensure `app/src-tauri/Cargo.toml` has `[features] custom-protocol = ["tauri/custom-protocol"]`. (2) Build with `cargo build --target aarch64-apple-ios --release --features custom-protocol`. (3) `build_ios.sh` Step 1 now passes this flag automatically. |
+| Xcode build error: `Multiple commands produce '.../bkemo.app/libapp.a'` | After running `xcodegen generate` once `arm64/release/libapp.a` exists on disk, xcodegen finds *both* `arm64/debug/libapp.a` and `arm64/release/libapp.a` under the `Externals` source path and adds each as a Resources build file. Two Resources phases trying to deliver the same `libapp.a` to the `.app` root → conflict. | In `gen/apple/project.yml`, the `Externals` sources entry must be `- path: Externals` + `buildPhase: none` (linking goes via `LIBRARY_SEARCH_PATHS` + the `framework: libapp.a` dependency, not Resources). Then `xcodegen generate`, then wipe `~/Library/Developer/Xcode/DerivedData/bkemo-*` so the cached duplicated rule is gone, then ⌘R. |
 | WKWebView shows `bk.hax429.me` as the **document** URL (viewport errors / logo.png 404s appear under that host in Safari Web Inspector) | `gen/apple/project.yml` embeds an absolute path to `dist/public` in its pre-build script. After the repo was renamed `blinko → blinkos`, that path stopped resolving and the Xcode build script silently logs `WARNING: Frontend dist not found` to `/tmp/blinko-xcode-build.log`, so the `.ipa` ships whatever was last in `gen/apple/assets/` — a pre-Phase-4.5 shell whose old `blinkoEndpoint.ts` redirected the WebView to the remote URL. | (1) `grep '/Users/.*/blinko/' app/src-tauri/gen/apple/project.yml` — if any matches, fix to the new path and re-run `xcodegen generate`. (2) Manually refresh: `rm -rf app/src-tauri/gen/apple/assets && cp -r dist/public/. app/src-tauri/gen/apple/assets/`. (3) `build_ios.sh` Step 2.5 now does this every run so it's belt-and-braces. (4) Verify with `grep 'index-' app/src-tauri/gen/apple/assets/index.html` matches `grep 'index-' dist/public/index.html`. |
 
 ---
@@ -678,7 +678,7 @@ networksetup -setairportpower en0 on     # on
 After Phase 4.5 shipped (cold-launch offline via build-time bundle on 2026-05-25), in priority order:
 
 1. **Test on physical iPhone** — follow §5.1 Steps 0–5. This is the validation gate for Phase 4.5; nothing else should happen until offline cold-launch is confirmed on Gabriel Wang's iPhone 17 Pro Max.
-2. **Phase 7 — TestFlight upload** (§5.5). Once §5.1 verifies on one device, push to TestFlight so the build is reproducible and reachable on devices without a paired Mac. Pre-req: a one-time App Store Connect listing for `me.hax429.blinko`.
+2. **Phase 7 — TestFlight upload** (§5.5). Once §5.1 verifies on one device, push to TestFlight so the build is reproducible and reachable on devices without a paired Mac. Pre-req: a one-time App Store Connect listing for `me.hax429.bk`.
 3. **Phase 6 — Tests.** Lock in regression coverage for the offline queue (`offlinePendingOps`, `offlineNoteStorage`, `syncOfflineNotes` ordering) and `blinkoEndpoint.ts` default behavior before more refactors layer on top. Files planned in §8.
 4. **Phase 8 — OTA bundle updater** (delivers G10). Only worth doing once you start shipping frontend changes that you don't want to push through TestFlight every time. Phase 4.5 already covers tasks 8c and 8f, so the remaining work is server-side bundle generation + Rust updater/resolver.
 5. **Phase 5 — macOS polish.** Signing, notarization, GitHub releases. Independent of iOS work — schedule whenever a macOS distribution is needed.
@@ -689,7 +689,7 @@ After Phase 4.5 shipped (cold-launch offline via build-time bundle on 2026-05-25
 
 - Apple Developer account: `bondi240827@gmail.com` (NOT `hax42g@gmail.com`)
 - Team: Yuan Lin, ID `5L7AP54366`
-- Bundle ID: `me.hax429.blinko`
+- Bundle ID: `me.hax429.bk`
 - Test device: Gabriel Wang's iPhone 17 Pro Max
   - UDID: `88CEEC75-5E0B-58BB-A3E8-73407340A8ED` (also `00008150-000A319E210B401C` in xcodebuild output)
 - Backend: `https://bk.hax429.me` (Oracle Cloud)

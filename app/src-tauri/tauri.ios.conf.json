@@ -8,7 +8,7 @@
     "app": {
       "windows": [
         {
-          "title": "Blinko",
+          "title": "bkemo",
           "fullscreen": true,
           "focus": true,
           "resizable": false

@@ -1,6 +1,6 @@
-name: Blinko
+name: bkemo
 options:
-  bundleIdPrefix: me.hax429.blinko
+  bundleIdPrefix: me.hax429.bk
   deploymentTarget:
     iOS: 14.0
 fileGroups: [../../src]
@@ -10,8 +10,8 @@ configs:
 settingGroups:
   app:
     base:
-      PRODUCT_NAME: Blinko
-      PRODUCT_BUNDLE_IDENTIFIER: me.hax429.blinko
+      PRODUCT_NAME: bkemo
+      PRODUCT_BUNDLE_IDENTIFIER: me.hax429.bk
 targetTemplates:
   app:
     type: application
@@ -24,7 +24,7 @@ targetTemplates:
     settings:
       groups: [app]
 targets:
-  Blinko_iOS:
+  bkemo-ios:
     type: application
     platform: iOS
     sources:
@@ -32,13 +32,13 @@ targets:
       - path: Assets.xcassets
       - path: Externals
         buildPhase: none
-      - path: Blinko_iOS
+      - path: bkemo-ios
       - path: assets
         buildPhase: resources
         type: folder
       - path: LaunchScreen.storyboard
     info:
-      path: Blinko_iOS/Info.plist
+      path: bkemo-ios/Info.plist
       properties:
         LSRequiresIPhoneOS: true
         UILaunchStoryboardName: LaunchScreen
@@ -54,12 +54,12 @@ targets:
           - UIInterfaceOrientationLandscapeRight
         CFBundleShortVersionString: 1.8.7
         CFBundleVersion: "1.8.7"
-        NSCameraUsageDescription: Blinko uses the camera to attach photos to notes
-        NSMicrophoneUsageDescription: Blinko uses the microphone for voice note recording
-        NSPhotoLibraryUsageDescription: Blinko accesses your photo library to attach images to notes
-        NSPhotoLibraryAddUsageDescription: Blinko saves images to your photo library
+        NSCameraUsageDescription: bkemo uses the camera to attach photos to notes
+        NSMicrophoneUsageDescription: bkemo uses the microphone for voice note recording
+        NSPhotoLibraryUsageDescription: bkemo accesses your photo library to attach images to notes
+        NSPhotoLibraryAddUsageDescription: bkemo saves images to your photo library
     entitlements:
-      path: Blinko_iOS/Blinko_iOS.entitlements
+      path: bkemo-ios/bkemo-ios.entitlements
     scheme:
       environmentVariables:
         RUST_BACKTRACE: full
@@ -68,7 +68,7 @@ targets:
       base:
         ENABLE_BITCODE: false
         ARCHS: [arm64]
-        VALID_ARCHS: arm64 
+        VALID_ARCHS: arm64
         LIBRARY_SEARCH_PATHS[arch=x86_64]: $(inherited) $(PROJECT_DIR)/Externals/x86_64/$(CONFIGURATION) $(SDKROOT)/usr/lib/swift $(TOOLCHAIN_DIR)/usr/lib/swift/$(PLATFORM_NAME) $(TOOLCHAIN_DIR)/usr/lib/swift-5.0/$(PLATFORM_NAME)
         LIBRARY_SEARCH_PATHS[arch=arm64]: $(inherited) $(PROJECT_DIR)/Externals/arm64/$(CONFIGURATION) $(SDKROOT)/usr/lib/swift $(TOOLCHAIN_DIR)/usr/lib/swift/$(PLATFORM_NAME) $(TOOLCHAIN_DIR)/usr/lib/swift-5.0/$(PLATFORM_NAME)
         ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES: true
@@ -86,12 +86,12 @@ targets:
       - sdk: WebKit.framework
     preBuildScripts:
       - script: |
-          exec >> /tmp/blinko-xcode-build.log 2>&1
+          exec >> /tmp/bkemo-xcode-build.log 2>&1
           echo "=== BUILD START $(date) CONFIGURATION=${CONFIGURATION} ==="
           export PATH="/Users/hax429/.bun/bin:/Users/hax429/.cargo/bin:$PATH"
           . "$HOME/.cargo/env" 2>/dev/null || true
 
-          ADDR_FILE="/tmp/me.hax429.blinko-server-addr"
+          ADDR_FILE="/tmp/me.hax429.bk-server-addr"
           LIB_OUT="$SRCROOT/Externals/arm64/$CONFIGURATION/libapp.a"
 
           if [ -f "$ADDR_FILE" ]; then
