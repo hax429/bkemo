@@ -1,16 +1,18 @@
 import { observer } from "mobx-react-lite";
-import { BlinkoEditor } from "@/components/BlinkoEditor";
+import { TiptapEditor, type TiptapEditorHandle } from "@/components/TiptapEditor";
 import { RootStore } from "@/store";
 import { BlinkoStore } from "@/store/blinkoStore";
-import { useEffect, useRef } from "react";
+import { NoteType } from "@shared/lib/types";
+import { useEffect, useRef, useState } from "react";
 import { isInTauri } from "@/lib/tauriHelper";
 import { invoke } from "@tauri-apps/api/core";
-import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useTranslation } from "react-i18next";
 
 const QuickNotePage = observer(() => {
   const blinko = RootStore.Get(BlinkoStore);
   const { t } = useTranslation();
+  const editorRef = useRef<TiptapEditorHandle>(null);
+  const [sending, setSending] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const lastHeightRef = useRef<number>(0);
   const resizeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -50,6 +52,8 @@ const QuickNotePage = observer(() => {
   useEffect(() => {
     // Ensure in create mode
     blinko.isCreateMode = true;
+    // Load tags for #-autocomplete in this standalone window.
+    if (!blinko.tagList.value) blinko.tagList.call();
 
     // Disable auto navigation - quicknote window should not navigate
     const originalNavigate = window.history.pushState;
@@ -130,12 +134,10 @@ const QuickNotePage = observer(() => {
     };
   }, []);
 
-  const handleSend = async () => {
-    // Call toggle method to close window after sending note - Tauri only
+  const closeWindow = async () => {
+    // Close the quicknote window after sending - Tauri only.
     if (isInTauri()) {
       try {
-        console.log('Calling toggle_quicknote_window to close');
-        // Call Rust toggle method - consistent with hotkey behavior
         await invoke('toggle_quicknote_window');
       } catch (error) {
         console.error('Failed to toggle quicknote window:', error);
@@ -143,20 +145,48 @@ const QuickNotePage = observer(() => {
     }
   };
 
+  const send = async () => {
+    const md = editorRef.current?.getMarkdown()?.trim() ?? '';
+    if (!md || sending) return;
+    setSending(true);
+    try {
+      await blinko.upsertNote.call({ content: md, type: NoteType.BLINKO, showToast: false });
+      editorRef.current?.clear();
+      await closeWindow();
+    } catch (error) {
+      console.error('Quick note save failed:', error);
+    } finally {
+      setSending(false);
+    }
+  };
+
   return (
-    <div className="w-full h-full p-0 m-0 overflow-hidden">
-      <div
-        ref={containerRef}
-        data-tauri-drag-region
-        id="quicknote-editor"
-        className="w-full h-full bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60"
-      >
-        <BlinkoEditor
-          mode="create"
-          onSended={handleSend}
-          withoutOutline={true}
-        // height={undefined} - let editor auto-adjust height 
-        />
+    // Plain .bkemo token scope (no fixed positioning) so the window can size to
+    // content via the MutationObserver above.
+    <div
+      ref={containerRef}
+      data-tauri-drag-region
+      id="quicknote-editor"
+      className="bkemo"
+      data-theme="dark"
+      data-density="regular"
+      style={{ width: '100%', minHeight: '100%', background: 'color-mix(in srgb, var(--bg) 88%, transparent)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', padding: 14, boxSizing: 'border-box' }}
+    >
+      <TiptapEditor
+        ref={editorRef}
+        placeholder={`${t('quicknote.title') || 'Quick memo'} · / for commands, ⌘↵ to save`}
+        autofocus
+        onSubmit={send}
+        getTags={() => blinko.tagList.value?.pathTags ?? []}
+      />
+      <div className="h-stack" style={{ gap: 8, marginTop: 10 }}>
+        <span style={{ color: 'var(--fg-3)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>⌘↵ to save</span>
+        <span className="spacer" />
+        <button
+          onClick={send}
+          disabled={sending}
+          style={{ background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 'var(--radius)', padding: '4px 14px', fontSize: 12, fontWeight: 500, opacity: sending ? 0.6 : 1, cursor: 'pointer' }}
+        >Send</button>
       </div>
     </div>
   );

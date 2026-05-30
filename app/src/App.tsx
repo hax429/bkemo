@@ -7,10 +7,7 @@ import './styles/github-markdown.css';
 import 'react-photo-view/dist/react-photo-view.css';
 import '@/lib/i18n';
 import { initStore } from '@/store/init';
-import { CommonLayout } from '@/components/Layout';
 import { AppProvider } from '@/store/module/AppProvider';
-import { BlinkoMultiSelectPop } from '@/components/BlinkoMultiSelectPop';
-import { BlinkoMusicPlayer } from '@/components/BlinkoMusicPlayer';
 import { LoadingPage } from '@/components/Common/LoadingPage';
 import { PluginManagerStore } from '@/store/plugin/pluginManagerStore';
 import { RootStore } from '@/store';
@@ -27,61 +24,14 @@ import QuickAIPage from "./pages/quickai";
 import QuickToolPage from "./pages/quicktool";
 import { useQuicknoteHotkey } from "./hooks/useQuicknoteHotkey";
 
-const HomePage = lazy(() => import('./pages/index'));
 const SignInPage = lazy(() => import('./pages/signin'));
 const SignUpPage = lazy(() => import('./pages/signup'));
-const HubPage = lazy(() => import('./pages/hub'));
-const AIPage = lazy(() => import('./pages/ai'));
-const ResourcesPage = lazy(() => import('./pages/resources'));
-const ReviewPage = lazy(() => import('./pages/review'));
-const SettingsPage = lazy(() => import('./pages/settings'));
-const PluginPage = lazy(() => import('./pages/plugin'));
-const AnalyticsPage = lazy(() => import('./pages/analytics'));
-const AllPage = lazy(() => import('./pages/all'));
 const OAuthCallbackPage = lazy(() => import('./pages/oauth-callback'));
-const DetailPage = lazy(() => import('./pages/detail'));
 const ShareIndexPage = lazy(() => import('./pages/share'));
 const ShareDetailPage = lazy(() => import('./pages/share/[id]'));
 const AiSharePage = lazy(() => import('./pages/ai-share'));
-
-const HomeRedirect = () => {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const blinko = RootStore.Get(BlinkoStore);
-  const [searchParams] = useSearchParams();
-  const [loading, setLoading] = useState(true);
-  
-  useEffect(() => {
-    const redirectToDefaultPage = async () => {
-      try {
-        await blinko.config.call();
-        const defaultHomePage = blinko.config.value?.defaultHomePage;
-        const currentPath = searchParams.get('path');
-        const isDirectNavigation = location.key === 'default';
-        if (currentPath || !defaultHomePage || defaultHomePage === 'blinko' || !isDirectNavigation) {
-          return;
-        }
-        navigate(`/?path=${defaultHomePage}`, { replace: true });
-      } catch (error) {
-        // Offline or backend unreachable — fall through to render HomePage with whatever
-        // is cached (noteCache.ts / offlineNoteStorage). Without this, the unhandled
-        // rejection from config.call() skips setLoading(false) and the user sees an
-        // infinite LoadingPage.
-        console.warn('config.call() failed, continuing without redirect:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    redirectToDefaultPage();
-  }, [navigate, searchParams, location]);
-  
-  if (loading) {
-    return <LoadingPage />;
-  }
-  
-  return <HomePage />;
-};
+const BkemoPage = lazy(() => import('./pages/bkemo'));
+const PublicMemoPage = lazy(() => import('./pages/m/[id]'));
 
 const ProtectedRoute = ({ children }) => {
   const navigate = useNavigate();
@@ -237,22 +187,18 @@ function AppRoutes() {
       return (
         <Suspense fallback={<LoadingPage />}>
           <Routes>
-            <Route path="/" element={<ProtectedRoute><HomeRedirect /></ProtectedRoute>} />
+            {/* bkemo is the app */}
+            <Route path="/" element={<ProtectedRoute><BkemoPage /></ProtectedRoute>} />
+            <Route path="/bkemo" element={<ProtectedRoute><BkemoPage /></ProtectedRoute>} />
             <Route path="/signin" element={<SignInPage />} />
             <Route path="/signup" element={<SignUpPage />} />
-            <Route path="/hub" element={<ProtectedRoute><HubPage /></ProtectedRoute>} />
-            <Route path="/ai" element={<ProtectedRoute><AIPage /></ProtectedRoute>} />
-            <Route path="/resources" element={<ProtectedRoute><ResourcesPage /></ProtectedRoute>} />
-            <Route path="/review" element={<ProtectedRoute><ReviewPage /></ProtectedRoute>} />
-            <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
-            <Route path="/plugin" element={<ProtectedRoute><PluginPage /></ProtectedRoute>} />
-            <Route path="/analytics" element={<ProtectedRoute><AnalyticsPage /></ProtectedRoute>} />
-            <Route path="/all" element={<ProtectedRoute><AllPage /></ProtectedRoute>} />
             <Route path="/oauth-callback" element={<OAuthCallbackPage />} />
-            <Route path="/detail/*" element={<ProtectedRoute><DetailPage /></ProtectedRoute>} />
+            {/* public share + comments/reactions */}
+            <Route path="/m/:id" element={<PublicMemoPage />} />
             <Route path="/share" element={<ShareIndexPage />} />
             <Route path="/share/:id" element={<ShareDetailPage />} />
             <Route path="/ai-share/:id" element={<AiSharePage />} />
+            {/* Tauri quick-capture windows */}
             <Route path="/quicknote" element={<QuickNotePage />} />
             <Route path="/quickai" element={<QuickAIPage />} />
             <Route path="/quicktool" element={<QuickToolPage />} />
@@ -290,17 +236,12 @@ function App() {
       />
       <BrowserRouter>
         <HeroUIProvider>
-          <ThemeProvider attribute="class" enableSystem={false}>
+          <ThemeProvider attribute="class" enableSystem={false} defaultTheme="dark">
+            {/* AppProvider mounts global toasts/dialogs; no legacy chrome — bkemo is the app. */}
             <AppProvider />
-            <CommonLayout>
-              <div className="app-content">
-                <AppRoutes />
-                <BlinkoMultiSelectPop />
-              </div>
-            </CommonLayout>
+            <AppRoutes />
           </ThemeProvider>
         </HeroUIProvider>
-        <BlinkoMusicPlayer />
       </BrowserRouter>
     </>
   );

@@ -54,6 +54,14 @@ interface UpsertNoteParams {
   updatedAt?: Date;
   /** Metadata */
   metadata?: any;
+  /** Task: due date (null clears it) */
+  dueDate?: Date | string | null;
+  /** Task: important flag */
+  isImportant?: boolean | null;
+  /** Task: urgent flag */
+  isUrgent?: boolean | null;
+  /** Task: completion time (null = not done) */
+  completedAt?: Date | string | null;
 }
 
 interface OfflineNote extends Omit<Note, 'id' | 'references'> {
@@ -181,6 +189,32 @@ export class BlinkoStore implements Store {
     return [...filteredOfflineNotes, ...notes].map(i => ({ ...i, isExpand: false }));
   }
 
+  /**
+   * Generic note query for the Direction D screens (stream / todo lanes /
+   * matrix / calendar). Goes through getFilteredNotes so it inherits the
+   * online→cache fallback and offline-note merge. The offlineFilter mirrors the
+   * common boolean filters so unsynced offline notes still surface in the right
+   * view. Pass task filters (isCompleted, dueStart/dueEnd, quadrant, isImportant,
+   * isUrgent, type) directly in filterConfig.
+   */
+  queryNotes = async (filterConfig: Record<string, any> = {}, page = 1, size = 100): Promise<Note[]> => {
+    const fc: Record<string, any> = { isArchived: false, isRecycle: false, type: -1, ...filterConfig };
+    return this.getFilteredNotes({
+      page,
+      size,
+      filterConfig: fc,
+      offlineFilter: (n: OfflineNote) => {
+        if (fc.isRecycle != null && !!n.isRecycle !== !!fc.isRecycle) return false;
+        if (fc.isArchived != null && !!n.isArchived !== !!fc.isArchived) return false;
+        if (fc.type != null && fc.type !== -1 && n.type !== fc.type) return false;
+        if (fc.isCompleted != null && (n.completedAt != null) !== !!fc.isCompleted) return false;
+        if (fc.isImportant != null && !!n.isImportant !== !!fc.isImportant) return false;
+        if (fc.isUrgent != null && !!n.isUrgent !== !!fc.isUrgent) return false;
+        return true;
+      },
+    });
+  }
+
   upsertNote = new PromiseState({
     eventKey: 'upsertNote',
     function: async (params: UpsertNoteParams) => {
@@ -199,7 +233,11 @@ export class BlinkoStore implements Store {
         references = [],
         createdAt: inputCreatedAt,
         updatedAt: inputUpdatedAt,
-        metadata
+        metadata,
+        dueDate,
+        isImportant,
+        isUrgent,
+        completedAt
       } = params;
 
       const saveOffline = (reason: 'offline' | 'fallback') => {
@@ -220,7 +258,11 @@ export class BlinkoStore implements Store {
             isOffline: true,
             pendingSync: true,
             tags: [],
-            metadata: metadata || {}
+            metadata: metadata || {},
+            dueDate: dueDate === undefined || dueDate === null ? null : new Date(dueDate),
+            isImportant: !!isImportant,
+            isUrgent: !!isUrgent,
+            completedAt: completedAt === undefined || completedAt === null ? null : new Date(completedAt)
           };
           this.saveOfflineNote(offlineNote);
           if (showToast) {
@@ -260,7 +302,11 @@ export class BlinkoStore implements Store {
             references,
             createdAt: inputCreatedAt ? new Date(inputCreatedAt) : undefined,
             updatedAt: inputUpdatedAt ? new Date(inputUpdatedAt) : undefined,
-            metadata
+            metadata,
+            dueDate: dueDate === undefined ? undefined : (dueDate === null ? null : new Date(dueDate)),
+            isImportant,
+            isUrgent,
+            completedAt: completedAt === undefined ? undefined : (completedAt === null ? null : new Date(completedAt))
           }),
           new Promise<never>((_, reject) =>
             setTimeout(() => reject(new Error('upsert-timeout')), 15000)
@@ -333,6 +379,38 @@ export class BlinkoStore implements Store {
       });
       this.updateTicker++;
       return res;
+    }
+  })
+
+  /**
+   * Toggle a memo's task completion. Optimistically patches the cache so the UI
+   * updates instantly, then routes through upsertNote (which handles offline
+   * queueing + online save + reconnect replay) by setting completedAt.
+   */
+  toggleTaskDone = new PromiseState({
+    function: async (params: { id: number; done: boolean; refresh?: boolean }) => {
+      const completedAt = params.done ? new Date() : null;
+      patchNoteInCache(params.id, { completedAt }).catch(e => console.error('[cache] toggleDone patch failed:', e));
+      return await this.upsertNote.call({ id: params.id, completedAt, showToast: false, refresh: params.refresh ?? true });
+    }
+  })
+
+  /** Set a task's due date (null clears it). Optimistic + offline-safe. */
+  setTaskDue = new PromiseState({
+    function: async (params: { id: number; dueDate: Date | null; refresh?: boolean }) => {
+      patchNoteInCache(params.id, { dueDate: params.dueDate }).catch(e => console.error('[cache] setDue patch failed:', e));
+      return await this.upsertNote.call({ id: params.id, dueDate: params.dueDate, showToast: false, refresh: params.refresh ?? true });
+    }
+  })
+
+  /** Set a task's importance/urgency. Optimistic + offline-safe. */
+  setTaskPriority = new PromiseState({
+    function: async (params: { id: number; isImportant?: boolean; isUrgent?: boolean; refresh?: boolean }) => {
+      const patch: Partial<Note> = {};
+      if (params.isImportant !== undefined) patch.isImportant = params.isImportant;
+      if (params.isUrgent !== undefined) patch.isUrgent = params.isUrgent;
+      patchNoteInCache(params.id, patch).catch(e => console.error('[cache] setPriority patch failed:', e));
+      return await this.upsertNote.call({ id: params.id, isImportant: params.isImportant, isUrgent: params.isUrgent, showToast: false, refresh: params.refresh ?? true });
     }
   })
 
