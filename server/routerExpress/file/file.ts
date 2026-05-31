@@ -141,12 +141,28 @@ router.get(/.*/, async (req, res) => {
       if (!token) {
         if (myFile?.note?.isShare) {
         } else {
-          return res.status(401).json({ error: "Unauthorized" });
+          const isAvatar = await prisma.accounts.findFirst({
+            where: { image: '/api/file/' + fullPath }
+          });
+          const isGuestAvatar = !isAvatar && await prisma.comments.findFirst({
+            where: { guestAvatar: '/api/file/' + fullPath }
+          });
+          if (!isAvatar && !isGuestAvatar) {
+            return res.status(401).json({ error: "Unauthorized" });
+          }
         }
       }
 
       if (myFile && (!myFile?.note?.isShare && Number(token?.id) != myFile?.note?.accountId && !myFile?.accountId)) {
-        return res.status(401).json({ error: "Unauthorized" });
+        const isAvatar = await prisma.accounts.findFirst({
+          where: { image: '/api/file/' + fullPath }
+        });
+        const isGuestAvatar = !isAvatar && await prisma.comments.findFirst({
+          where: { guestAvatar: '/api/file/' + fullPath }
+        });
+        if (!isAvatar && !isGuestAvatar) {
+          return res.status(401).json({ error: "Unauthorized" });
+        }
       }
     } catch (error) {
       console.error('Error checking file permissions:', error);

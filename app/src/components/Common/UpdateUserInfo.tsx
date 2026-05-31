@@ -73,10 +73,22 @@ export const UpdateUserPassword = observer(() => {
       <PasswordInput placeholder={t('enter-your-password')} label={t('confirm-password')} value={passwordConfirm} onChange={e => setPasswordConfirm(e.target.value)} />
       <div className="flex w-full justify-end">
         <Button className="ml-auto" color='primary' onPress={async e => {
-          await PromiseCall(api.users.upsertUser.mutate({ id: Number(user.id), password }))
-          RootStore.Get(DialogStore).close()
-          eventBus.emit('user:signout')
-          navigate('/signin')
+          if (!originalPassword) {
+            RootStore.Get(ToastPlugin).error(t('original-password-is-required'));
+            return;
+          }
+          if (password !== passwordConfirm) {
+            RootStore.Get(ToastPlugin).error(t('the-two-passwords-are-inconsistent'));
+            return;
+          }
+          await PromiseCall(api.users.upsertUser.mutate({
+            id: Number(user.id),
+            password,
+            originalPassword
+          }));
+          RootStore.Get(DialogStore).close();
+          eventBus.emit('user:signout');
+          navigate('/signin');
         }}>{t('save')}</Button>
       </div>
     </div>

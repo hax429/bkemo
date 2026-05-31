@@ -35,7 +35,9 @@
 
   background: var(--bg);
   color: var(--fg);
-  font-family: var(--font-body);
+  /* --font-family is set globally by FontManager when a custom font-style is
+     chosen in Settings; fall back to the bkemo body font otherwise. */
+  font-family: var(--font-family, var(--font-body));
   font-feature-settings: "ss01", "cv11";
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
@@ -130,4 +132,13 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+}
+
+/* Dynamic form controls focus matching the selected accent color */
+.bkemo input:focus,
+.bkemo select:focus,
+.bkemo textarea:focus {
+  border-color: var(--accent) !important;
+  outline: none !important;
+  box-shadow: 0 0 0 2px var(--accent-soft) !important;
 }

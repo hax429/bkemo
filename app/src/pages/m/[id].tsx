@@ -4,15 +4,27 @@ import dayjs from '@/lib/dayjs';
 import { api } from '@/lib/trpc';
 import { getGuestId, getGuestName, setGuestName } from '@/lib/guestId';
 import { MarkdownView } from '@/components/bkemo/MarkdownView';
+import { observer } from 'mobx-react-lite';
+import { RootStore } from '@/store';
+import { UserStore } from '@/store/user';
+import { getBlinkoEndpoint } from '@/lib/blinkoEndpoint';
+import axios from 'axios';
 import '@/styles/bkemo-theme.css';
 
 const REACTION_PALETTE = ['👍', '❤️', '🎉', '👀', '🔥', '💯'];
 
 type PublicNote = { id: number; content: string; createdAt?: string | Date; tags?: any[] } | null;
 type Reaction = { emoji: string; count: number; reactedByMe: boolean };
-type Comment = { id: number; content: string; guestName?: string | null; account?: { nickname?: string; name?: string } | null; createdAt: string | Date };
+type Comment = {
+  id: number;
+  content: string;
+  guestName?: string | null;
+  guestAvatar?: string | null;
+  account?: { nickname?: string; name?: string; image?: string } | null;
+  createdAt: string | Date;
+};
 
-export default function PublicMemoPage() {
+const PublicMemoPage = observer(function PublicMemoPage() {
   const { id = '' } = useParams();
   const guestId = getGuestId();
   const [note, setNote] = useState<PublicNote>(null);
@@ -26,6 +38,12 @@ export default function PublicMemoPage() {
   const [draft, setDraft] = useState('');
   const [name, setName] = useState(getGuestName());
   const [showPicker, setShowPicker] = useState(false);
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [guestAvatar, setGuestAvatar] = useState<string | null>(null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+
+  const user = RootStore.Get(UserStore);
 
   const loadNote = useCallback(async (pw?: string) => {
     setLoading(true);
@@ -78,13 +96,89 @@ export default function PublicMemoPage() {
   };
 
   const submitComment = async () => {
-    if (!note?.id || !draft.trim()) return;
-    setGuestName(name);
+    if (!note?.id || !draft.trim() || isSubmitting) return;
+    setIsSubmitting(true);
     try {
-      await api.comments.create.mutate({ noteId: note.id, content: draft.trim(), guestName: name.trim() || undefined });
+      if (user.isLogin) {
+        await api.comments.create.mutate({
+          noteId: note.id,
+          content: draft.trim(),
+        });
+      } else {
+        setGuestName(name);
+        await api.comments.create.mutate({
+          noteId: note.id,
+          content: draft.trim(),
+          guestName: name.trim() || undefined,
+          guestAvatar: guestAvatar || undefined,
+        });
+      }
       setDraft('');
       loadComments(note.id);
-    } catch (e) { console.error('[share] comment failed:', e); }
+    } catch (e) {
+      console.error('[share] comment failed:', e);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingAvatar(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const response = await axios.post(getBlinkoEndpoint('/api/file/upload?isGuestAvatar=true'), formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+      const path = response.data?.filePath || response.data?.path;
+      if (path) {
+        setGuestAvatar(path);
+      }
+    } catch (err) {
+      console.error('Failed to upload guest avatar:', err);
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
+  const renderCommentAvatar = (c: Comment) => {
+    const imgUrl = c.account?.image || c.guestAvatar;
+    if (imgUrl) {
+      const src = imgUrl.startsWith('http') ? imgUrl : getBlinkoEndpoint(imgUrl);
+      return (
+        <img
+          src={src}
+          style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover', border: '1px solid rgba(255,255,255,0.1)' }}
+          alt="avatar"
+        />
+      );
+    }
+    const nameVal = c.account?.nickname || c.account?.name || c.guestName || 'BK';
+    const initial = nameVal.trim().charAt(0).toUpperCase() || 'B';
+    return (
+      <div
+        style={{
+          width: 32,
+          height: 32,
+          borderRadius: '50%',
+          background: 'rgba(255, 255, 255, 0.1)',
+          color: 'rgba(255, 255, 255, 0.8)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: 13,
+          fontWeight: 600,
+          fontFamily: 'var(--font-mono)',
+          border: '1px solid rgba(255,255,255,0.1)',
+        }}
+      >
+        {initial}
+      </div>
+    );
   };
 
   return (
@@ -156,28 +250,266 @@ export default function PublicMemoPage() {
             {/* comments */}
             <div style={{ marginTop: 28 }}>
               <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '.06em', color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', marginBottom: 12 }}>{comments.length} comment{comments.length === 1 ? '' : 's'}</div>
+
               {/* composer */}
-              <div style={{ background: 'rgba(10,10,18,0.5)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 14, padding: 14, marginBottom: 16 }}>
-                <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name (optional)" style={{ width: '100%', background: 'transparent', color: '#fff', border: 'none', borderBottom: '1px solid rgba(255,255,255,0.12)', padding: '4px 0', fontSize: 13, marginBottom: 8, outline: 'none' }} />
-                <textarea value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Add a comment…" rows={2} style={{ width: '100%', background: 'transparent', color: '#fff', border: 'none', resize: 'vertical', fontSize: 14, outline: 'none', fontFamily: 'inherit' }} />
-                <div className="h-stack" style={{ marginTop: 8 }}>
-                  <span className="spacer" />
-                  <button onClick={submitComment} disabled={!draft.trim()} style={{ background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, padding: '5px 14px', fontSize: 13, fontWeight: 500, opacity: draft.trim() ? 1 : 0.5, cursor: 'pointer' }}>Comment</button>
-                </div>
-              </div>
-              {comments.map((c) => (
-                <div key={c.id} style={{ padding: '12px 0', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
-                  <div className="h-stack" style={{ gap: 8, marginBottom: 4 }}>
-                    <span style={{ color: '#fff', fontSize: 13, fontWeight: 600 }}>{c.account?.nickname || c.account?.name || c.guestName || 'Anonymous'}</span>
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>{dayjs(c.createdAt).fromNow()}</span>
+              {user.isLogin ? (
+                <div style={{
+                  background: 'rgba(255,255,255,0.03)',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  borderRadius: 16,
+                  padding: 16,
+                  marginBottom: 20,
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.15)'
+                }}>
+                  <div className="h-stack" style={{ gap: 10, marginBottom: 12, alignItems: 'center' }}>
+                    {user.image ? (
+                      <img src={user.image.startsWith('http') ? user.image : getBlinkoEndpoint(user.image)} style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover' }} alt="avatar" />
+                    ) : (
+                      <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'rgba(255,255,255,0.15)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600 }}>
+                        {(user.nickname || user.name || 'U').charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                    <span style={{ color: 'rgba(255,255,255,0.8)', fontSize: 13, fontWeight: 500 }}>
+                      Commenting as <span style={{ color: '#fff', fontWeight: 600 }}>{user.nickname || user.name || 'Anonymous'}</span>
+                    </span>
                   </div>
-                  <div style={{ color: 'rgba(255,255,255,0.85)', fontSize: 14, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{c.content}</div>
+                  <textarea
+                    value={draft}
+                    onChange={(e) => setDraft(e.target.value)}
+                    placeholder="Add a comment…"
+                    rows={3}
+                    style={{
+                      width: '100%',
+                      background: 'rgba(0,0,0,0.15)',
+                      color: '#fff',
+                      border: '1px solid rgba(255,255,255,0.08)',
+                      borderRadius: 8,
+                      padding: '10px 12px',
+                      resize: 'vertical',
+                      fontSize: 14,
+                      outline: 'none',
+                      fontFamily: 'inherit',
+                      transition: 'border-color 0.15s ease'
+                    }}
+                    onFocus={(e) => e.currentTarget.style.borderColor = 'var(--accent)'}
+                    onBlur={(e) => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'}
+                  />
+                  <div className="h-stack" style={{ marginTop: 10 }}>
+                    <span className="spacer" />
+                    <button
+                      onClick={submitComment}
+                      disabled={!draft.trim() || isSubmitting}
+                      style={{
+                        background: 'var(--accent)',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: 8,
+                        padding: '6px 16px',
+                        fontSize: 13,
+                        fontWeight: 500,
+                        opacity: draft.trim() ? 1 : 0.5,
+                        cursor: draft.trim() ? 'pointer' : 'default',
+                        transition: 'opacity 0.15s ease'
+                      }}
+                    >
+                      {isSubmitting ? 'Sending...' : 'Comment'}
+                    </button>
+                  </div>
                 </div>
-              ))}
+              ) : (
+                <div style={{
+                  background: 'rgba(255,255,255,0.03)',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  borderRadius: 16,
+                  padding: 16,
+                  marginBottom: 20,
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.15)'
+                }}>
+                  <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                      <div
+                        onClick={() => document.getElementById('guest-avatar-input')?.click()}
+                        style={{
+                          position: 'relative',
+                          width: 52,
+                          height: 52,
+                          borderRadius: '50%',
+                          cursor: 'pointer',
+                          overflow: 'hidden',
+                          border: '2px solid rgba(255,255,255,0.15)',
+                          background: 'rgba(255,255,255,0.05)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          transition: 'all 0.2s ease',
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.borderColor = 'var(--accent)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)';
+                        }}
+                        title="Click to upload custom avatar"
+                      >
+                        {uploadingAvatar ? (
+                          <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.7)', textAlign: 'center' }}>...</div>
+                        ) : guestAvatar ? (
+                          <img
+                            src={guestAvatar.startsWith('http') ? guestAvatar : getBlinkoEndpoint(guestAvatar)}
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            alt="Guest Avatar"
+                          />
+                        ) : (
+                          <div style={{ fontSize: 20, fontWeight: 600, color: 'rgba(255,255,255,0.7)' }}>
+                            {(name.trim() || 'BK').substring(0, 2).toUpperCase()}
+                          </div>
+                        )}
+                        <div
+                          style={{
+                            position: 'absolute',
+                            inset: 0,
+                            background: 'rgba(0,0,0,0.5)',
+                            opacity: 0,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: 9,
+                            color: '#fff',
+                            fontWeight: 500,
+                            transition: 'opacity 0.2s ease',
+                          }}
+                          className="upload-overlay"
+                          onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
+                          onMouseLeave={(e) => e.currentTarget.style.opacity = '0'}
+                        >
+                          Upload
+                        </div>
+                      </div>
+                      {guestAvatar && (
+                        <span
+                          onClick={() => setGuestAvatar(null)}
+                          style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)', cursor: 'pointer', transition: 'color 0.15s' }}
+                          onMouseEnter={(e) => e.currentTarget.style.color = '#ff6b6b'}
+                          onMouseLeave={(e) => e.currentTarget.style.color = 'rgba(255,255,255,0.4)'}
+                        >
+                          Remove
+                        </span>
+                      )}
+                    </div>
+
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      <input
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        placeholder="Your name (optional, defaults to bk-xxxxxx)"
+                        style={{
+                          width: '100%',
+                          background: 'rgba(0,0,0,0.15)',
+                          color: '#fff',
+                          border: '1px solid rgba(255,255,255,0.08)',
+                          borderRadius: 8,
+                          padding: '8px 12px',
+                          fontSize: 13,
+                          outline: 'none',
+                          transition: 'border-color 0.15s ease'
+                        }}
+                        onFocus={(e) => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)'}
+                        onBlur={(e) => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'}
+                      />
+                      <textarea
+                        value={draft}
+                        onChange={(e) => setDraft(e.target.value)}
+                        placeholder="Add a comment…"
+                        rows={3}
+                        style={{
+                          width: '100%',
+                          background: 'rgba(0,0,0,0.15)',
+                          color: '#fff',
+                          border: '1px solid rgba(255,255,255,0.08)',
+                          borderRadius: 8,
+                          padding: '10px 12px',
+                          resize: 'vertical',
+                          fontSize: 14,
+                          outline: 'none',
+                          fontFamily: 'inherit',
+                          transition: 'border-color 0.15s ease'
+                        }}
+                        onFocus={(e) => e.currentTarget.style.borderColor = 'var(--accent)'}
+                        onBlur={(e) => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'}
+                      />
+                      <div className="h-stack">
+                        <span className="spacer" />
+                        <button
+                          onClick={submitComment}
+                          disabled={!draft.trim() || isSubmitting}
+                          style={{
+                            background: 'var(--accent)',
+                            color: '#fff',
+                            border: 'none',
+                            borderRadius: 8,
+                            padding: '6px 16px',
+                            fontSize: 13,
+                            fontWeight: 500,
+                            opacity: draft.trim() ? 1 : 0.5,
+                            cursor: draft.trim() ? 'pointer' : 'default',
+                            transition: 'opacity 0.15s ease'
+                          }}
+                        >
+                          {isSubmitting ? 'Sending...' : 'Comment'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                  <input
+                    type="file"
+                    id="guest-avatar-input"
+                    accept="image/*"
+                    onChange={handleAvatarUpload}
+                    style={{ display: 'none' }}
+                  />
+                </div>
+              )}
+
+              {/* comment list */}
+              <div>
+                {comments.map((c) => (
+                  <div key={c.id} style={{ display: 'flex', gap: 12, padding: '16px 0', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                    {renderCommentAvatar(c)}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div className="h-stack" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <span style={{ color: '#fff', fontSize: 13.5, fontWeight: 600 }}>
+                          {c.account?.nickname || c.account?.name || c.guestName || 'Anonymous'}
+                        </span>
+                        {c.account && (
+                          <span style={{
+                            fontSize: 9.5,
+                            background: 'rgba(75, 45, 184, 0.25)',
+                            color: '#a78bfa',
+                            padding: '1px 5px',
+                            borderRadius: 4,
+                            fontWeight: 500,
+                            border: '1px solid rgba(167, 139, 250, 0.3)'
+                          }}>
+                            Member
+                          </span>
+                        )}
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'rgba(255,255,255,0.45)' }}>
+                          {dayjs(c.createdAt).fromNow()}
+                        </span>
+                      </div>
+                      <div style={{ color: 'rgba(255,255,255,0.85)', fontSize: 13.5, lineHeight: 1.5, whiteSpace: 'pre-wrap', marginTop: 4 }}>
+                        {c.content}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           </>
         ) : null}
       </div>
     </div>
   );
-}
+});
+
+export default PublicMemoPage;

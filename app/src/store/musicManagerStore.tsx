@@ -1,6 +1,6 @@
 import { makeAutoObservable } from 'mobx';
 import { Store } from './standard/base';
-import { FileType } from '@/components/Common/Editor/type';
+import { FileType } from '@/lib/editorTypes';
 import { getBlinkoEndpoint } from '@/lib/blinkoEndpoint';
 import { RootStore } from './root';
 import { UserStore } from './user';

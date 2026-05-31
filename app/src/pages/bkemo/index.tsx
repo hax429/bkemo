@@ -3,8 +3,11 @@ import { useState, useEffect } from 'react';
 import { useMediaQuery } from 'usehooks-ts';
 import { RootStore } from '@/store';
 import { BlinkoStore } from '@/store/blinkoStore';
+import { eventBus } from '@/lib/event';
 import type { Note } from '@shared/lib/types';
-import { loadPrefs, savePrefs, type BkemoPrefs } from '@/lib/bkemoSettings';
+import { loadPrefs, savePrefs, hydratePrefs, type BkemoPrefs } from '@/lib/bkemoSettings';
+import { getBkemoConfig } from '@/lib/bkemoConfig';
+import { FontManager } from '@/lib/fontManager';
 import { SettingsScreen } from '@/components/bkemo/SettingsScreen';
 import { BkemoLayout } from '@/components/bkemo/BkemoLayout';
 import { Sidebar, type BkemoRoute } from '@/components/bkemo/Sidebar';
@@ -17,6 +20,8 @@ import { DailyReview } from '@/components/bkemo/DailyReview';
 import { Calendar } from '@/components/bkemo/Calendar';
 import { Stats } from '@/components/bkemo/Stats';
 import { NoteModal } from '@/components/bkemo/NoteModal';
+import { UserStore } from '@/store/user';
+import { signOut, navigate } from '@/components/Auth/auth-client';
 
 function ComingSoon({ title }: { title: string }) {
   return (
@@ -58,20 +63,53 @@ const BkemoPage = observer(function BkemoPage() {
   const [prefs, setPrefs] = useState<BkemoPrefs>(() => loadPrefs());
   const [editing, setEditing] = useState<Note | null>(null);
   const [showMore, setShowMore] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
   const isMobile = useMediaQuery('(max-width: 768px)');
+  const user = RootStore.Get(UserStore);
 
   const updatePrefs = (p: Partial<BkemoPrefs>) => {
     setPrefs((prev) => { const next = { ...prev, ...p }; savePrefs(next); return next; });
   };
 
+  const cfg = getBkemoConfig();
+
   // Ensure tags are loaded for #-autocomplete (sidebar isn't mounted on mobile).
   useEffect(() => {
     const blinko = RootStore.Get(BlinkoStore);
     if (!blinko.tagList.value) blinko.tagList.call();
+    // Load the persisted preference config that the workspace honors.
+    // After config loads, hydrate bkemoPrefs from server so appearance
+    // follows the account across devices.
+    blinko.config.call().then((cfg: any) => {
+      if (cfg?.bkemoPrefs) {
+        setPrefs(hydratePrefs(cfg.bkemoPrefs));
+      }
+    }).catch(() => { /* ignore */ });
+    // Android share intents (from lib/hooks useAndroidShortcuts) → open composer.
+    const onQuickCapture = (opts: { text?: string } = {}) => {
+      setEditing({ content: opts.text ?? '', type: 2 } as Note);
+    };
+    eventBus.on('bkemo:quick-capture', onQuickCapture);
+    return () => { eventBus.off('bkemo:quick-capture', onQuickCapture); };
   }, []);
 
+  // Apply the custom font-style (registers the @font-face + sets --font-family,
+  // which .bkemo reads). Re-runs when the setting changes.
+  useEffect(() => {
+    if (cfg.fontStyle && cfg.fontStyle !== 'default') {
+      FontManager.applyFont(cfg.fontStyle).catch(() => { /* ignore */ });
+    }
+  }, [cfg.fontStyle]);
+
+  // Daily review can be turned off in Settings — bounce back to Home if so.
+  useEffect(() => {
+    if (cfg.closeDailyReview && route === 'daily') setRoute('home');
+  }, [cfg.closeDailyReview, route]);
+
+  const newMemo = () => setEditing({ content: '', type: 2 } as Note);
+
   const render = () => {
-    if (route === 'home') return <Stream onOpen={setEditing} />;
+    if (route === 'home') return <Stream onOpen={setEditing} onNew={newMemo} />;
     if (route === 'daily') return <DailyReview onOpen={setEditing} />;
     if (route === 'random') return <Random onOpen={setEditing} />;
     if (route === 'trash') return <Trash />;
@@ -82,7 +120,7 @@ const BkemoPage = observer(function BkemoPage() {
       return <Todos view={route as TodoView} onView={(v) => setRoute(v)} onOpen={setEditing} />;
     }
     if (typeof route === 'string' && route.startsWith('tag:')) {
-      return <Stream onOpen={setEditing} tag={route.slice(4)} />;
+      return <Stream onOpen={setEditing} onNew={newMemo} tag={route.slice(4)} />;
     }
     return <ComingSoon title="bkemo" />;
   };
@@ -92,17 +130,19 @@ const BkemoPage = observer(function BkemoPage() {
       {isMobile ? (
         <div className="v-stack" style={{ height: '100%', width: '100%' }}>
           <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>{render()}</div>
-          <MobileTabBar
-            activeRoute={route}
-            onNav={setRoute}
-            onNew={() => setEditing({ content: '', type: 2 } as Note)}
-            onMore={() => setShowMore(true)}
-          />
+          {!cfg.hideMobileBar && (
+            <MobileTabBar
+              activeRoute={route}
+              onNav={setRoute}
+              onNew={newMemo}
+              onMore={() => setShowMore(true)}
+            />
+          )}
           {showMore && <MoreSheet onPick={setRoute} onClose={() => setShowMore(false)} />}
         </div>
       ) : (
         <div className="h-stack" style={{ height: '100%', width: '100%' }}>
-          <Sidebar activeRoute={route} onNav={setRoute} onNewMemo={() => setRoute('home')} />
+          <Sidebar activeRoute={route} onNav={setRoute} onNewMemo={newMemo} />
           {render()}
         </div>
       )}

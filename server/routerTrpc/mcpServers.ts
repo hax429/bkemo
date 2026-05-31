@@ -1,4 +1,4 @@
-import { router, authProcedure, superAdminAuthMiddleware } from '@server/middleware';
+import { router, authProcedure, requireManageSite } from '@server/middleware';
 import { z } from 'zod';
 import { prisma } from '@server/prisma';
 import { mcpClientManager } from '@server/aiServer/mcp';
@@ -102,7 +102,7 @@ function areArgsSafe(args: string[]): boolean {
 export const mcpServersRouter = router({
   // List all MCP servers (admin only)
   list: authProcedure
-    .use(superAdminAuthMiddleware)
+    .use(requireManageSite)
     .meta({ openapi: { method: 'GET', path: '/v1/mcp-servers/list', summary: 'List MCP servers', protect: true, tags: ['MCP Server'] } })
     .input(z.void())
     .output(z.array(mcpServerSchema))
@@ -115,7 +115,7 @@ export const mcpServersRouter = router({
 
   // Get a single MCP server by ID (admin only)
   get: authProcedure
-    .use(superAdminAuthMiddleware)
+    .use(requireManageSite)
     .meta({ openapi: { method: 'GET', path: '/v1/mcp-servers/get', summary: 'Get MCP server by ID', protect: true, tags: ['MCP Server'] } })
     .input(z.object({ id: z.number() }))
     .output(z.union([mcpServerSchema, z.null()]))
@@ -128,7 +128,7 @@ export const mcpServersRouter = router({
 
   // Create a new MCP server (admin only)
   create: authProcedure
-    .use(superAdminAuthMiddleware)
+    .use(requireManageSite)
     .meta({ openapi: { method: 'POST', path: '/v1/mcp-servers/create', summary: 'Create MCP server', protect: true, tags: ['MCP Server'] } })
     .input(z.object({
       name: z.string().min(1).max(255),
@@ -192,7 +192,7 @@ export const mcpServersRouter = router({
 
   // Update an MCP server (admin only)
   update: authProcedure
-    .use(superAdminAuthMiddleware)
+    .use(requireManageSite)
     .meta({ openapi: { method: 'POST', path: '/v1/mcp-servers/update', summary: 'Update MCP server', protect: true, tags: ['MCP Server'] } })
     .input(z.object({
       id: z.number(),
@@ -269,7 +269,7 @@ export const mcpServersRouter = router({
 
   // Delete an MCP server (admin only)
   delete: authProcedure
-    .use(superAdminAuthMiddleware)
+    .use(requireManageSite)
     .meta({ openapi: { method: 'POST', path: '/v1/mcp-servers/delete', summary: 'Delete MCP server', protect: true, tags: ['MCP Server'] } })
     .input(z.object({ id: z.number() }))
     .output(z.object({ success: z.boolean() }))
@@ -287,7 +287,7 @@ export const mcpServersRouter = router({
 
   // Toggle server enabled/disabled (admin only)
   toggle: authProcedure
-    .use(superAdminAuthMiddleware)
+    .use(requireManageSite)
     .meta({ openapi: { method: 'POST', path: '/v1/mcp-servers/toggle', summary: 'Toggle MCP server enabled', protect: true, tags: ['MCP Server'] } })
     .input(z.object({
       id: z.number(),
@@ -309,7 +309,7 @@ export const mcpServersRouter = router({
 
   // Test connection to an MCP server (admin only)
   testConnection: authProcedure
-    .use(superAdminAuthMiddleware)
+    .use(requireManageSite)
     .meta({ openapi: { method: 'POST', path: '/v1/mcp-servers/test-connection', summary: 'Test MCP server connection', protect: true, tags: ['MCP Server'] } })
     .input(z.object({ id: z.number() }))
     .output(z.object({
@@ -342,7 +342,7 @@ export const mcpServersRouter = router({
 
   // Get connection status for all servers (admin only)
   connectionStatus: authProcedure
-    .use(superAdminAuthMiddleware)
+    .use(requireManageSite)
     .meta({ openapi: { method: 'GET', path: '/v1/mcp-servers/connection-status', summary: 'Get MCP servers connection status', protect: true, tags: ['MCP Server'] } })
     .input(z.void())
     .output(z.array(connectionStatusSchema))
@@ -353,7 +353,7 @@ export const mcpServersRouter = router({
 
   // Disconnect a server (admin only)
   disconnect: authProcedure
-    .use(superAdminAuthMiddleware)
+    .use(requireManageSite)
     .meta({ openapi: { method: 'POST', path: '/v1/mcp-servers/disconnect', summary: 'Disconnect MCP server', protect: true, tags: ['MCP Server'] } })
     .input(z.object({ id: z.number() }))
     .output(z.object({ success: z.boolean() }))

@@ -71,7 +71,9 @@ router.post('/', async (req, res) => {
     res.setTimeout(0); // 0 = no timeout
 
     const token = await getTokenFromRequest(req);
-    if (!token) {
+    const isGuestAvatar = req.headers['x-guest-avatar'] === 'true' || req.query.isGuestAvatar === 'true';
+
+    if (!token && !isGuestAvatar) {
       return res.status(401).json({ error: "Unauthorized" });
     }
 
@@ -147,6 +149,11 @@ router.post('/', async (req, res) => {
       if (!fileInfo || !fileInfo.stream) {
         return res.status(400).json({ error: "No files received." });
       }
+
+      const isGuestAvatar = req.headers['x-guest-avatar'] === 'true' || req.query.isGuestAvatar === 'true';
+      if (!token && isGuestAvatar && !fileInfo.mimeType.startsWith('image/')) {
+        return res.status(400).json({ error: "Only image files are allowed for guest avatars." });
+      }
       
       try {
         const webReadableStream = Readable.toWeb(fileInfo.stream) as unknown as ReadableStream;
@@ -168,7 +175,7 @@ router.post('/', async (req, res) => {
           originalName: fileInfo.filename,
           fileSize: fileInfo.size,
           type: fileInfo.mimeType,
-          accountId: Number(token.id),
+          accountId: token ? Number(token.id) : null,
           metadata: Object.keys(metadata).length > 0 ? metadata : undefined
         });
         

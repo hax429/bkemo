@@ -1,12 +1,20 @@
 import { observer } from 'mobx-react-lite';
 import { useEffect, useRef, useState } from 'react';
+import { useMediaQuery } from 'usehooks-ts';
 import dayjs from '@/lib/dayjs';
 import type { Dayjs } from 'dayjs';
 import { RootStore } from '@/store';
 import { BlinkoStore } from '@/store/blinkoStore';
 import { NoteType, type Note } from '@shared/lib/types';
+import { api } from '@/lib/trpc';
+import { PageSize } from '@/store/standard/PromiseState';
+import { getDisplayTime } from '@/lib/helper';
+import { getBkemoConfig } from '@/lib/bkemoConfig';
 import { TiptapEditor, type TiptapEditorHandle } from '@/components/TiptapEditor';
 import { MarkdownView } from './MarkdownView';
+import { ContextMenu, type MenuItem } from './ContextMenu';
+import { CommentsSection, CardFeedback } from './CommentsSection';
+import { MultiSelectBar } from './MultiSelectBar';
 import { isTask, isDone } from '@/lib/taskFilters';
 
 function dayLabel(d: Dayjs): string {
@@ -112,65 +120,159 @@ const Composer = observer(function Composer() {
   );
 });
 
-const MemoRow = observer(function MemoRow({ note, onOpen }: { note: Note; onOpen?: (n: Note) => void }) {
+const SelectBox = ({ on }: { on: boolean }) => (
+  <span style={{ width: 14, height: 14, borderRadius: 3, marginTop: 2, flexShrink: 0, border: `1.5px solid ${on ? 'var(--accent)' : 'var(--fg-3)'}`, background: on ? 'var(--accent)' : 'transparent', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 10 }}>{on ? '✓' : ''}</span>
+);
+
+const MemoRow = observer(function MemoRow({ note, onOpen, selected, selectionActive, onToggleSelect, onContext, hideComments, textFoldLength }: {
+  note: Note;
+  onOpen?: (n: Note) => void;
+  selected: boolean;
+  selectionActive: boolean;
+  onToggleSelect: (id: number) => void;
+  onContext: (e: React.MouseEvent, n: Note) => void;
+  hideComments: boolean;
+  textFoldLength: number;
+}) {
   const task = isTask(note);
   const done = isDone(note);
-  const created = note.createdAt ? dayjs(note.createdAt) : dayjs();
+  const [expanded, setExpanded] = useState(false);
+
+  // Fold long memos behind a "Show more" (textFoldLength = 0 disables folding).
+  const longBody = textFoldLength > 0 && (note.content?.length ?? 0) > textFoldLength;
+  const collapsed = longBody && !expanded;
+
   return (
     <div
-      onClick={() => onOpen?.(note)}
+      onContextMenu={(e) => { e.preventDefault(); onContext(e, note); }}
+      onClick={() => (selectionActive ? onToggleSelect(note.id!) : onOpen?.(note))}
       style={{
-        background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)',
-        padding: 'var(--row-pad-y) 16px', marginBottom: 10, cursor: 'pointer', transition: 'border-color .1s',
+        background: 'var(--bg-2)', border: `1px solid ${selected ? 'var(--accent)' : 'var(--border)'}`, borderRadius: 'var(--radius-lg)',
+        padding: 'var(--row-pad-y) 16px', cursor: 'pointer', transition: 'border-color .1s',
       }}
-      onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'var(--border-2)')}
-      onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'var(--border)')}
+      onMouseEnter={(e) => { if (!selected) e.currentTarget.style.borderColor = 'var(--border-2)'; }}
+      onMouseLeave={(e) => { if (!selected) e.currentTarget.style.borderColor = 'var(--border)'; }}
     >
       {/* meta row */}
       <div className="h-stack" style={{ gap: 8, fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg-3)', marginBottom: 4 }}>
+        {selectionActive && (
+          <span onClick={(e) => { e.stopPropagation(); onToggleSelect(note.id!); }}><SelectBox on={selected} /></span>
+        )}
         {task && <TaskCheck note={note} />}
+        {note.isTop && <span title="Pinned" style={{ color: 'var(--accent)' }}>⊕</span>}
         <span>BK-{note.id}</span>
-        <span>·</span>
-        <span>{created.format('HH:mm')}</span>
         <span className="spacer" />
-        <span>{created.fromNow(true)}</span>
+        <span>{getDisplayTime(note.createdAt, note.updatedAt)}</span>
       </div>
       {/* body — markdown preview, consistent with the editor */}
-      <div style={{ color: done ? 'var(--fg-3)' : 'var(--fg)', textDecoration: done ? 'line-through' : 'none' }}>
-        <MarkdownView content={note.content ?? ''} />
+      <div style={{ position: 'relative', maxHeight: collapsed ? 150 : undefined, overflow: collapsed ? 'hidden' : undefined }}>
+        <div style={{ color: done ? 'var(--fg-3)' : 'var(--fg)', textDecoration: done ? 'line-through' : 'none' }}>
+          <MarkdownView content={note.content ?? ''} />
+        </div>
+        {collapsed && (
+          <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 48, background: 'linear-gradient(transparent, var(--bg-2))', pointerEvents: 'none' }} />
+        )}
       </div>
+      {longBody && (
+        <span
+          onClick={(e) => { e.stopPropagation(); setExpanded((v) => !v); }}
+          style={{ display: 'inline-block', marginTop: 4, color: 'var(--accent)', fontSize: 12, cursor: 'pointer', fontFamily: 'var(--font-mono)' }}
+        >{expanded ? 'Show less' : 'Show more'}</span>
+      )}
+      {/* footer: feedback & actions */}
+      <div className="h-stack" style={{ gap: 14, marginTop: 8, color: 'var(--fg-3)', fontSize: 12 }}>
+        <span className="spacer" />
+        <span onClick={(e) => { e.stopPropagation(); onContext(e, note); }} style={{ cursor: 'pointer' }} title="More">···</span>
+      </div>
+      {!hideComments && (
+        <CardFeedback note={note} />
+      )}
     </div>
   );
 });
 
-export const Stream = observer(function Stream({ onOpen, tag }: { onOpen?: (n: Note) => void; tag?: string }) {
+export const Stream = observer(function Stream({ onOpen, onNew, tag }: { onOpen?: (n: Note) => void; onNew?: () => void; tag?: string }) {
   const blinko = RootStore.Get(BlinkoStore);
+  const cfg = getBkemoConfig();
   const [allNotes, setAllNotes] = useState<Note[]>([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [menu, setMenu] = useState<{ x: number; y: number; note: Note } | null>(null);
 
+  // Responsive card columns (device-card-columns setting).
+  const isMobile = useMediaQuery('(max-width: 767px)');
+  const isTablet = useMediaQuery('(min-width: 768px) and (max-width: 1199px)');
+  const cols = Math.max(1, isMobile ? cfg.smallCols : isTablet ? cfg.mediumCols : cfg.largeCols);
+  const maxW = cfg.maxHomePageWidth > 0 ? cfg.maxHomePageWidth : (cols > 1 ? Math.min(1200, 520 * cols) : 760);
+  const showComposer = !(cfg.hidePcEditor && !isMobile);
+
+  // Page size drives the load batch (page-size setting) for the home stream.
+  // Project (tag) views filter client-side, so they load a large set up-front.
+  const size = tag ? 200 : (PageSize.value || 30);
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    blinko.queryNotes({ type: -1, isRecycle: false, isArchived: false }, 1, 200)
-      .then((list) => { if (!cancelled) setAllNotes(list); })
+    blinko.queryNotes({ type: -1, isRecycle: false, isArchived: false }, 1, size)
+      .then((list) => { if (!cancelled) { setAllNotes(list); setPage(1); setHasMore(list.length >= size); } })
       .catch((e) => console.error('[stream] load failed:', e))
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [blinko.updateTicker]);
+  }, [blinko.updateTicker, size]);
+
+  const loadMore = async () => {
+    const next = page + 1;
+    try {
+      const list = await blinko.queryNotes({ type: -1, isRecycle: false, isArchived: false }, next, size);
+      setAllNotes((prev) => {
+        const seen = new Set(prev.map((n) => n.id));
+        return [...prev, ...list.filter((n) => !seen.has(n.id))];
+      });
+      setPage(next);
+      setHasMore(list.length >= size);
+    } catch (e) { console.error('[stream] load more failed:', e); }
+  };
+
+  const toggleSelect = (id: number) => setSelected((prev) => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+  const clearSelection = () => setSelected(new Set());
+  const removeLocal = (ids: number[]) => setAllNotes((prev) => prev.filter((n) => !ids.includes(n.id!)));
+
+  // ── single-note actions (context menu) ──
+  const pin = (n: Note) => blinko.upsertNote.call({ id: n.id, isTop: !n.isTop, showToast: false });
+  const setType = (n: Note, type: NoteType) => blinko.upsertNote.call({ id: n.id, type, showToast: false });
+  const archive = async (ids: number[]) => { try { await api.notes.updateMany.mutate({ ids, isArchived: true }); removeLocal(ids); } catch (e) { console.error(e); } };
+  const trash = async (ids: number[]) => { await blinko.trashNote.call({ ids }); removeLocal(ids); };
+
+  const menuItems = (n: Note): MenuItem[] => [
+    { label: 'Edit', icon: '✎', onClick: () => onOpen?.(n) },
+    { label: n.isTop ? 'Unpin' : 'Pin', icon: '⊕', onClick: () => pin(n) },
+    { label: isTask(n) ? 'Make memo' : 'Make to-do', icon: '☑', onClick: () => setType(n, isTask(n) ? NoteType.BLINKO : NoteType.TODO) },
+    { label: 'Copy text', icon: '⧉', onClick: () => navigator.clipboard?.writeText(n.content ?? '') },
+    { label: 'Select', icon: '☑', onClick: () => toggleSelect(n.id!) },
+    { type: 'divider' },
+    { label: 'Archive', icon: '▦', onClick: () => archive([n.id!]) },
+    { label: 'Trash', icon: '⌫', danger: true, onClick: () => trash([n.id!]) },
+  ];
 
   // When viewing a project (tag), filter by the hashtag in content (offline-safe).
   const notes = tag
     ? allNotes.filter((n) => new RegExp(`#${tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\b|/)`, 'i').test(n.content ?? ''))
     : allNotes;
 
-  // group by day, newest first
+  // Sort + group by the configured field (create vs update time), newest first.
+  const sortField = (n: Note) => (cfg.orderByCreate ? n.createdAt : n.updatedAt) ?? n.createdAt;
   const groups: { label: string; items: Note[] }[] = [];
   const byKey = new Map<string, Note[]>();
   [...notes]
-    .sort((a, b) => dayjs(b.createdAt ?? 0).valueOf() - dayjs(a.createdAt ?? 0).valueOf())
+    .sort((a, b) => dayjs(sortField(b) ?? 0).valueOf() - dayjs(sortField(a) ?? 0).valueOf())
     .forEach((n) => {
-      const key = dayjs(n.createdAt ?? undefined).format('YYYY-MM-DD');
+      const key = dayjs(sortField(n) ?? undefined).format('YYYY-MM-DD');
       if (!byKey.has(key)) byKey.set(key, []);
       byKey.get(key)!.push(n);
     });
@@ -188,26 +290,70 @@ export const Stream = observer(function Stream({ onOpen, tag }: { onOpen?: (n: N
       </div>
 
       <div className="bk-scroll" style={{ flex: 1, overflow: 'auto' }}>
-        <div style={{ maxWidth: 760, margin: '0 auto', padding: '20px 20px 48px' }}>
-          <Composer />
+        <div style={{ maxWidth: maxW, margin: '0 auto', padding: '20px 20px 48px' }}>
+          {showComposer ? (
+            <Composer />
+          ) : (
+            <div
+              onClick={onNew}
+              className="h-stack"
+              style={{ gap: 8, padding: '10px 14px', marginBottom: 14, background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', color: 'var(--fg-2)', fontSize: 13, cursor: 'pointer' }}
+            >
+              <span style={{ color: 'var(--accent)' }}>＋</span>
+              <span>New memo…</span>
+            </div>
+          )}
           {loading && notes.length === 0 ? (
             <div style={{ padding: 30, textAlign: 'center', color: 'var(--fg-3)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>Loading…</div>
           ) : groups.length === 0 ? (
             <div style={{ padding: 30, textAlign: 'center', color: 'var(--fg-3)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>No memos yet. Write your first one above.</div>
           ) : (
-            groups.map((g) => (
-              <div key={g.label} style={{ marginTop: 18 }}>
-                <div className="h-stack" style={{ gap: 8, marginBottom: 10, color: 'var(--fg-2)', fontSize: 12, fontWeight: 500 }}>
-                  <span>{g.label}</span>
-                  <span style={{ color: 'var(--fg-3)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>{g.items.length}</span>
-                  <div style={{ flex: 1, height: 1, background: 'var(--border)', marginLeft: 4 }} />
+            <>
+              {groups.map((g) => (
+                <div key={g.label} style={{ marginTop: 18 }}>
+                  <div className="h-stack" style={{ gap: 8, marginBottom: 10, color: 'var(--fg-2)', fontSize: 12, fontWeight: 500 }}>
+                    <span>{g.label}</span>
+                    <span style={{ color: 'var(--fg-3)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>{g.items.length}</span>
+                    <div style={{ flex: 1, height: 1, background: 'var(--border)', marginLeft: 4 }} />
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gap: 10, alignItems: 'start' }}>
+                    {g.items.map((n) => (
+                      <MemoRow
+                        key={n.id}
+                        note={n}
+                        onOpen={onOpen}
+                        selected={selected.has(n.id!)}
+                        selectionActive={selected.size > 0}
+                        onToggleSelect={toggleSelect}
+                        onContext={(e, note) => setMenu({ x: e.clientX, y: e.clientY, note })}
+                        hideComments={cfg.hideComments}
+                        textFoldLength={cfg.textFoldLength}
+                      />
+                    ))}
+                  </div>
                 </div>
-                {g.items.map((n) => <MemoRow key={n.id} note={n} onOpen={onOpen} />)}
-              </div>
-            ))
+              ))}
+              {hasMore && !tag && (
+                <div style={{ textAlign: 'center', marginTop: 20 }}>
+                  <span
+                    onClick={loadMore}
+                    style={{ display: 'inline-block', padding: '6px 16px', border: '1px solid var(--border-2)', borderRadius: 'var(--radius)', color: 'var(--fg-2)', fontSize: 12, fontFamily: 'var(--font-mono)', cursor: 'pointer' }}
+                  >Load more</span>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
+
+      {menu && <ContextMenu x={menu.x} y={menu.y} items={menuItems(menu.note)} onClose={() => setMenu(null)} />}
+      <MultiSelectBar
+        count={selected.size}
+        onPin={() => { [...selected].forEach((id) => { const n = allNotes.find((x) => x.id === id); if (n) pin(n); }); clearSelection(); }}
+        onArchive={() => { archive([...selected]); clearSelection(); }}
+        onTrash={() => { trash([...selected]); clearSelection(); }}
+        onClear={clearSelection}
+      />
     </div>
   );
 });

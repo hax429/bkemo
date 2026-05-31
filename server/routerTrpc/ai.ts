@@ -1,4 +1,4 @@
-import { router, authProcedure } from '../middleware';
+import { router, authProcedure, requireManageSite } from '../middleware';
 import { z } from 'zod';
 import { AiService } from '@server/aiServer';
 import { prisma } from '../prisma';
@@ -363,7 +363,7 @@ export const aiRouter = router({
       return await AiModelFactory.getAllAiProviders();
     }),
 
-  createProvider: authProcedure
+  createProvider: authProcedure.use(requireManageSite)
     .input(z.object({
       title: z.string(),
       provider: z.string(),
@@ -379,7 +379,7 @@ export const aiRouter = router({
       });
     }),
 
-  updateProvider: authProcedure
+  updateProvider: authProcedure.use(requireManageSite)
     .input(z.object({
       id: z.number(),
       title: z.string().optional(),
@@ -398,7 +398,7 @@ export const aiRouter = router({
       });
     }),
 
-  deleteProvider: authProcedure
+  deleteProvider: authProcedure.use(requireManageSite)
     .input(z.object({
       id: z.number()
     }))
@@ -436,7 +436,7 @@ export const aiRouter = router({
       return await AiModelFactory.getAiModelsByCapability(input.capability);
     }),
 
-  createModel: authProcedure
+  createModel: authProcedure.use(requireManageSite)
     .input(z.object({
       providerId: z.number(),
       title: z.string(),
@@ -461,7 +461,7 @@ export const aiRouter = router({
       });
     }),
 
-  updateModel: authProcedure
+  updateModel: authProcedure.use(requireManageSite)
     .input(z.object({
       id: z.number(),
       title: z.string().optional(),
@@ -488,7 +488,7 @@ export const aiRouter = router({
       });
     }),
 
-  deleteModel: authProcedure
+  deleteModel: authProcedure.use(requireManageSite)
     .input(z.object({
       id: z.number()
     }))
@@ -499,7 +499,7 @@ export const aiRouter = router({
     }),
 
 
-  createModelsFromProvider: authProcedure
+  createModelsFromProvider: authProcedure.use(requireManageSite)
     .input(z.object({
       providerId: z.number(),
       models: z.array(z.object({

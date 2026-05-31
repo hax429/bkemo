@@ -122,7 +122,6 @@
         "tiptap-markdown": "^0.9.0",
         "usehooks-ts": "^3.1.1",
         "vanilla-tilt": "^1.8.1",
-        "vditor": "3.11.2",
         "zod": "^4.1.12",
       },
       "devDependencies": {
@@ -4880,8 +4879,6 @@
     "vanilla-tilt": ["vanilla-tilt@1.8.1", "", {}, "sha512-hPB1XUsnh+SIeVSW2beb5RnuFxz4ZNgxjGD78o52F49gS4xaoLeEMh9qrQnJrnEn/vjjBI7IlxrrXmz4tGV0Kw=="],
 
     "vary": ["vary@1.1.2", "", {}, "sha512-BNGbWLfd0eUPabhkXUVm0j8uuvREyTh5ovRa/dyow/BqAbZJyC+5fU+IzQOzmAKzYqYRAISoRhdQr3eIZ/PXqg=="],
-
-    "vditor": ["vditor@3.11.2", "", { "dependencies": { "diff-match-patch": "^1.0.5" } }, "sha512-8QguQQUPWbBFocnfQmWjz4jiykQnvsmCuhOomGIVVK7vc+dQq2h8w9qQQuEjUTZpnZT5fEdYbj4aLr1NGdAZaA=="],
 
     "vfile": ["vfile@6.0.3", "", { "dependencies": { "@types/unist": "^3.0.0", "vfile-message": "^4.0.0" } }, "sha512-KzIbH/9tXat2u30jf+smMwFCsno4wHVdNmzFyL+T/L3UGqqk6JKfVqOFOZEpZSHADH1k40ab6NUIXZq422ov3Q=="],
 

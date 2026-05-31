@@ -11,6 +11,7 @@ import { verifyPassword } from '@prisma/seed';
 import { getGlobalConfig } from '../../routerTrpc/config';
 import { getNextAuthSecret, generateToken, generateApiToken } from '../../lib/helper';
 import { cache } from '@shared/lib/cache';
+import { resolvePermissions } from '../../lib/permissions';
 
 // Cache TTL in milliseconds (20 seconds)
 const CACHE_TTL = 20 * 1000;
@@ -61,6 +62,10 @@ async function handleOAuthCallback(accessToken: string, refreshToken: string, pr
         realUser = await cache.wrap(`linked_account_${existingUser.linkAccountId}`, async () => {
           return (await prisma.accounts.findFirst({ where: { id: existingUser.linkAccountId! } }))!;
         }, { ttl: CACHE_TTL });
+      }
+
+      if (!resolvePermissions(realUser).enabled) {
+        return done(null, false, { message: 'This account has been disabled' });
       }
 
       await prisma.accounts.update({
@@ -126,6 +131,10 @@ const initJwtStrategy = async () => {
 
         if (!user) {
           return done(null, false, { message: 'User not found' });
+        }
+
+        if (!resolvePermissions(user).enabled) {
+          return done(null, false, { message: 'This account has been disabled' });
         }
 
         if (!jwtPayload.twoFactorVerified) {

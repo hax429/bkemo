@@ -1,5 +1,6 @@
 import { observer } from 'mobx-react-lite';
 import type { BkemoRoute } from './Sidebar';
+import { getBkemoConfig } from '@/lib/bkemoConfig';
 
 const TABS: { id: BkemoRoute; glyph: string; label: string }[] = [
   { id: 'home', glyph: '✦', label: 'Home' },
@@ -8,6 +9,8 @@ const TABS: { id: BkemoRoute; glyph: string; label: string }[] = [
   { id: 'daily', glyph: '☉', label: 'Daily' },
   { id: '__more', glyph: '⋯', label: 'More' },
 ];
+// Shown in place of Daily when Daily review is disabled in Settings.
+const RANDOM_TAB = { id: 'random' as BkemoRoute, glyph: '↻', label: 'Random' };
 
 /** Bottom tab bar for the mobile (iOS) shell. */
 export const MobileTabBar = observer(function MobileTabBar({ activeRoute, onNav, onNew, onMore }: {
@@ -16,6 +19,8 @@ export const MobileTabBar = observer(function MobileTabBar({ activeRoute, onNav,
   onNew: () => void;
   onMore: () => void;
 }) {
+  const { closeDailyReview } = getBkemoConfig();
+  const tabs = closeDailyReview ? TABS.map((t) => (t.id === 'daily' ? RANDOM_TAB : t)) : TABS;
   return (
     <div
       className="h-stack"
@@ -24,7 +29,7 @@ export const MobileTabBar = observer(function MobileTabBar({ activeRoute, onNav,
         justifyContent: 'space-between', background: 'var(--bg-2)', flexShrink: 0,
       }}
     >
-      {TABS.map((t) => {
+      {tabs.map((t) => {
         const active = activeRoute === t.id;
         const onClick = t.id === '__new' ? onNew : t.id === '__more' ? onMore : () => onNav(t.id);
         return (

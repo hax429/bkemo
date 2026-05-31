@@ -6,6 +6,7 @@ import { BlinkoStore } from '@/store/blinkoStore';
 import { NoteType, type Note } from '@shared/lib/types';
 import { TiptapEditor, type TiptapEditorHandle } from '@/components/TiptapEditor';
 import { isDone, isTask } from '@/lib/taskFilters';
+import { UserStore } from '@/store/user';
 
 const pill = (active: boolean, color: string): React.CSSProperties => ({
   padding: '4px 10px', borderRadius: 100, fontSize: 12, fontFamily: 'var(--font-mono)', cursor: 'pointer',
@@ -17,6 +18,7 @@ const pill = (active: boolean, color: string): React.CSSProperties => ({
 /** Edit a single memo/task: content (TipTap) + due date + important/urgent + done. */
 export const NoteModal = observer(function NoteModal({ note, onClose }: { note: Note; onClose: () => void }) {
   const blinko = RootStore.Get(BlinkoStore);
+  const user = RootStore.Get(UserStore);
   const ref = useRef<TiptapEditorHandle>(null);
   const [isTodo, setIsTodo] = useState(note.type === NoteType.TODO || isTask(note));
   const [important, setImportant] = useState(!!note.isImportant);
@@ -90,7 +92,7 @@ export const NoteModal = observer(function NoteModal({ note, onClose }: { note: 
           <span>·</span>
           <span>{note.createdAt ? dayjs(note.createdAt).format('MMM D, YYYY HH:mm') : ''}</span>
           <span className="spacer" />
-          {note.id && (
+          {note.id && user.canShare && (
             <span onClick={() => (shareId ? setShowShare((v) => !v) : toggleShare())} title="Share" style={{ cursor: 'pointer', fontSize: 12, color: shareId ? 'var(--accent)' : 'var(--fg-3)' }}>↗ {shareId ? 'Shared' : 'Share'}</span>
           )}
           <span onClick={onClose} style={{ cursor: 'pointer', fontSize: 14 }}>✕</span>

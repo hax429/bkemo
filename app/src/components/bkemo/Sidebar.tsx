@@ -1,9 +1,13 @@
 import { observer } from 'mobx-react-lite';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { signOut, navigate } from '@/components/Auth/auth-client';
+import { eventBus } from '@/lib/event';
 import { RootStore } from '@/store';
 import { BlinkoStore } from '@/store/blinkoStore';
 import { BaseStore } from '@/store/baseStore';
 import { UserStore } from '@/store/user';
+import { getBkemoConfig } from '@/lib/bkemoConfig';
+import { getBlinkoEndpoint } from '@/lib/blinkoEndpoint';
 
 export type BkemoRoute =
   | 'home' | 'daily' | 'random' | 'trash'
@@ -62,6 +66,7 @@ export const Sidebar = observer(function Sidebar({ activeRoute, onNav, onNewMemo
   const blinko = RootStore.Get(BlinkoStore);
   const base = RootStore.Get(BaseStore);
   const user = RootStore.Get(UserStore);
+  const [showUserMenu, setShowUserMenu] = useState(false);
 
   useEffect(() => {
     if (!blinko.tagList.value) blinko.tagList.call();
@@ -70,15 +75,138 @@ export const Sidebar = observer(function Sidebar({ activeRoute, onNav, onNewMemo
   const tree = blinko.tagList.value?.listTags ?? [];
   const initials = (user?.nickname || user?.name || 'BK').slice(0, 2).toUpperCase();
   const pending = blinko.offlinePendingOps.list?.length ?? 0;
+  const { closeDailyReview } = getBkemoConfig();
+  const notesNav = closeDailyReview ? NOTES_NAV.filter((n) => n.id !== 'daily') : NOTES_NAV;
 
   return (
     <div style={{ width: 248, height: '100%', flexShrink: 0, position: 'relative', background: 'var(--bg-2)', borderRight: '1px solid var(--border)' }}>
       <div className="v-stack bk-scroll" style={{ height: '100%', overflow: 'auto', padding: '10px 6px 8px', gap: 1 }}>
         {/* workspace trigger */}
-        <div className="h-stack" style={{ gap: 8, padding: '6px 10px', margin: '0 2px 10px', borderRadius: 'var(--radius)' }}>
-          <div className="bk-avatar" style={{ width: 22, height: 22, borderRadius: 5, fontSize: 11 }}>{initials}</div>
-          <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--fg)', flex: 1 }}>bkemo</div>
-          <span onClick={() => onNav('settings')} title="Settings" style={{ color: 'var(--fg-3)', fontSize: 13, cursor: 'pointer' }}>⚙</span>
+        <div style={{ position: 'relative' }}>
+          <div
+            onClick={() => setShowUserMenu(!showUserMenu)}
+            className="h-stack"
+            style={{
+              gap: 8,
+              padding: '6px 10px',
+              margin: '0 2px 10px',
+              borderRadius: 'var(--radius)',
+              cursor: 'pointer',
+              userSelect: 'none',
+              alignItems: 'center',
+              background: showUserMenu ? 'var(--hover)' : 'transparent',
+              transition: 'background .15s'
+            }}
+            onMouseEnter={(e) => { if (!showUserMenu) e.currentTarget.style.background = 'var(--hover)'; }}
+            onMouseLeave={(e) => { if (!showUserMenu) e.currentTarget.style.background = 'transparent'; }}
+          >
+            {user?.image ? (
+              <img
+                src={getBlinkoEndpoint(`${user.image}?token=${user.tokenData.value?.token}`)}
+                alt="avatar"
+                style={{ width: 22, height: 22, borderRadius: 5, objectFit: 'cover', flexShrink: 0 }}
+              />
+            ) : (
+              <div className="bk-avatar" style={{ width: 22, height: 22, borderRadius: 5, fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                {initials}
+              </div>
+            )}
+            <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', margin: '0 4px' }}>
+              <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--fg)', lineHeight: 1.2 }}>bkemo</div>
+              <div style={{ fontSize: 10, color: 'var(--fg-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%', textAlign: 'left', lineHeight: 1.2 }}>{user?.nickname || user?.name || 'Guest'}</div>
+            </div>
+            <span style={{ color: 'var(--fg-3)', fontSize: 9, flexShrink: 0 }}>▼</span>
+          </div>
+
+          {/* Back-drop overlay */}
+          {showUserMenu && (
+            <div
+              onClick={() => setShowUserMenu(false)}
+              style={{
+                position: 'fixed',
+                inset: 0,
+                zIndex: 69,
+                background: 'transparent'
+              }}
+            />
+          )}
+
+          {/* Dropdown Menu */}
+          {showUserMenu && (
+            <div
+              style={{
+                position: 'absolute',
+                top: 34,
+                left: 2,
+                zIndex: 70,
+                width: 140,
+                background: 'var(--bg-2)',
+                border: '1px solid var(--border-2)',
+                borderRadius: 'var(--radius-lg)',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                padding: '4px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 1
+              }}
+            >
+              <div
+                onClick={() => {
+                  onNav('settings');
+                  setShowUserMenu(false);
+                }}
+                style={{
+                  padding: '8px 12px',
+                  fontSize: 12.5,
+                  color: 'var(--fg)',
+                  borderRadius: 'var(--radius)',
+                  cursor: 'pointer',
+                  userSelect: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  fontWeight: 500
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.background = 'var(--hover)'}
+                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+              >
+                <span style={{ fontSize: 13 }}>⚙</span>
+                <span>Settings</span>
+              </div>
+              <div
+                style={{
+                  height: 1,
+                  background: 'var(--border)',
+                  margin: '3px 0'
+                }}
+              />
+              <div
+                onClick={async () => {
+                  setShowUserMenu(false);
+                  await signOut({ callbackUrl: '/signin', redirect: false });
+                  eventBus.emit('user:signout');
+                  navigate('/signin');
+                }}
+                style={{
+                  padding: '8px 12px',
+                  fontSize: 12.5,
+                  color: '#E0696B',
+                  borderRadius: 'var(--radius)',
+                  cursor: 'pointer',
+                  userSelect: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  fontWeight: 500
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.background = 'var(--hover)'}
+                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+              >
+                <span style={{ fontSize: 13 }}>🚪</span>
+                <span>Log out</span>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* search */}
@@ -94,7 +222,7 @@ export const Sidebar = observer(function Sidebar({ activeRoute, onNav, onNewMemo
         </div>
 
         <div style={sectionLbl}>Notes</div>
-        {NOTES_NAV.map((n) => (
+        {notesNav.map((n) => (
           <NavRow key={n.id} icon={n.icon} title={n.title} active={activeRoute === n.id} onClick={() => onNav(n.id)} />
         ))}
 

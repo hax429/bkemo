@@ -17,8 +17,22 @@ export default function Component() {
   const [user, setUser] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [password2, setPassword2] = React.useState("");
-  const { t } = useTranslation()
-  const navigate = useNavigate()
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+
+  React.useEffect(() => {
+    api.users.canRegister.mutate()
+      .then((allowed) => {
+        if (!allowed) {
+          RootStore.Get(ToastPlugin).error(t('registration-is-disabled', 'Registration is currently disabled'));
+          navigate('/signin');
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to check register status:', err);
+      });
+  }, [navigate, t]);
+
   return (
     <GradientBackground>
       <div className="flex h-full w-screen items-center justify-center p-2 sm:p-4 lg:p-8">

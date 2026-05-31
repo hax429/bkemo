@@ -3,9 +3,13 @@ import { useEffect, useMemo, useState } from 'react';
 import dayjs from '@/lib/dayjs';
 import { RootStore } from '@/store';
 import { BlinkoStore } from '@/store/blinkoStore';
-import type { Note } from '@shared/lib/types';
+import { api } from '@/lib/trpc';
+import { NoteType, type Note } from '@shared/lib/types';
 import { isTask, isDone, bucketQuadrants, laneToDueRange, type TaskLane } from '@/lib/taskFilters';
 import { renderMemoBody, previewText } from './renderMemoBody';
+import { ContextMenu, type MenuItem } from './ContextMenu';
+import { CommentsSection, CardFeedback } from './CommentsSection';
+import { getBkemoConfig } from '@/lib/bkemoConfig';
 
 export type TodoView = TaskLane | 'matrix';
 
@@ -46,21 +50,31 @@ function dueLabel(n: Note): string {
   return d.format('MMM D');
 }
 
-const TaskRow = observer(function TaskRow({ note, onOpen }: { note: Note; onOpen?: (n: Note) => void }) {
+const TaskRow = observer(function TaskRow({ note, onOpen, onContext }: { note: Note; onOpen?: (n: Note) => void; onContext?: (e: React.MouseEvent, n: Note) => void }) {
   const done = isDone(note);
+  const { hideComments } = getBkemoConfig();
   return (
     <div
-      onClick={() => onOpen?.(note)}
-      style={{ padding: 'var(--row-pad-y) var(--row-pad-x)', borderBottom: '1px solid var(--border)', display: 'grid', gridTemplateColumns: 'auto auto 1fr auto', columnGap: 12, alignItems: 'start', background: 'var(--bg)', cursor: 'pointer' }}
+      onContextMenu={(e) => { if (onContext) { e.preventDefault(); onContext(e, note); } }}
+      style={{ padding: 'var(--row-pad-y) var(--row-pad-x)', borderBottom: '1px solid var(--border)', background: 'var(--bg)' }}
       onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-2)')}
       onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--bg)')}
     >
-      <span style={{ paddingTop: 2 }}><Check note={note} /></span>
-      <span style={{ paddingTop: 4 }}><PriorityDots important={note.isImportant} urgent={note.isUrgent} /></span>
-      <div style={{ fontSize: 13.5, lineHeight: 'var(--row-line)', color: done ? 'var(--fg-3)' : 'var(--fg)', textDecoration: done ? 'line-through' : 'none' }}>
-        {renderMemoBody(previewText(note.content ?? ''))}
+      <div onClick={() => onOpen?.(note)} style={{ display: 'grid', gridTemplateColumns: 'auto auto 1fr auto', columnGap: 12, alignItems: 'start', cursor: 'pointer' }}>
+        <span style={{ paddingTop: 2 }}><Check note={note} /></span>
+        <span style={{ paddingTop: 4 }}><PriorityDots important={note.isImportant} urgent={note.isUrgent} /></span>
+        <div style={{ fontSize: 13.5, lineHeight: 'var(--row-line)', color: done ? 'var(--fg-3)' : 'var(--fg)', textDecoration: done ? 'line-through' : 'none' }}>
+          {note.isTop && <span title="Pinned" style={{ color: 'var(--accent)', marginRight: 6 }}>⊕</span>}
+          {renderMemoBody(previewText(note.content ?? ''))}
+        </div>
+        <span style={{ ...monoCap, fontSize: 11, color: dueLabel(note) === 'today' ? 'var(--accent)' : 'var(--fg-3)', paddingTop: 3, textAlign: 'right' }}>{dueLabel(note)}</span>
       </div>
-      <span style={{ ...monoCap, fontSize: 11, color: dueLabel(note) === 'today' ? 'var(--accent)' : 'var(--fg-3)', paddingTop: 3, textAlign: 'right' }}>{dueLabel(note)}</span>
+      {/* footer: more actions */}
+      <div className="h-stack" style={{ gap: 14, marginTop: 6, marginLeft: 26, color: 'var(--fg-3)', fontSize: 12 }}>
+        <span className="spacer" />
+        {onContext && <span onClick={(e) => onContext(e, note)} style={{ cursor: 'pointer' }} title="More">···</span>}
+      </div>
+      {!hideComments && <div style={{ marginLeft: 26 }}><CardFeedback note={note} /></div>}
     </div>
   );
 });
@@ -73,7 +87,7 @@ const TABS: { id: TodoView; label: string }[] = [
   { id: 'matrix', label: 'Matrix' },
 ];
 
-function Quadrant({ icon, label, sub, tone, tasks, empty, onOpen }: { icon: string; label: string; sub: string; tone: string; tasks: Note[]; empty: string; onOpen?: (n: Note) => void }) {
+function Quadrant({ icon, label, sub, tone, tasks, empty, onOpen, onContext }: { icon: string; label: string; sub: string; tone: string; tasks: Note[]; empty: string; onOpen?: (n: Note) => void; onContext?: (e: React.MouseEvent, n: Note) => void }) {
   return (
     <div style={{ ...card, padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       <div className="h-stack" style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', background: 'var(--bg-2)', gap: 10 }}>
@@ -87,13 +101,13 @@ function Quadrant({ icon, label, sub, tone, tasks, empty, onOpen }: { icon: stri
       <div className="bk-scroll" style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
         {tasks.length === 0 ? (
           <div style={{ ...monoCap, padding: 24, textAlign: 'center', color: 'var(--fg-3)' }}>{empty}</div>
-        ) : tasks.map((t) => <TaskRow key={t.id} note={t} onOpen={onOpen} />)}
+        ) : tasks.map((t) => <TaskRow key={t.id} note={t} onOpen={onOpen} onContext={onContext} />)}
       </div>
     </div>
   );
 }
 
-function MatrixView({ open, onOpen }: { open: Note[]; onOpen?: (n: Note) => void }) {
+function MatrixView({ open, onOpen, onContext }: { open: Note[]; onOpen?: (n: Note) => void; onContext?: (e: React.MouseEvent, n: Note) => void }) {
   const q = useMemo(() => bucketQuadrants(open), [open]);
   return (
     <div style={{ flex: 1, overflow: 'hidden', padding: 18, background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}>
@@ -102,11 +116,11 @@ function MatrixView({ open, onOpen }: { open: Note[]; onOpen?: (n: Note) => void
         <div style={{ ...mono, fontSize: 11, letterSpacing: '.14em', textAlign: 'center' }}>URGENT</div>
         <div style={{ ...mono, fontSize: 11, letterSpacing: '.14em', textAlign: 'center' }}>NOT URGENT</div>
         <div style={{ ...mono, fontSize: 11, letterSpacing: '.14em', writingMode: 'vertical-rl', transform: 'rotate(180deg)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>IMPORTANT</div>
-        <Quadrant icon="▣" label="Do now" sub="Crises · deadlines" tone="var(--accent)" tasks={q.do} empty="Nothing on fire." onOpen={onOpen} />
-        <Quadrant icon="◫" label="Schedule" sub="Strategy · prevention" tone="#5BD0C8" tasks={q.schedule} empty="Plan something." onOpen={onOpen} />
+        <Quadrant icon="▣" label="Do now" sub="Crises · deadlines" tone="var(--accent)" tasks={q.do} empty="Nothing on fire." onOpen={onOpen} onContext={onContext} />
+        <Quadrant icon="◫" label="Schedule" sub="Strategy · prevention" tone="#5BD0C8" tasks={q.schedule} empty="Plan something." onOpen={onOpen} onContext={onContext} />
         <div style={{ ...mono, fontSize: 11, letterSpacing: '.14em', writingMode: 'vertical-rl', transform: 'rotate(180deg)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>NOT IMPORTANT</div>
-        <Quadrant icon="◰" label="Delegate" sub="Interruptions · errands" tone="#E8A35C" tasks={q.delegate} empty="No errands waiting." onOpen={onOpen} />
-        <Quadrant icon="◱" label="Eliminate" sub="Time-wasters · trivia" tone="#9B6B6B" tasks={q.eliminate} empty="Inbox zero on this one." onOpen={onOpen} />
+        <Quadrant icon="◰" label="Delegate" sub="Interruptions · errands" tone="#E8A35C" tasks={q.delegate} empty="No errands waiting." onOpen={onOpen} onContext={onContext} />
+        <Quadrant icon="◱" label="Eliminate" sub="Time-wasters · trivia" tone="#9B6B6B" tasks={q.eliminate} empty="Inbox zero on this one." onOpen={onOpen} onContext={onContext} />
       </div>
     </div>
   );
@@ -116,6 +130,27 @@ export const Todos = observer(function Todos({ view, onView, onOpen }: { view: T
   const blinko = RootStore.Get(BlinkoStore);
   const [openTasks, setOpenTasks] = useState<Note[]>([]);
   const [doneTasks, setDoneTasks] = useState<Note[]>([]);
+  const [menu, setMenu] = useState<{ x: number; y: number; note: Note } | null>(null);
+
+  const removeLocal = (id: number) => {
+    setOpenTasks((p) => p.filter((n) => n.id !== id));
+    setDoneTasks((p) => p.filter((n) => n.id !== id));
+  };
+
+  const taskMenuItems = (n: Note): MenuItem[] => [
+    { label: 'Edit', icon: '✎', onClick: () => onOpen?.(n) },
+    { label: isDone(n) ? 'Mark undone' : 'Mark done', icon: '✓', onClick: () => blinko.toggleTaskDone.call({ id: n.id!, done: !isDone(n) }) },
+    { label: n.isImportant ? 'Not important' : 'Important', icon: '!', onClick: () => blinko.setTaskPriority.call({ id: n.id!, isImportant: !n.isImportant }) },
+    { label: n.isUrgent ? 'Not urgent' : 'Urgent', icon: '^', onClick: () => blinko.setTaskPriority.call({ id: n.id!, isUrgent: !n.isUrgent }) },
+    { label: n.dueDate ? 'Clear due date' : 'Due today', icon: '●', onClick: () => blinko.setTaskDue.call({ id: n.id!, dueDate: n.dueDate ? null : dayjs().endOf('day').toDate() }) },
+    { label: n.isTop ? 'Unpin' : 'Pin', icon: '⊕', onClick: () => blinko.upsertNote.call({ id: n.id, isTop: !n.isTop, showToast: false }) },
+    { label: 'Make memo', icon: '✦', onClick: () => blinko.upsertNote.call({ id: n.id, type: NoteType.BLINKO, showToast: false }) },
+    { label: 'Copy text', icon: '⧉', onClick: () => navigator.clipboard?.writeText(n.content ?? '') },
+    { type: 'divider' },
+    { label: 'Archive', icon: '▦', onClick: async () => { try { await api.notes.updateMany.mutate({ ids: [n.id!], isArchived: true }); removeLocal(n.id!); } catch (e) { console.error(e); } } },
+    { label: 'Trash', icon: '⌫', danger: true, onClick: async () => { await blinko.trashNote.call({ ids: [n.id!] }); removeLocal(n.id!); } },
+  ];
+  const openMenu = (e: React.MouseEvent, note: Note) => setMenu({ x: e.clientX, y: e.clientY, note });
 
   useEffect(() => {
     let cancelled = false;
@@ -165,7 +200,7 @@ export const Todos = observer(function Todos({ view, onView, onOpen }: { view: T
       </div>
 
       {view === 'matrix' ? (
-        <MatrixView open={openTasks} onOpen={onOpen} />
+        <MatrixView open={openTasks} onOpen={onOpen} onContext={openMenu} />
       ) : (
         <div className="bk-scroll" style={{ flex: 1, overflow: 'auto' }}>
           <div style={{ padding: '20px 18px 0', maxWidth: 980, margin: '0 auto' }}>
@@ -175,7 +210,7 @@ export const Todos = observer(function Todos({ view, onView, onOpen }: { view: T
               <div style={{ ...monoCap, padding: 30, textAlign: 'center', color: 'var(--fg-3)', border: '1px dashed var(--border-2)', borderRadius: 'var(--radius-lg)' }}>Nothing in this lane.</div>
             ) : (
               <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', overflow: 'hidden' }}>
-                {laned.map((n) => <TaskRow key={n.id} note={n} onOpen={onOpen} />)}
+                {laned.map((n) => <TaskRow key={n.id} note={n} onOpen={onOpen} onContext={openMenu} />)}
               </div>
             )}
 
@@ -186,13 +221,15 @@ export const Todos = observer(function Todos({ view, onView, onOpen }: { view: T
                   <span style={{ color: 'var(--fg-3)' }}>{doneTasks.length}</span>
                 </div>
                 <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', overflow: 'hidden', opacity: 0.7 }}>
-                  {doneTasks.slice(0, 20).map((n) => <TaskRow key={n.id} note={n} onOpen={onOpen} />)}
+                  {doneTasks.slice(0, 20).map((n) => <TaskRow key={n.id} note={n} onOpen={onOpen} onContext={openMenu} />)}
                 </div>
               </div>
             )}
           </div>
         </div>
       )}
+
+      {menu && <ContextMenu x={menu.x} y={menu.y} items={taskMenuItems(menu.note)} onClose={() => setMenu(null)} />}
     </div>
   );
 });

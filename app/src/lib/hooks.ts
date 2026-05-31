@@ -3,11 +3,19 @@ import { helper } from "./helper";
 import { BlinkoStore } from "@/store/blinkoStore";
 import { RootStore } from "@/store";
 import { isAndroid, isInTauri } from '@/lib/tauriHelper';
-import { ShowEditBlinkoModel } from '@/components/BlinkoRightClickMenu';
 import { eventBus } from '@/lib/event';
 
+/**
+ * Legacy Vditor edit-modal opener removed. Android share intents now emit an
+ * event the bkemo app listens for to open the composer with the shared content
+ * (handled in pages/bkemo).
+ */
+const ShowEditBlinkoModel = (_size: string, _mode: string, opts?: { text?: string; file?: File }) => {
+  eventBus.emit('bkemo:quick-capture', opts ?? {});
+};
+
 import { readFile } from "@tauri-apps/plugin-fs";
-import { FocusEditorFixMobile } from "@/components/Common/Editor/editorUtils";
+import { FocusEditorFixMobile } from "@/lib/editorTypes";
 import { ToastPlugin } from "@/store/module/Toast/Toast";
 
 export const useConfigSetting = (configKey: keyof BlinkoStore['config']['value']) => {

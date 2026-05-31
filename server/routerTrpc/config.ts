@@ -5,11 +5,18 @@ import { GlobalConfig, ZConfigKey, ZConfigSchema, ZUserPerferConfigKey } from '.
 import { configSchema } from '@shared/lib/prismaZodType';
 import { Context } from '../context';
 import { reinitializeOAuthStrategies } from '../routerExpress/auth/config';
+import { resolvePermissions } from '../lib/permissions';
 
 export const getGlobalConfig = async ({ ctx, useAdmin = false }: { ctx?: Context, useAdmin?: boolean }) => {
   const userId = Number(ctx?.id ?? 0);
   const configs = await prisma.config.findMany();
-  const isSuperAdmin = useAdmin ? true : ctx?.role === 'superadmin';
+  // "Site admins" (owner or a user with admin power) may read global config so
+  // they can edit it; everyone else only sees their own per-user prefs.
+  let isSuperAdmin = useAdmin;
+  if (!isSuperAdmin && userId) {
+    const account = await prisma.accounts.findUnique({ where: { id: userId }, select: { role: true, permissions: true } });
+    isSuperAdmin = resolvePermissions(account).manageSiteSettings;
+  }
 
   const globalConfig = configs.reduce((acc, item) => {
     const config = item.config as { type: string, value: any };
@@ -129,7 +136,9 @@ export const configRouter = router({
           updateResult = await prisma.config.create({ data: { userId, key, config: { type: typeof value, value } } });
         }
       } else {
-        if (ctx.role !== 'superadmin') {
+        // Global (site) config requires the "admin power" permission.
+        const account = await prisma.accounts.findUnique({ where: { id: userId }, select: { role: true, permissions: true } });
+        if (!resolvePermissions(account).manageSiteSettings) {
           throw new Error('You are not allowed to update global config')
         }
         const matchedConfigs = await prisma.config.findMany({ where: { key } });

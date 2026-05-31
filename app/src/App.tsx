@@ -15,21 +15,15 @@ import { UserStore } from '@/store/user';
 import { getTokenData, setNavigate } from '@/components/Auth/auth-client';
 import { BlinkoStore } from '@/store/blinkoStore';
 import { useAndroidShortcuts } from '@/lib/hooks';
-import { useQuickaiHotkey } from '@/hooks/useQuickaiHotkey';
 import { useInitialHotkeySetup } from '@/hooks/useInitialHotkeySetup';
 import { isInTauri, isDesktop } from "@/lib/tauriHelper";
 import { listen } from "@tauri-apps/api/event";
 import QuickNotePage from "./pages/quicknote";
-import QuickAIPage from "./pages/quickai";
-import QuickToolPage from "./pages/quicktool";
 import { useQuicknoteHotkey } from "./hooks/useQuicknoteHotkey";
 
 const SignInPage = lazy(() => import('./pages/signin'));
 const SignUpPage = lazy(() => import('./pages/signup'));
 const OAuthCallbackPage = lazy(() => import('./pages/oauth-callback'));
-const ShareIndexPage = lazy(() => import('./pages/share'));
-const ShareDetailPage = lazy(() => import('./pages/share/[id]'));
-const AiSharePage = lazy(() => import('./pages/ai-share'));
 const BkemoPage = lazy(() => import('./pages/bkemo'));
 const PublicMemoPage = lazy(() => import('./pages/m/[id]'));
 
@@ -88,9 +82,11 @@ function AppRoutes() {
   const navigate = useNavigate();
   const windowType = getWindowType();
 
-  // Initialize Quick AI hotkey handler inside Router context (only for main window on desktop)
+  const userStore = RootStore.Get(UserStore);
+  userStore.use();
+
+  // Initialize quick-note hotkey handler inside Router context (main window, desktop only)
   if (windowType === 'main' && isDesktop()) {
-    useQuickaiHotkey();
     useQuicknoteHotkey(true);
   }
 
@@ -153,32 +149,12 @@ function AppRoutes() {
 
   // Return different routes based on window type
   switch (windowType) {
-    case 'quicktool':
-      return (
-        <Suspense fallback={<LoadingPage />}>
-          <Routes>
-            <Route path="/quicktool" element={<QuickToolPage />} />
-            <Route path="*" element={<Navigate to="/quicktool" replace />} />
-          </Routes>
-        </Suspense>
-      );
-
     case 'quicknote':
       return (
         <Suspense fallback={<LoadingPage />}>
           <Routes>
             <Route path="/quicknote" element={<QuickNotePage />} />
             <Route path="*" element={<Navigate to="/quicknote" replace />} />
-          </Routes>
-        </Suspense>
-      );
-
-    case 'quickai':
-      return (
-        <Suspense fallback={<LoadingPage />}>
-          <Routes>
-            <Route path="/quickai" element={<QuickAIPage />} />
-            <Route path="*" element={<Navigate to="/quickai" replace />} />
           </Routes>
         </Suspense>
       );
@@ -193,15 +169,10 @@ function AppRoutes() {
             <Route path="/signin" element={<SignInPage />} />
             <Route path="/signup" element={<SignUpPage />} />
             <Route path="/oauth-callback" element={<OAuthCallbackPage />} />
-            {/* public share + comments/reactions */}
+            {/* public share page (comments + reactions) */}
             <Route path="/m/:id" element={<PublicMemoPage />} />
-            <Route path="/share" element={<ShareIndexPage />} />
-            <Route path="/share/:id" element={<ShareDetailPage />} />
-            <Route path="/ai-share/:id" element={<AiSharePage />} />
-            {/* Tauri quick-capture windows */}
+            {/* Tauri quick-capture window */}
             <Route path="/quicknote" element={<QuickNotePage />} />
-            <Route path="/quickai" element={<QuickAIPage />} />
-            <Route path="/quicktool" element={<QuickToolPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Suspense>

@@ -23,6 +23,7 @@ model accounts {
   note          Int             @default(0)
   role          String          @default("") @db.VarChar
   loginType     String          @default("") @db.VarChar
+  permissions   Json?           @db.Json
   linkAccountId Int?
   createdAt     DateTime        @default(now()) @db.Timestamptz(6)
   updatedAt     DateTime        @updatedAt @db.Timestamptz(6)
@@ -125,6 +126,7 @@ model comments {
   guestName String?  @db.VarChar
   guestIP   String?  @db.VarChar
   guestUA   String?  @db.VarChar
+  guestAvatar String? @db.VarChar
   noteId    Int
   parentId  Int?
   createdAt DateTime @default(now()) @db.Timestamptz(6)

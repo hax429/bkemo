@@ -13,7 +13,7 @@ import { SendWebhook } from '@server/lib/helper';
 import { Context } from '../context';
 import { cache } from '@shared/lib/cache';
 import { AiModelFactory } from '@server/aiServer/aiModelFactory';
-import { authProcedure, demoAuthMiddleware, publicProcedure, router } from '@server/middleware';
+import { authProcedure, demoAuthMiddleware, publicProcedure, router, requireShare } from '@server/middleware';
 
 const extractHashtags = (input: string): string[] => {
   const withoutCodeBlocks = input.replace(/```[\s\S]*?```/g, '');
@@ -95,9 +95,11 @@ export const noteRouter = router({
               )
               .optional(),
             comments: z.any().optional(),
+            reactions: z.array(z.any()).optional(),
             _count: z.object({
               comments: z.number(),
               histories: z.number(),
+              reactions: z.number().optional(),
             }),
             owner: z.object({
               id: z.number(),
@@ -236,6 +238,7 @@ export const noteRouter = router({
           attachments: {
             orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
           },
+          reactions: true,
           comments: {
             include: {
               account: {
@@ -275,6 +278,7 @@ export const noteRouter = router({
             select: {
               comments: true,
               histories: true,
+              reactions: true,
             },
           },
           internalShares: true,
@@ -326,8 +330,10 @@ export const noteRouter = router({
                 }),
               ),
             ),
+            reactions: z.array(z.any()).optional(),
             _count: z.object({
               comments: z.number(),
+              reactions: z.number().optional(),
             }),
           }),
         ),
@@ -359,9 +365,11 @@ export const noteRouter = router({
                 },
               },
               attachments: true,
+              reactions: true,
               _count: {
                 select: {
                   comments: true,
+                  reactions: true,
                 },
               },
             },
@@ -413,9 +421,11 @@ export const noteRouter = router({
                 }),
               )
               .optional(),
+            reactions: z.array(z.any()).optional(),
             _count: z.object({
               comments: z.number(),
               histories: z.number(),
+              reactions: z.number().optional(),
             }),
           }),
         ),
@@ -430,6 +440,7 @@ export const noteRouter = router({
           attachments: {
             orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
           },
+          reactions: true,
           references: {
             select: {
               toNoteId: true,
@@ -458,6 +469,7 @@ export const noteRouter = router({
             select: {
               comments: true,
               histories: true,
+              reactions: true,
             },
           },
         },
@@ -516,9 +528,11 @@ export const noteRouter = router({
                 })
                 .nullable()
                 .optional(),
+              reactions: z.array(z.any()).optional(),
               _count: z.object({
                 comments: z.number(),
                 histories: z.number(),
+                reactions: z.number().optional(),
               }),
             }),
           ),
@@ -557,10 +571,12 @@ export const noteRouter = router({
           },
           tags: true,
           attachments: true,
+          reactions: true,
           _count: {
             select: {
               comments: true,
               histories: true,
+              reactions: true,
             },
           },
         },
@@ -647,9 +663,11 @@ export const noteRouter = router({
                 }),
               )
               .optional(),
+            reactions: z.array(z.any()).optional(),
             _count: z.object({
               comments: z.number(),
               histories: z.number(),
+              reactions: z.number().optional(),
             }),
           }),
         ),
@@ -672,6 +690,7 @@ export const noteRouter = router({
             },
           },
           attachments: true,
+          reactions: true,
           references: {
             select: {
               toNoteId: true,
@@ -696,7 +715,7 @@ export const noteRouter = router({
               },
             },
           },
-          _count: { select: { comments: true, histories: true } },
+          _count: { select: { comments: true, histories: true, reactions: true } },
         },
       });
     }),
@@ -820,9 +839,11 @@ export const noteRouter = router({
               }),
             )
             .optional(),
+          reactions: z.array(z.any()).optional(),
           _count: z.object({
             comments: z.number(),
             histories: z.number(),
+            reactions: z.number().optional(),
           }),
         }),
       ),
@@ -1275,7 +1296,7 @@ export const noteRouter = router({
       }
     }),
 
-  shareNote: authProcedure
+  shareNote: authProcedure.use(requireShare)
     .meta({ openapi: { method: 'POST', path: '/v1/note/share', summary: 'Share note', protect: true, tags: ['Note'] } })
     .input(
       z.object({
@@ -1768,9 +1789,11 @@ export const noteRouter = router({
               image: z.string(),
             }).nullable(),
             canEdit: z.boolean(),
+            reactions: z.array(z.any()).optional(),
             _count: z.object({
               comments: z.number(),
               histories: z.number(),
+              reactions: z.number().optional(),
             }),
           }),
         ),
@@ -1796,6 +1819,7 @@ export const noteRouter = router({
           attachments: {
             orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
           },
+          reactions: true,
           account: {
             select: {
               id: true,
@@ -1816,6 +1840,7 @@ export const noteRouter = router({
             select: {
               comments: true,
               histories: true,
+              reactions: true,
             },
           },
         },

@@ -353,9 +353,9 @@ export class FileService {
 
   static async uploadFileStream(
     {
-      stream, originalName, fileSize, type, accountId, metadata
+      stream, originalName, fileSize, type, accountId = null, metadata
     }: {
-      stream: ReadableStream, originalName: string, fileSize: number, type: string, accountId: number, metadata?: any
+      stream: ReadableStream, originalName: string, fileSize: number, type: string, accountId?: number | null, metadata?: any
     }) {
     const config = await getGlobalConfig({ useAdmin: true });
     const extension = path.extname(originalName);
@@ -480,9 +480,9 @@ export class FileService {
 
   // path: /api/file/123/456/789.jpg
   static async createAttachment({
-    path, name, size, type, noteId, accountId, metadata
+    path, name, size, type, noteId, accountId = null, metadata
   }: {
-    path: string, name: string, size: number, type: string, noteId?: number | null, accountId: number, metadata?: any
+    path: string, name: string, size: number, type: string, noteId?: number | null, accountId?: number | null, metadata?: any
   }) {
     const pathParts = (path as string)
       .replace('/api/file/', '')

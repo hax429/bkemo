@@ -56,6 +56,7 @@ export const ZUserPerferConfigKey = z.union([
   z.literal('defaultHomePage'),
   z.literal('desktopHotkeys'),
   z.literal('systemTray'),
+  z.literal('bkemoPrefs'),
 ]);
 
 export const ZConfigKey = z.union([
@@ -193,7 +194,8 @@ export const ZConfigSchema = z.object({
   fontStyle: z.string().optional(),
   signinFooterEnabled: z.boolean().optional(),
   signinFooterText: z.string().optional(),
-  customTitle: z.string().optional()
+  customTitle: z.string().optional(),
+  bkemoPrefs: z.any().optional(),
 });
 
 export type GlobalConfig = z.infer<typeof ZConfigSchema>;

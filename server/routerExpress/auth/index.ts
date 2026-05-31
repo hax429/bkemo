@@ -4,6 +4,7 @@ import { prisma } from '../../prisma';
 import { authenticator } from 'otplib';
 import { getGlobalConfig } from '../../routerTrpc/config';
 import { verifyToken, generateToken, generateApiToken } from '../../lib/helper';
+import { resolvePermissions } from '../../lib/permissions';
 
 const router = express.Router();
 
@@ -75,6 +76,12 @@ router.post('/login', (req, res, next) => {
     }
 
     try {
+      // Reject sign-in for soft-disabled accounts.
+      const account = await prisma.accounts.findUnique({ where: { id: user.id }, select: { role: true, permissions: true } });
+      if (!resolvePermissions(account).enabled) {
+        return res.status(403).json({ error: 'This account has been disabled' });
+      }
+
       console.log('Login successful:', {
         user: user.id
       });
@@ -110,6 +117,10 @@ router.post('/verify-2fa', async (req: any, res) => {
 
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (!resolvePermissions(user).enabled) {
+      return res.status(403).json({ error: 'This account has been disabled' });
     }
 
     const config = await getGlobalConfig({

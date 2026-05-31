@@ -1,4 +1,4 @@
-import { router, authProcedure, publicProcedure, superAdminAuthMiddleware } from '../middleware';
+import { router, authProcedure, publicProcedure, requireManageSite } from '../middleware';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { prisma } from '../prisma';
@@ -160,7 +160,7 @@ export const pluginRouter = router({
     }),
 
   saveDevPlugin: authProcedure
-    .use(superAdminAuthMiddleware)
+    .use(requireManageSite)
     .input(
       z.object({
         code: z.string(),
@@ -217,7 +217,7 @@ export const pluginRouter = router({
 
   // Save additional files for dev plugin
   saveAdditionalDevFile: authProcedure
-    .use(superAdminAuthMiddleware)
+    .use(requireManageSite)
     .input(
       z.object({
         filePath: z.string(),

@@ -147,7 +147,15 @@ router.get(/.*/, async (req: Request, res: Response) => {
           if (myFile.note?.isShare) {
             // Public shared file, allow access
           } else {
-            return res.status(401).json({ error: "Unauthorized" });
+            const isAvatar = await prisma.accounts.findFirst({
+              where: { image: '/api/s3file/' + fullPath }
+            });
+            const isGuestAvatar = !isAvatar && await prisma.comments.findFirst({
+              where: { guestAvatar: '/api/s3file/' + fullPath }
+            });
+            if (!isAvatar && !isGuestAvatar) {
+              return res.status(401).json({ error: "Unauthorized" });
+            }
           }
         } else {
           // Check if user owns the file or the note containing the file
@@ -156,7 +164,15 @@ router.get(/.*/, async (req: Request, res: Response) => {
                           token.role === 'superadmin';
           
           if (!myFile.note?.isShare && !isOwner) {
-            return res.status(401).json({ error: "Unauthorized" });
+            const isAvatar = await prisma.accounts.findFirst({
+              where: { image: '/api/s3file/' + fullPath }
+            });
+            const isGuestAvatar = !isAvatar && await prisma.comments.findFirst({
+              where: { guestAvatar: '/api/s3file/' + fullPath }
+            });
+            if (!isAvatar && !isGuestAvatar) {
+              return res.status(401).json({ error: "Unauthorized" });
+            }
           }
         }
       } catch (error) {

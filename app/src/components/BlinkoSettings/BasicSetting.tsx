@@ -1,195 +1,179 @@
 import { observer } from "mobx-react-lite";
-import { Alert, Button, Input, Switch, Tooltip, Image } from "@heroui/react";
+import { Alert, Button, Input } from "@heroui/react";
 import { RootStore } from "@/store";
 import { Icon } from '@/components/Common/Iconify/icons';
 import { UserStore } from "@/store/user";
 import { useTranslation } from "react-i18next";
 import { DialogStore } from "@/store/module/Dialog";
 import { UpdateUserInfo, UpdateUserPassword } from "../Common/UpdateUserInfo";
-import { Item } from "./Item";
 import { Copy } from "../Common/Copy";
-import { MarkdownRender } from "../Common/MarkdownRender";
-import { PromiseCall, PromiseState } from "@/store/standard/PromiseState";
+import { PromiseCall } from "@/store/standard/PromiseState";
 import { api } from "@/lib/trpc";
 import { BlinkoStore } from "@/store/blinkoStore";
-import { useEffect } from "react";
-import { motion, AnimatePresence } from "motion/react";
+import { useEffect, useState } from "react";
 import { ShowGen2FATokenModal } from "../Common/TwoFactorModal/gen2FATokenModal";
-import { CollapsibleCard } from "../Common/CollapsibleCard";
 import { eventBus } from "@/lib/event";
-import { LinkAccountModal } from "../Common/Modals/LinkAccountModal";
-import { showTipsDialog } from "../Common/TipsDialog";
-import { DialogStandaloneStore } from "@/store/module/DialogStandalone";
 import { UploadFileWrapper } from "../Common/UploadFile";
-import Avatar from "boring-avatars";
 import { signOut } from "../Auth/auth-client";
 import { getBlinkoEndpoint } from "@/lib/blinkoEndpoint";
+import { ToastPlugin } from "@/store/module/Toast/Toast";
+
+// Custom Row component styled exactly like SettingsScreen's Row
+function Row({ title, sub, control }: { title: React.ReactNode; sub?: React.ReactNode; control: React.ReactNode }) {
+  return (
+    <div className="h-stack" style={{ padding: '16px 0', borderBottom: '1px solid var(--border)', gap: 24, alignItems: 'flex-start' }}>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontSize: 14, color: 'var(--fg)', fontWeight: 500 }}>{title}</div>
+        {sub && <div style={{ fontSize: 12, color: 'var(--fg-2)', marginTop: 4, lineHeight: 1.5 }}>{sub}</div>}
+      </div>
+      <div style={{ flexShrink: 0 }}>{control}</div>
+    </div>
+  );
+}
+
+// Custom Toggle component styled exactly like SettingsScreen's Toggle
+function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <span onClick={() => onChange(!on)} style={{ width: 38, height: 22, borderRadius: 100, background: on ? 'var(--accent)' : 'var(--bg-3)', border: '1px solid var(--border-2)', position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'background .15s', display: 'inline-block' }}>
+      <span style={{ position: 'absolute', top: 2, left: on ? 18 : 2, width: 16, height: 16, borderRadius: 50, background: '#fff', transition: 'left .15s' }} />
+    </span>
+  );
+}
 
 export const BasicSetting = observer(() => {
-  const user = RootStore.Get(UserStore)
-  const CODE = `curl -X 'POST' '${getBlinkoEndpoint() ?? window.location.origin}api/v1/note/upsert' \\\n      -H 'Content-Type: application/json' \\\n      -H 'Authorization: Bearer ${user.userInfo.value?.token}' \\\n      -d '{ "content": "🎉Hello,Blinko! --send from api ", "type":0 }'\n`
-  const CODE_SNIPPET = `\`\`\`javascript\n //blinko api document:${getBlinkoEndpoint() ?? window.location.origin}/api-doc\n ${CODE} \`\`\``
-  const { t } = useTranslation()
-  const blinko = RootStore.Get(BlinkoStore)
+  const user = RootStore.Get(UserStore);
+  const blinko = RootStore.Get(BlinkoStore);
+  const { t } = useTranslation();
 
-  const store = RootStore.Local(() => ({
-    webhookEndpoint: '',
-    totpToken: '',
-    showToken: false,
-    showQRCode: false,
-    totpSecret: '',
-    qrCodeUrl: '',
-    showLowPermToken: false,
-    lowPermToken: '',
-    setShowToken(value: boolean) {
-      this.showToken = value;
-    },
-    setShowQRCode(value: boolean) {
-      this.showQRCode = value;
-    },
-    setTotpSecret(value: string) {
-      this.totpSecret = value;
-    },
-    setQrCodeUrl(value: string) {
-      this.qrCodeUrl = value;
-    },
-    setShowLowPermToken(value: boolean) {
-      this.showLowPermToken = value;
-    },
-    setLowPermToken(value: string) {
-      this.lowPermToken = value;
-    },
-    setRigster: new PromiseState({
-      function: async (value: boolean) => {
-        return await PromiseCall(api.config.update.mutate({
-          key: 'isAllowRegister',
-          value
-        }))
-      }
-    }),
-    genLowPermToken: new PromiseState({
-      function: async () => {
-        const response = await PromiseCall(api.users.genLowPermToken.mutate());
-        return response;
-      }
-    }),
-  }))
+  const [showToken, setShowToken] = useState(false);
 
-  useEffect(() => {
-    store.webhookEndpoint = blinko.config.value?.webhookEndpoint ?? ''
-  }, [blinko.config.value])
+  const initials = (user.nickname || user.name || 'G').slice(0, 2).toUpperCase();
 
   return (
-    <CollapsibleCard
-      icon="tabler:settings"
-      title={t('basic-information')}
-    >
-      <Item
-        leftContent={<>{t('name')}</>}
-        rightContent={
-          <div className="flex gap-2 items-center">
-            <div className="text-desc">{user.name}</div>
-            <div className="relative group">
+    <div className="v-stack" style={{ gap: 24 }}>
+      <div>
+        <h2 style={{ fontSize: 24, fontWeight: 600, color: 'var(--fg)', letterSpacing: '-0.02em', margin: 0 }}>Basic Information</h2>
+        <div style={{ color: 'var(--fg-2)', fontSize: 13, marginTop: 4, marginBottom: 18 }}>Your account details, API token and security settings. Synced to your account.</div>
+      </div>
+
+      <div className="v-stack" style={{ gap: 0 }}>
+        {/* Profile Section Title */}
+        <h3 style={{ fontSize: 16, fontWeight: 600, color: 'var(--fg)', marginTop: 8, marginBottom: 4, borderBottom: '1px solid var(--border)', paddingBottom: 8 }}>Profile</h3>
+
+        {/* Row 1: Name */}
+        <Row
+          title="Name"
+          sub="Your account display name and initials avatar. Click the avatar to upload a custom image."
+          control={
+            <div className="h-stack" style={{ gap: 12, alignItems: 'center' }}>
+              <span style={{ fontSize: 14, color: 'var(--fg-2)', fontWeight: 500 }}>{user.nickname || user.name}</span>
               <UploadFileWrapper
                 acceptImage
                 onUpload={async ({ filePath }) => {
-                  if (!user.userInfo.value?.id) return
+                  if (!user.userInfo.value?.id) return;
                   await PromiseCall(api.users.upsertUser.mutate({
                     id: user.userInfo.value?.id,
                     image: filePath
                   }));
-                  await user.userInfo.call(Number(user.id))
-                  await signOut({ callbackUrl: '/signin' })
-                  eventBus.emit('user:signout')
+                  await user.userInfo.call(Number(user.id));
                 }}
               >
-                {user.userInfo.value?.image ? (
-                  <img
-                    src={getBlinkoEndpoint(`${user.userInfo.value.image}?token=${user.tokenData.value?.token}`)}
-                    alt="avatar"
-                    className="w-10 h-10 rounded-full object-cover cursor-pointer hover:opacity-80 transition-opacity"
-                  />
-                ) : (
-                  <Image src="/logo.png" width={30} />
-                )}
+                <div style={{ cursor: 'pointer', position: 'relative' }} title="Click to upload custom avatar">
+                  {user.userInfo.value?.image ? (
+                    <img
+                      src={getBlinkoEndpoint(`${user.userInfo.value.image}?token=${user.tokenData.value?.token}`)}
+                      alt="avatar"
+                      style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover' }}
+                    />
+                  ) : (
+                    <div className="bk-avatar" style={{ width: 28, height: 28, borderRadius: '50%', fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {initials}
+                    </div>
+                  )}
+                </div>
               </UploadFileWrapper>
-            </div>
 
-            <Button variant="flat" isIconOnly startContent={<Icon icon="tabler:edit" width="20" height="20" />} size='sm'
-              onPress={e => {
-                RootStore.Get(DialogStore).setData({
-                  isOpen: true,
-                  title: t('change-user-info'),
-                  content: <UpdateUserInfo />
-                })
-              }} />
-            <Button variant="flat" isIconOnly startContent={<Icon icon="material-symbols:password" width="20" height="20" />} size='sm'
-              onPress={e => {
-                RootStore.Get(DialogStore).setData({
-                  title: t('rest-user-password'),
-                  isOpen: true,
-                  content: <UpdateUserPassword />
-                })
-              }} />
-            {
-              user.userInfo?.value?.loginType == 'oauth' &&
-              <Button variant="flat" isIconOnly startContent={<Icon icon="tabler:link" width="20" height="20" />} size='sm'
-                onPress={e => {
+              <button
+                onClick={() => {
                   RootStore.Get(DialogStore).setData({
-                    title: t('link-account'),
                     isOpen: true,
-                    size: 'md',
-                    content: <LinkAccountModal />
-                  })
-                }} />
-            }
-
-            {
-              user.userInfo?.value?.isLinked &&
-              <Button color="danger" variant="flat" isIconOnly startContent={<Icon icon="hugeicons:unlink-03" width="20" height="20" />} size='sm'
-                onPress={e => {
-                  showTipsDialog({
-                    title: t('unlink-account'),
-                    content: t('unlink-account-tips'),
-                    onConfirm: async () => {
-                      await PromiseCall(api.users.unlinkAccount.mutate({
-                        id: user.userInfo.value!.id
-                      }))
-                      eventBus.emit('user:signout')
-                      RootStore.Get(DialogStandaloneStore).close()
-                    }
-                  })
-                }} />
-            }
-          </div>
-        }
-      />
-
-      <Item
-        leftContent={
-          <div className="flex flex-col gap-1">
-            <div className="flex items-center gap-2">
-              <div>{t('access-token')}</div>
-              <Button
-                isIconOnly
-                variant="flat"
-                size="sm"
-                onPress={() => {
-                  store.setShowToken(!store.showToken)
+                    title: t('change-user-info'),
+                    content: <UpdateUserInfo />
+                  });
                 }}
+                style={{
+                  background: 'var(--bg-3)',
+                  border: '1px solid var(--border-2)',
+                  borderRadius: 8,
+                  width: 28,
+                  height: 28,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'var(--fg-2)',
+                  cursor: 'pointer'
+                }}
+                title="Edit Nickname"
               >
-                <Icon
-                  icon={store.showToken ? "mdi:eye-off" : "mdi:eye"}
-                  width="20"
-                  height="20"
-                />
-              </Button>
+                <Icon icon="lucide:edit-3" width={14} height={14} />
+              </button>
+
+              <button
+                onClick={() => {
+                  RootStore.Get(DialogStore).setData({
+                    title: t('rest-user-password'),
+                    isOpen: true,
+                    content: <UpdateUserPassword />
+                  });
+                }}
+                style={{
+                  background: 'var(--bg-3)',
+                  border: '1px solid var(--border-2)',
+                  borderRadius: 8,
+                  width: 28,
+                  height: 28,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'var(--fg-2)',
+                  cursor: 'pointer'
+                }}
+                title="Change Password"
+              >
+                <span style={{ fontSize: 10, fontWeight: 'bold' }}>***</span>
+              </button>
             </div>
-            <Tooltip content={<div className="text-sm text-desc max-w-[300px]">{t('low-permission-token-desc')}</div>}>
+          }
+        />
+
+        {/* Security & API Section Title */}
+        <h3 style={{ fontSize: 16, fontWeight: 600, color: 'var(--fg)', marginTop: 24, marginBottom: 4, borderBottom: '1px solid var(--border)', paddingBottom: 8 }}>Security & APIs</h3>
+
+        {/* Row 2: Access Token */}
+        <Row
+          title={
+            <div className="v-stack" style={{ gap: 2 }}>
+              <div className="h-stack" style={{ gap: 6, alignItems: 'center' }}>
+                <span style={{ fontSize: 14, color: 'var(--fg)', fontWeight: 500 }}>Access Token</span>
+                <button
+                  onClick={() => setShowToken(!showToken)}
+                  style={{
+                    background: 'var(--bg-3)',
+                    border: 'none',
+                    borderRadius: 6,
+                    padding: '3px 8px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    cursor: 'pointer',
+                    color: 'var(--fg-2)'
+                  }}
+                >
+                  <Icon icon={showToken ? "lucide:eye-off" : "lucide:eye"} width={14} height={14} />
+                </button>
+              </div>
               <div
-                className="text-xs text-yellow-500 cursor-pointer"
                 onClick={async () => {
-                  const response = await store.genLowPermToken.call();
+                  const response = await PromiseCall(api.users.genLowPermToken.mutate());
                   if (response?.token) {
                     RootStore.Get(DialogStore).setData({
                       isOpen: true,
@@ -213,141 +197,89 @@ export const BasicSetting = observer(() => {
                     });
                   }
                 }}
+                style={{ fontSize: 12, color: 'var(--accent)', cursor: 'pointer', fontWeight: 500 }}
+                className="hover:underline"
               >
-                {t('generate-low-permission-token')}
+                Generate Low Permission Token
               </div>
-            </Tooltip>
-          </div>
-        }
-        rightContent={
-          <div className="flex gap-2 items-center">
-            <Input
-              disabled
-              className="w-[150px] md:w-[300px]"
-              value={store.showToken ? user.userInfo.value?.token : '••••••••••••••••'}
-              type={store.showToken ? "text" : "password"}
-              endContent={<Copy size={20} content={user.userInfo.value?.token ?? ''} />}
-            />
+            </div>
+          }
+          sub="Required for webhook and API integrations. Keep this token private."
+          control={
+            <div className="h-stack" style={{ gap: 12, alignItems: 'center' }}>
+              <div className="h-stack" style={{ background: 'var(--bg-3)', border: '1px solid var(--border-2)', borderRadius: 8, padding: '4px 8px', gap: 8, width: 240, alignItems: 'center' }}>
+                <input
+                  disabled
+                  type={showToken ? "text" : "password"}
+                  value={showToken ? (user.userInfo.value?.token ?? '') : '••••••••••••••••••••••••••••••••'}
+                  style={{
+                    background: 'transparent',
+                    color: 'var(--fg)',
+                    border: 'none',
+                    outline: 'none',
+                    fontSize: 12,
+                    flex: 1,
+                    cursor: 'default',
+                    fontFamily: 'var(--font-mono)'
+                  }}
+                />
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(user.userInfo.value?.token ?? '');
+                    RootStore.Get(ToastPlugin).success(t('copied-successfully'));
+                  }}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--fg-3)',
+                    cursor: 'pointer',
+                    padding: 0,
+                    display: 'flex',
+                    alignItems: 'center'
+                  }}
+                  title="Copy Token"
+                >
+                  <Icon icon="lucide:copy" width={14} height={14} />
+                </button>
+              </div>
+              <button
+                onClick={async () => {
+                  if (confirm("Are you sure you want to regenerate your access token? This will invalidate any existing integrations.")) {
+                    await PromiseCall(api.users.regenToken.mutate());
+                    await user.userInfo.call(Number(user.id));
+                  }
+                }}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--fg-2)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  padding: 4
+                }}
+                title="Regenerate Token"
+              >
+                <Icon icon="lucide:refresh-cw" width={16} height={16} />
+              </button>
+            </div>
+          }
+        />
 
-            <Icon
-              className="cursor-pointer hover:rotate-180 !transition-all"
-              onClick={async () => {
-                await PromiseCall(api.users.regenToken.mutate())
-                console.log('user.id', user.id);
-                user.userInfo.call(Number(user.id))
-              }}
-              icon="fluent:arrow-sync-12-filled"
-              width="20"
-              height="20"
-            />
-          </div>
-        }
-      />
-
-      {
-        <AnimatePresence>
-          {store.showToken && (
-            <motion.div
-              initial={{ height: 0, opacity: 0, scale: 0.95 }}
-              animate={{
-                height: "auto",
-                opacity: 1,
-                scale: 1,
-              }}
-              exit={{
-                height: 0,
-                opacity: 0,
-                scale: 0.95
-              }}
-              transition={{
-                duration: 0.3,
-                ease: [0.23, 1, 0.32, 1],
-                scale: {
-                  type: "spring",
-                  damping: 15,
-                  stiffness: 300
-                }
-              }}
-            >
-              <Item
-                leftContent={
-                  <div className="w-full flex-1 relative">
-                    <Copy size={20} content={CODE} className="absolute top-4 right-2" />
-                    <MarkdownRender content={CODE_SNIPPET} />
-                  </div>
-                }
-              />
-            </motion.div>
-          )}
-        </AnimatePresence>
-      }
-
-      {
-        user.role == 'superadmin' &&
-        <Item
-          leftContent={<>{t('allow-register')}</>}
-          rightContent={<Switch
-            thumbIcon={store.setRigster.loading.value ? <Icon icon="eos-icons:three-dots-loading" width="24" height="24" /> : null}
-            isDisabled={store.setRigster.loading.value}
-            isSelected={user.canRegister.value}
-            onChange={async e => {
-              await store.setRigster.call(e.target.checked)
-              user.canRegister.call()
-            }}
-          />} />
-      }
-
-      {
-        user.role == 'superadmin' &&
-        <Item
-          leftContent={<>Webhook</>}
-          rightContent={<>
-            <Input
-              placeholder="Enter webhook URL"
-              value={store.webhookEndpoint}
-              onChange={(e) => store.webhookEndpoint = e.target.value}
-              onBlur={async () => {
-                await PromiseCall(api.config.update.mutate({
-                  key: 'webhookEndpoint',
-                  value: store.webhookEndpoint
-                }))
-              }}
-              className="w-[150px] md:w-[300px]"
-            />
-          </>} />
-      }
-
-      <Item
-        leftContent={<>{t('hide-pc-editor')}</>}
-        rightContent={
-          <div className="flex gap-2 items-center">
-            <Switch
-              isSelected={blinko.config.value?.hidePcEditor ?? false}
-              onChange={async (e) => {
-                await PromiseCall(api.config.update.mutate({
-                  key: 'hidePcEditor',
-                  value: e.target.checked
-                }));
-                blinko.config.call();
-              }}
-            />
-          </div>
-        }
-      />
-
-      <Item
-        leftContent={<>{t('two-factor-authentication')}</>}
-        rightContent={
-          <div className="flex gap-2 items-center">
-            <Switch
-              isSelected={blinko.config.value?.twoFactorEnabled ?? false}
-              onChange={async (e) => {
-                if (!e.target.checked) {
+        {/* Row 3: Two-Factor Authentication */}
+        <Row
+          title="Two-Factor Authentication"
+          sub="Protect your account with TOTP authenticator codes."
+          control={
+            <Toggle
+              on={blinko.config.value?.twoFactorEnabled ?? false}
+              onChange={async (checked) => {
+                if (!checked) {
                   await PromiseCall(api.config.update.mutate({
                     key: 'twoFactorEnabled',
                     value: false
                   }));
-                  blinko.config.call();
+                  await blinko.config.call();
                 } else {
                   const response = await PromiseCall(api.users.generate2FASecret.mutate({
                     name: user.name!
@@ -356,25 +288,124 @@ export const BasicSetting = observer(() => {
                     ShowGen2FATokenModal({
                       qrCodeUrl: response.qrCode,
                       totpSecret: response.secret
-                    })
+                    });
                   }
                 }
               }}
             />
-          </div>
-        }
-      />
+          }
+        />
+      </div>
 
-      <Item
-        leftContent={<></>}
-        rightContent={
-          <Tooltip placement="bottom" content={t('logout')}>
-            <Button isIconOnly startContent={<Icon icon="hugeicons:logout-05" width="20" height="20" />} color='danger' onPress={async () => {
-              await signOut({ callbackUrl: '/signin' })
-              eventBus.emit('user:signout')
-            }}></Button>
-          </Tooltip>
-        } />
-    </CollapsibleCard>
+      {/* Danger Zone Section */}
+      <div style={{ marginTop: 32, border: '1px solid #ff4d4f', borderRadius: 'var(--radius-lg)', padding: '20px 24px', background: 'rgba(255, 77, 79, 0.05)' }}>
+        <h3 style={{ fontSize: 16, fontWeight: 600, color: '#ff4d4f', margin: '0 0 12px 0' }}>Danger Zone</h3>
+        <div className="v-stack" style={{ gap: 16 }}>
+          
+          {/* Logout Row */}
+          <div className="h-stack" style={{ justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255, 77, 79, 0.15)', paddingBottom: 16 }}>
+            <div>
+              <div style={{ fontSize: 14, color: 'var(--fg)', fontWeight: 500 }}>Log out</div>
+              <div style={{ fontSize: 12, color: 'var(--fg-2)', marginTop: 4 }}>Disconnect your session from this device.</div>
+            </div>
+            <button
+              onClick={async () => {
+                if (confirm("Are you sure you want to log out?")) {
+                  await signOut({ callbackUrl: '/signin' });
+                  eventBus.emit('user:signout');
+                }
+              }}
+              style={{
+                background: '#ff4d4f',
+                color: '#fff',
+                border: 'none',
+                borderRadius: 8,
+                padding: '8px 16px',
+                fontSize: 13,
+                fontWeight: 600,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                cursor: 'pointer',
+              }}
+            >
+              <Icon icon="lucide:log-out" width={16} height={16} />
+              Log out
+            </button>
+          </div>
+
+          {/* Clear User Data Row */}
+          <div className="h-stack" style={{ justifyContent: 'space-between', alignItems: 'center', borderBottom: user.canManageSite ? '1px solid rgba(255, 77, 79, 0.15)' : 'none', paddingBottom: user.canManageSite ? 16 : 0 }}>
+            <div>
+              <div style={{ fontSize: 14, color: 'var(--fg)', fontWeight: 500 }}>Clear my user data</div>
+              <div style={{ fontSize: 12, color: 'var(--fg-2)', marginTop: 4 }}>Permanently delete all your memos, tasks, tags, comments, and attachments. This cannot be undone.</div>
+            </div>
+            <button
+              onClick={async () => {
+                if (confirm("WARNING: This will permanently delete ALL your memos, comments, tags, and attachments. This cannot be undone! Are you sure?")) {
+                  const checkName = prompt("To confirm, type your username:");
+                  if (checkName === user.name) {
+                    await PromiseCall(api.users.clearUserData.mutate());
+                    RootStore.Get(ToastPlugin).success("Your user data has been cleared.");
+                    window.location.reload();
+                  } else {
+                    alert("Confirmation username did not match. Operation cancelled.");
+                  }
+                }
+              }}
+              style={{
+                background: 'transparent',
+                color: '#ff4d4f',
+                border: '1px solid #ff4d4f',
+                borderRadius: 8,
+                padding: '8px 16px',
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              Clear User Data
+            </button>
+          </div>
+
+          {/* Clear Site Data Row (Admin Only) */}
+          {user.canManageSite && (
+            <div className="h-stack" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <div style={{ fontSize: 14, color: 'var(--fg)', fontWeight: 500 }}>Clear all site data</div>
+                <div style={{ fontSize: 12, color: 'var(--fg-2)', marginTop: 4 }}>Permanently delete all other user accounts, notes, comments, and attachments from the system. (Admin Only)</div>
+              </div>
+              <button
+                onClick={async () => {
+                  if (confirm("CRITICAL WARNING: This will permanently delete ALL OTHER USER ACCOUNTS and ALL system notes, comments, attachments, and configs. This is an administrative reset. Are you sure?")) {
+                    const checkConfirm = prompt("To confirm, type 'DELETE ALL SITE DATA':");
+                    if (checkConfirm === 'DELETE ALL SITE DATA') {
+                      await PromiseCall(api.users.clearSiteData.mutate());
+                      RootStore.Get(ToastPlugin).success("All site data has been cleared.");
+                      window.location.reload();
+                    } else {
+                      alert("Confirmation typed text did not match. Operation cancelled.");
+                    }
+                  }
+                }}
+                style={{
+                  background: 'transparent',
+                  color: '#ff4d4f',
+                  border: '1px solid #ff4d4f',
+                  borderRadius: 8,
+                  padding: '8px 16px',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                Clear Site Data
+              </button>
+            </div>
+          )}
+
+        </div>
+      </div>
+    </div>
   );
-})
+});
