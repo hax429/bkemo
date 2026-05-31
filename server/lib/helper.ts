@@ -24,7 +24,7 @@ export function generateTOTP(): string {
 }
 
 export function generateTOTPQRCode(username: string, secret: string): string {
-  return authenticator.keyuri(username, 'Blinko', secret);
+  return authenticator.keyuri(username, 'bkemo', secret);
 }
 
 export function verifyTOTP(token: string, secret: string): boolean {

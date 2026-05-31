@@ -161,6 +161,21 @@ export default defineConfig({
     strictPort: false,
     host: host || false,
     allowedHosts: true,
+    // Opt-in dev proxy: when BKEMO_BACKEND is set, the frontend-only Vite server
+    // forwards /api to that backend (e.g. https://bk.hax429.me) so you can log in
+    // and load real data without a local backend. Leave it unset for the full
+    // local stack (debug.sh / `bun run dev:frontend`), where the server handles /api.
+    ...(process.env.BKEMO_BACKEND
+      ? {
+          proxy: {
+            '/api': {
+              target: process.env.BKEMO_BACKEND,
+              changeOrigin: true,
+              secure: true,
+            },
+          },
+        }
+      : {}),
     watch: {
       ignored: ["**/src-tauri/**", "**/node_modules/**", "**/.git/**"],
     },

@@ -5,7 +5,6 @@ import { PluginRender } from "./pluginRender";
 import { Note } from "@shared/lib/types";
 import { makeAutoObservable } from "mobx";
 import { eventBus } from "@/lib/event";
-import { EditorStore } from "@/components/Common/Editor/editorStore";
 
 export type EditorFooterSlot = {
   name: string;
@@ -77,25 +76,17 @@ export class PluginApiStore implements Store {
     makeAutoObservable(this);
   }
 
-  getActiveEditorStore(): EditorStore | null {
-    const editorElement = document.getElementById('global-editor');
-    if (!editorElement) return null;
-    //@ts-ignore
-    const editorInstance = editorElement.__storeInstance;
-    return editorInstance;
+  // Legacy Vditor editor bridge removed. The new TipTap editor doesn't expose a
+  // global editor store to the plugin API; these are inert no-ops.
+  getActiveEditorStore(): any | null {
+    return null;
   }
 
   getEditorMetadata() {
-    const editorStore = this.getActiveEditorStore();
-    return editorStore?.metadata || {};
+    return {};
   }
 
-  setEditorMetadata(metadata) {
-    const editorStore = this.getActiveEditorStore();
-    if (editorStore) {
-      editorStore.metadata = { ...(editorStore.metadata || {}), ...metadata };
-      return true;
-    }
+  setEditorMetadata(_metadata: any) {
     return false;
   }
 

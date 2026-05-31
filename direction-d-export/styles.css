@@ -1,0 +1,166 @@
+/* bkemo design exploration — global tokens */
+
+:root {
+  --accent: #5E6AD2; /* default Linear-ish */
+  --density: 1;
+}
+
+/* ---------- Direction palettes (scoped) ---------- */
+
+/* Sidekick — Notion-ish warm */
+.dir-sidekick {
+  --bg: #FFFFFF;
+  --bg-2: #F7F6F3;
+  --bg-3: #EFEDE7;
+  --fg: #37352F;
+  --fg-2: #6B6863;
+  --fg-3: #9B9690;
+  --border: rgba(55,53,47,0.09);
+  --border-2: rgba(55,53,47,0.16);
+  --hover: rgba(55,53,47,0.06);
+  --accent-soft: color-mix(in srgb, var(--accent) 12%, transparent);
+  --font-display: "Inter", "Helvetica Neue", system-ui, sans-serif;
+  --font-body: "Inter", "Helvetica Neue", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "Menlo", monospace;
+  --radius: 4px;
+  --radius-lg: 6px;
+}
+
+/* Issue — Linear-ish cool */
+.dir-issue {
+  --bg: #08090A;
+  --bg-2: #101113;
+  --bg-3: #1A1B1F;
+  --fg: #F7F8F8;
+  --fg-2: #8A8F98;
+  --fg-3: #62666D;
+  --border: #23252A;
+  --border-2: #2D2F36;
+  --hover: rgba(255,255,255,0.04);
+  --accent-soft: color-mix(in srgb, var(--accent) 22%, transparent);
+  --font-display: "Inter", system-ui, sans-serif;
+  --font-body: "Inter", system-ui, sans-serif;
+  --font-mono: "Berkeley Mono", "JetBrains Mono", ui-monospace, "Menlo", monospace;
+  --radius: 6px;
+  --radius-lg: 8px;
+}
+
+/* Quartz — Hybrid mono+sans, warm gray with single accent */
+.dir-quartz {
+  --bg: #FAF8F5;
+  --bg-2: #F1EDE6;
+  --bg-3: #E8E3D9;
+  --fg: #1C1B19;
+  --fg-2: #6B6863;
+  --fg-3: #A29B8E;
+  --border: rgba(28,27,25,0.10);
+  --border-2: rgba(28,27,25,0.18);
+  --hover: rgba(28,27,25,0.05);
+  --accent-soft: color-mix(in srgb, var(--accent) 14%, transparent);
+  --font-display: "Instrument Serif", "Cormorant Garamond", Georgia, serif;
+  --font-body: "Inter", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "Menlo", monospace;
+  --radius: 2px;
+  --radius-lg: 4px;
+}
+
+/* ---------- Reset-ish for design surfaces ---------- */
+
+.surface {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-feature-settings: "ss01", "cv11";
+  -webkit-font-smoothing: antialiased;
+  font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+.surface * { box-sizing: border-box; }
+.surface button { font-family: inherit; cursor: pointer; }
+
+/* ---------- Wireframe sketch styles ---------- */
+
+.wf {
+  background: #FBFAF7;
+  color: #2A2A2A;
+  font-family: "Caveat", "Kalam", "Patrick Hand", cursive;
+}
+.wf-box {
+  border: 1.5px solid #2A2A2A;
+  border-radius: 6px;
+  background: #fff;
+  position: relative;
+}
+.wf-box.dashed { border-style: dashed; }
+.wf-box.filled { background: #2A2A2A0D; }
+.wf-bar {
+  height: 8px;
+  background: #2A2A2A;
+  border-radius: 2px;
+  opacity: 0.85;
+}
+.wf-bar.thin { height: 5px; opacity: 0.55; }
+.wf-bar.faint { opacity: 0.3; }
+.wf-pill {
+  display: inline-flex;
+  align-items: center;
+  border: 1.2px solid #2A2A2A;
+  border-radius: 100px;
+  padding: 2px 8px;
+  font-size: 11px;
+  background: #fff;
+}
+.wf-label {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: #2A2A2A99;
+  text-transform: uppercase;
+}
+.wf-arrow {
+  stroke: #2A2A2A;
+  stroke-width: 1.5;
+  fill: none;
+}
+.wf-note {
+  font-family: "Caveat", cursive;
+  font-size: 16px;
+  color: #B85C3A;
+  line-height: 1.1;
+}
+
+/* ---------- Generic helpers shared by hi-fi ---------- */
+
+.h-stack { display: flex; align-items: center; }
+.v-stack { display: flex; flex-direction: column; }
+.gap-1  { gap: 4px;  }
+.gap-2  { gap: 8px;  }
+.gap-3  { gap: 12px; }
+.gap-4  { gap: 16px; }
+.gap-6  { gap: 24px; }
+.spacer { flex: 1; }
+
+.dot {
+  display: inline-block;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+/* Custom scrollbar suppression in mock surfaces */
+.surface .scroll::-webkit-scrollbar { display: none; }
+.surface .scroll { scrollbar-width: none; }
+
+/* Selection / focus accents */
+.surface ::selection { background: var(--accent-soft); color: var(--fg); }
+
+/* Avatar placeholder */
+.avatar {
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 40%, #000));
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  display: inline-flex; align-items: center; justify-content: center;
+}

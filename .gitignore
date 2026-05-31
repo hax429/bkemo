@@ -81,3 +81,6 @@ app/src-tauri/gen/android/tauri.settings.gradle
 
 # Internal / Agent configurations
 .antigravitycli/
+
+# bkemo local dev Postgres cluster (created by debug.sh)
+.bkemo-pg/

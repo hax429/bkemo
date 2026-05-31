@@ -116,11 +116,12 @@ export const commentRouter = router({
       content: z.string(),
       noteId: z.number(),
       parentId: z.number().optional(),
-      guestName: z.string().optional()
+      guestName: z.string().optional(),
+      guestAvatar: z.string().optional()
     }))
     .output(z.boolean())
     .mutation(async function ({ input, ctx }) {
-      let { content, noteId, parentId, guestName } = input;
+      let { content, noteId, parentId, guestName, guestAvatar } = input;
 
       // Security fix: Check if user has access to the note
       const hasAccess = await checkNoteAccess(noteId, ctx);
@@ -156,13 +157,11 @@ export const commentRouter = router({
         }
       }
 
-      if (!ctx.id && !guestName) {
-        guestName = "void-" + crypto
-          .createHash('md5')
-          .update(`${ctx.ip}-${JSON.stringify(ctx.userAgent)}`)
-          .digest('hex')
-          .slice(0, 5);
+      let effectiveGuestName: string | null = null;
+      if (!ctx.id) {
+        effectiveGuestName = guestName?.trim() || ("bk-" + crypto.randomBytes(3).toString('hex'));
       }
+
       let validGuestUA = '';
       try {
         validGuestUA = JSON.stringify(ctx.userAgent)
@@ -179,7 +178,8 @@ export const commentRouter = router({
           noteId,
           parentId,
           accountId: ctx.id ? Number(ctx.id) : null,
-          guestName: !ctx.id ? guestName : null,
+          guestName: effectiveGuestName,
+          guestAvatar: !ctx.id ? guestAvatar : null,
           guestIP: ctx.ip?.toString(),
           guestUA: validGuestUA
         },
@@ -198,10 +198,10 @@ export const commentRouter = router({
         CreateNotification({
           type: NotificationType.COMMENT,
           title: 'comment-notification',
-          content: (ctx?.name ?? guestName) + ':' + content,
+          content: (ctx?.name ?? effectiveGuestName ?? 'Anonymous') + ':' + content,
           metadata: {
             noteId,
-            guestName,
+            guestName: effectiveGuestName,
           },
           accountId: Number(note?.accountId),
         })

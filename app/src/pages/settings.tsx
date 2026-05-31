@@ -11,15 +11,13 @@ import { UserSetting } from '@/components/BlinkoSettings/UserSetting';
 import { AboutSetting } from '@/components/BlinkoSettings/AboutSetting';
 import { StorageSetting } from '@/components/BlinkoSettings/StorageSetting';
 import { ExportSetting } from '@/components/BlinkoSettings/ExportSetting';
-import { MusicSetting } from '@/components/BlinkoSettings/MusicSetting';
-import { SSOSetting } from '@/components/BlinkoSettings/SSOSetting';
-import { HttpProxySetting } from '@/components/BlinkoSettings/HttpProxySetting';
+
 import { useTranslation } from 'react-i18next';
 import { JSX } from 'react';
 import { ScrollableTabs, TabItem } from '@/components/Common/ScrollableTabs';
 import { useState, useEffect } from 'react';
 import { BlinkoStore } from '@/store/blinkoStore';
-import { PluginSetting } from '@/components/BlinkoSettings/PluginSetting';
+
 import { ImportAIDialog } from '@/components/BlinkoSettings/ImportAIDialog';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { Icon } from '@/components/Common/Iconify/icons';
@@ -76,14 +74,6 @@ export const allSettings: SettingItem[] = [
     keywords: ['ai', 'artificial intelligence', '人工智能'],
   },
   {
-    key: 'httpproxy',
-    title: ('http-proxy'),
-    icon: 'tabler:cloud-network',
-    component: <HttpProxySetting />,
-    requireAdmin: true,
-    keywords: ['proxy', 'http', 'connection', '代理', 'HTTP代理'],
-  },
-  {
     key: 'task',
     title: ('schedule-task'),
     icon: 'tabler:list-check',
@@ -100,14 +90,6 @@ export const allSettings: SettingItem[] = [
     keywords: ['storage', 'database', '存储', '数据库'],
   },
   {
-    key: 'music',
-    title: ('music-settings'),
-    icon: 'tabler:music',
-    component: <MusicSetting />,
-    requireAdmin: true,
-    keywords: ['music', '音乐设置'],
-  },
-  {
     key: 'import',
     title: ('import'),
     icon: 'tabler:file-import',
@@ -116,28 +98,12 @@ export const allSettings: SettingItem[] = [
     keywords: ['import', 'data', '导入', '数据导入'],
   },
   {
-    key: 'sso',
-    title: ('sso-settings'),
-    icon: 'tabler:key',
-    component: <SSOSetting />,
-    requireAdmin: true,
-    keywords: ['sso', 'single sign on', '单点登录'],
-  },
-  {
     key: 'export',
     title: ('export'),
     icon: 'tabler:file-export',
     component: <ExportSetting />,
     requireAdmin: false,
     keywords: ['export', 'data', '导出', '数据导出'],
-  },
-  {
-    key: 'plugin',
-    title: ('plugin-settings'),
-    icon: 'hugeicons:plug-socket',
-    component: <PluginSetting />,
-    requireAdmin: true,
-    keywords: ['plugin', 'plugins', '插件', '插件设置'],
   },
   {
     key: 'about',

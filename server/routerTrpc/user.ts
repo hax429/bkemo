@@ -1,4 +1,5 @@
-import { router, publicProcedure, authProcedure, superAdminAuthMiddleware, demoAuthMiddleware } from '../middleware';
+import { router, publicProcedure, authProcedure, demoAuthMiddleware, requireManageUsers, requireManageSite } from '../middleware';
+import { resolvePermissions, normalizePermissions, isOwner, type UserPermissions } from '../lib/permissions';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { prisma } from '../prisma';
@@ -10,11 +11,11 @@ import { deleteNotes } from './note';
 import { createSeed } from '@prisma/seedData';
 
 export const userRouter = router({
-  list: authProcedure.use(superAdminAuthMiddleware)
+  list: authProcedure.use(requireManageUsers)
     .meta({
       openapi: {
         method: 'GET', path: '/v1/user/list', summary: 'Find user list',
-        description: 'Find user list, need super admin permission', tags: ['User']
+        description: 'Find user list, need manage-users permission', tags: ['User']
       }
     })
     .input(z.void())
@@ -140,7 +141,14 @@ export const userRouter = router({
       isLinked: z.boolean(),
       loginType: z.string(),
       image: z.string().nullable(),
-      role: z.string()
+      role: z.string(),
+      isOwner: z.boolean(),
+      permissions: z.object({
+        canShare: z.boolean(),
+        manageSiteSettings: z.boolean(),
+        manageUsers: z.boolean(),
+        enabled: z.boolean(),
+      })
     }))
     .query(async ({ input, ctx }) => {
       const requestedId = input.id ?? Number(ctx.id);
@@ -195,7 +203,9 @@ export const userRouter = router({
         loginType: user.loginType ?? '',
         isLinked: isLinked ? true : false,
         image: user.image ?? null,
-        role: user.role ?? ''
+        role: user.role ?? '',
+        isOwner: isOwner(user),
+        permissions: resolvePermissions(user)
       }
     }),
   canRegister: publicProcedure
@@ -309,16 +319,18 @@ export const userRouter = router({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'User not found' });
       }
 
-      const token = await generateApiToken({
-        id: user.id,
-        name: user.name ?? '',
-        role: user.role,
-        permissions: ['notes.upsert', 'ai.completions', 'users.list', 'users.genTokenByUserId']
-      });
+      const token = await generateApiToken(
+        {
+          id: user.id,
+          name: user.name ?? '',
+          role: user.role,
+        },
+        ['notes.upsert', 'ai.completions', 'users.list', 'users.genTokenByUserId']
+      );
 
       return { token };
     }),
-  genTokenByUserId: authProcedure.use(superAdminAuthMiddleware)
+  genTokenByUserId: authProcedure.use(requireManageUsers)
     .meta({
       openapi: {
         method: 'POST',
@@ -482,23 +494,29 @@ export const userRouter = router({
         }
       })
     }),
-  upsertUserByAdmin: authProcedure.use(superAdminAuthMiddleware).use(demoAuthMiddleware)
+  upsertUserByAdmin: authProcedure.use(requireManageUsers).use(demoAuthMiddleware)
     .meta({
       openapi: {
         method: 'POST', path: '/v1/user/upsert-by-admin', summary: 'Update or create user by admin'
-        , description: 'Update or create user by admin, need super admin permission', tags: ['User']
+        , description: 'Update or create user by admin, need manage-users permission', tags: ['User']
       }
     })
     .input(z.object({
       id: z.number().optional(),
       name: z.string().optional(),
       password: z.string().optional(),
-      nickname: z.string().optional()
+      nickname: z.string().optional(),
+      permissions: z.object({
+        canShare: z.boolean(),
+        manageSiteSettings: z.boolean(),
+        manageUsers: z.boolean(),
+        enabled: z.boolean(),
+      }).partial().optional()
     }))
     .output(z.union([z.boolean(), z.any()]))
     .mutation(async ({ input }) => {
       return prisma.$transaction(async () => {
-        const { id, nickname, name, password } = input
+        const { id, nickname, name, password, permissions } = input
 
         const update: Prisma.accountsUpdateInput = {}
 
@@ -513,12 +531,20 @@ export const userRouter = router({
         }
 
         if (id) {
+          const target = await prisma.accounts.findUnique({ where: { id } });
+          if (!target) {
+            throw new TRPCError({ code: 'NOT_FOUND', message: 'User not found' });
+          }
           if (name) update.name = name
           if (password) {
             const passwordHash = await hashPassword(password)
             update.password = passwordHash
           }
           if (nickname) update.nickname = nickname
+          // The owner (superadmin) always keeps full permissions — never editable here.
+          if (permissions !== undefined && !isOwner(target)) {
+            update.permissions = normalizePermissions(permissions) as unknown as Prisma.InputJsonValue
+          }
           await prisma.accounts.update({ where: { id }, data: update })
           return true
         } else {
@@ -526,7 +552,15 @@ export const userRouter = router({
             throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Password is required' });
           }
           const passwordHash = await hashPassword(password!)
-          const res = await prisma.accounts.create({ data: { name, password: passwordHash, nickname: name, role: 'user' } })
+          const res = await prisma.accounts.create({
+            data: {
+              name,
+              password: passwordHash,
+              nickname: name,
+              role: 'user',
+              permissions: normalizePermissions(permissions) as unknown as Prisma.InputJsonValue
+            }
+          })
           await prisma.accounts.update({ where: { id: res.id }, data: { apiToken: await generateApiToken({ id: res.id, name: name ?? '', role: 'user' }) } })
           return true
         }
@@ -553,7 +587,51 @@ export const userRouter = router({
       }
       return true;
     }),
-  deleteUser: authProcedure.use(superAdminAuthMiddleware).use(demoAuthMiddleware)
+  clearUserData: authProcedure
+    .meta({ openapi: { method: 'POST', path: '/v1/user/clear-data', summary: 'Clear current user data', protect: true, tags: ['User'] } })
+    .input(z.void())
+    .output(z.boolean())
+    .mutation(async ({ ctx }) => {
+      const userId = Number(ctx.id);
+      await prisma.$transaction([
+        prisma.comments.deleteMany({ where: { accountId: userId } }),
+        prisma.attachments.deleteMany({ where: { accountId: userId } }),
+        prisma.noteInternalShare.deleteMany({ where: { accountId: userId } }),
+        prisma.tagsToNote.deleteMany({ where: { note: { accountId: userId } } }),
+        prisma.notes.deleteMany({ where: { accountId: userId } }),
+        prisma.tag.deleteMany({ where: { accountId: userId } }),
+        prisma.follows.deleteMany({ where: { accountId: userId } }),
+        prisma.notifications.deleteMany({ where: { accountId: userId } }),
+        prisma.conversation.deleteMany({ where: { accountId: userId } }),
+        prisma.aiScheduledTask.deleteMany({ where: { accountId: userId } }),
+      ]);
+      return true;
+    }),
+  clearSiteData: authProcedure.use(requireManageSite)
+    .meta({ openapi: { method: 'POST', path: '/v1/user/clear-site-data', summary: 'Clear all site data (admin only)', protect: true, tags: ['User'] } })
+    .input(z.void())
+    .output(z.boolean())
+    .mutation(async ({ ctx }) => {
+      const currentUserId = Number(ctx.id);
+      await prisma.$transaction([
+        prisma.message.deleteMany({}),
+        prisma.conversation.deleteMany({}),
+        prisma.reaction.deleteMany({}),
+        prisma.comments.deleteMany({}),
+        prisma.attachments.deleteMany({}),
+        prisma.noteInternalShare.deleteMany({}),
+        prisma.tagsToNote.deleteMany({}),
+        prisma.notes.deleteMany({}),
+        prisma.tag.deleteMany({}),
+        prisma.follows.deleteMany({}),
+        prisma.notifications.deleteMany({}),
+        prisma.aiScheduledTask.deleteMany({}),
+        prisma.config.deleteMany({ where: { userId: { not: currentUserId } } }),
+        prisma.accounts.deleteMany({ where: { id: { not: currentUserId } } }),
+      ]);
+      return true;
+    }),
+  deleteUser: authProcedure.use(requireManageUsers).use(demoAuthMiddleware)
     .meta({
       openapi: {
         method: 'DELETE',

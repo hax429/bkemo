@@ -77,6 +77,26 @@ export class UserStore implements Store {
     return this.role === 'superadmin';
   }
 
+  /** Resolved per-user capabilities (owner ⇒ all true). Source: users.detail. */
+  get permissions() {
+    if (this.isSuperAdmin) {
+      return { canShare: true, manageSiteSettings: true, manageUsers: true, enabled: true };
+    }
+    return this.userInfo.value?.permissions ?? { canShare: true, manageSiteSettings: false, manageUsers: false, enabled: true };
+  }
+
+  get canManageUsers() {
+    return this.isSuperAdmin || !!this.permissions.manageUsers;
+  }
+
+  get canManageSite() {
+    return this.isSuperAdmin || !!this.permissions.manageSiteSettings;
+  }
+
+  get canShare() {
+    return this.isSuperAdmin || !!this.permissions.canShare;
+  }
+
   static wait() {
     return RootStore.Get(UserStore).wait();
   }

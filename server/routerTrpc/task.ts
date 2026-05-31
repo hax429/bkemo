@@ -1,4 +1,4 @@
-import { router, authProcedure, demoAuthMiddleware, superAdminAuthMiddleware } from '@server/middleware';
+import { router, authProcedure, demoAuthMiddleware, requireManageSite } from '@server/middleware';
 import { z } from 'zod';
 import { DBJob } from '@server/jobs/dbjob';
 import { ArchiveJob } from '@server/jobs/archivejob';
@@ -26,7 +26,7 @@ const taskInfoSchema = z.object({
 const BACKUP_PROGRESS_CACHE_KEY = "backup-database-progress";
 
 export const taskRouter = router({
-  list: authProcedure.use(superAdminAuthMiddleware)
+  list: authProcedure.use(requireManageSite)
     .meta({ openapi: { method: 'GET', path: '/v1/tasks/list', summary: 'Query user task list', protect: true, tags: ['Task'] } })
     .input(z.void())
     .output(z.array(taskInfoSchema))
@@ -78,7 +78,7 @@ export const taskRouter = router({
       
       return results;
     }),
-  upsertTask: authProcedure.use(superAdminAuthMiddleware)
+  upsertTask: authProcedure.use(requireManageSite)
     .meta({ openapi: { method: 'GET', path: '/v1/tasks/upsert', summary: 'Upsert Task', protect: true, tags: ['Task'] } })
     .input(z.object({
       time: z.string().optional(),
@@ -114,7 +114,7 @@ export const taskRouter = router({
         return { success: true, action: 'updated', cron: time };
       }
     }),
-  importFromBlinko: authProcedure.use(demoAuthMiddleware).use(superAdminAuthMiddleware)
+  importFromBlinko: authProcedure.use(demoAuthMiddleware).use(requireManageSite)
     .input(z.object({
       filePath: z.string()
     }))
@@ -140,7 +140,7 @@ export const taskRouter = router({
       }
     }),
 
-  importFromMemos: authProcedure.use(demoAuthMiddleware).use(superAdminAuthMiddleware)
+  importFromMemos: authProcedure.use(demoAuthMiddleware).use(requireManageSite)
     .input(z.object({
       filePath: z.string() //xxxx.db
     }))

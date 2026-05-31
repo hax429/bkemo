@@ -6,6 +6,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Blinko is an open-source, self-hosted note-taking application with AI-powered features. It's a multi-platform application (web, desktop via Tauri, mobile) built with TypeScript/React frontend and Node.js/Express backend.
 
+## bkemo — Direction D rewrite (current app)
+
+This fork was rebuilt around one idea: **every memo is also a todo**. The new "Direction D" UI is now **the app** — `/` and `/bkemo` render `app/src/pages/bkemo` (a fixed full-screen `.bkemo` surface). The legacy Blinko web UI (`CommonLayout` chrome + the `pages/index|hub|ai|resources|review|settings|plugin|analytics|all|detail` routes) was **removed from routing** in `app/src/App.tsx`; those page files and many legacy components still exist on disk and are not deleted because the Tauri **quick-capture windows** (`/quicknote|quickai|quicktool`) and a few shared pieces still import them (and still use the legacy **Vditor** editor). Global toasts/dialogs come from `<AppProvider/>` (not the removed chrome).
+
+Key bits of the new architecture:
+- **Data model**: `notes` reuses `type` (`NoteType.TODO`) plus task columns `dueDate`/`isImportant`/`isUrgent`/`completedAt` (`prisma/schema.prisma`). A memo is a task if typed TODO or any task field is set; done = `completedAt != null`. A `reaction` table powers public reactions.
+- **Backend**: `note.list` gained task filters (lane via `dueStart/dueEnd`, `quadrant`, `isImportant/isUrgent/isCompleted`); `note.upsert` persists task fields; `note.toggleDone`. New `reaction` router (`server/routerTrpc/reaction.ts`, public list/toggle). Sharing reuses `note.shareNote` + `note.publicDetail`; comments reuse the public `comment` router.
+- **Frontend**: screens in `app/src/components/bkemo/` (Sidebar, Stream, Todos+Matrix, DailyReview, Random, Trash, Calendar, Stats, SettingsScreen, NoteModal, MobileTabBar, MarkdownView) wired via `BlinkoStore.queryNotes` + the Dexie cache; responsive (sidebar ≥768px, bottom tab bar below). Editor is **TipTap** (`app/src/components/TiptapEditor`, markdown round-trip, slash menu, #-autocomplete, task lists). Design tokens in `app/src/styles/bkemo-theme.css` (dark default; theme/accent/density in Settings → Appearance, persisted via `app/src/lib/bkemoSettings.ts`). bkemo Settings embeds the reused Blinko setting sections (`allSettings` from `pages/settings`) retheme​d to bkemo tokens.
+- **Public share**: `/m/:id` (`app/src/pages/m/[id].tsx`) — gradient public page showing one memo + reactions + guest comments; guest identity in `app/src/lib/guestId.ts`.
+- **Local dev**: `./debug.sh` provisions Postgres (Docker or Homebrew), writes `.env`, `prisma db push`, creates `admin/123456`, and runs the backend+frontend on :1111. The root `dev:frontend` script is avoided (a Python `dotenv` shadows the Node one); the server's own `bun --env-file` is used instead.
+
 ## Tech Stack
 
 - **Frontend**: React 18, TypeScript, Vite, TailwindCSS, Tauri (for desktop apps)

@@ -13,7 +13,7 @@ import { SendWebhook } from '@server/lib/helper';
 import { Context } from '../context';
 import { cache } from '@shared/lib/cache';
 import { AiModelFactory } from '@server/aiServer/aiModelFactory';
-import { authProcedure, demoAuthMiddleware, publicProcedure, router } from '@server/middleware';
+import { authProcedure, demoAuthMiddleware, publicProcedure, router, requireShare } from '@server/middleware';
 
 const extractHashtags = (input: string): string[] => {
   const withoutCodeBlocks = input.replace(/```[\s\S]*?```/g, '');
@@ -43,6 +43,15 @@ export const noteRouter = router({
         startDate: z.union([z.date(), z.null(), z.string()]).default(null).optional(),
         endDate: z.union([z.date(), z.null(), z.string()]).default(null).optional(),
         hasTodo: z.boolean().default(false).optional(),
+        // Task filters. Lane date-ranges are resolved on the client (its own
+        // timezone) and passed as dueStart/dueEnd; quadrant maps important×urgent.
+        dueStart: z.union([z.date(), z.null(), z.string()]).default(null).optional(),
+        dueEnd: z.union([z.date(), z.null(), z.string()]).default(null).optional(),
+        hasDueDate: z.union([z.boolean(), z.null()]).default(null).optional(),
+        isImportant: z.union([z.boolean(), z.null()]).default(null).optional(),
+        isUrgent: z.union([z.boolean(), z.null()]).default(null).optional(),
+        isCompleted: z.union([z.boolean(), z.null()]).default(null).optional(),
+        quadrant: z.enum(['do', 'schedule', 'delegate', 'eliminate']).nullish(),
       }),
     )
     .output(
@@ -86,9 +95,11 @@ export const noteRouter = router({
               )
               .optional(),
             comments: z.any().optional(),
+            reactions: z.array(z.any()).optional(),
             _count: z.object({
               comments: z.number(),
               histories: z.number(),
+              reactions: z.number().optional(),
             }),
             owner: z.object({
               id: z.number(),
@@ -104,7 +115,7 @@ export const noteRouter = router({
       ),
     )
     .mutation(async function ({ input, ctx }) {
-      const { tagId, type, isArchived, isRecycle, searchText, page, size, orderBy, withFile, withoutTag, withLink, isUseAiQuery, startDate, endDate, isShare, hasTodo } = input;
+      const { tagId, type, isArchived, isRecycle, searchText, page, size, orderBy, withFile, withoutTag, withLink, isUseAiQuery, startDate, endDate, isShare, hasTodo, dueStart, dueEnd, hasDueDate, isImportant, isUrgent, isCompleted, quadrant } = input;
       if (isUseAiQuery && searchText?.trim() != '') {
         const cleanedQuery = searchText?.replace(/@/g, '').trim();
         if (cleanedQuery && cleanedQuery.length > 0) {
@@ -190,6 +201,30 @@ export const noteRouter = router({
           { content: { contains: '* [x]', mode: 'insensitive' } },
         ];
       }
+      // ── Task filters ──
+      if (isImportant != null) where.isImportant = isImportant;
+      if (isUrgent != null) where.isUrgent = isUrgent;
+      if (isCompleted != null) {
+        where.completedAt = isCompleted ? { not: null } : null;
+      }
+      if (quadrant) {
+        const map = {
+          do: { isImportant: true, isUrgent: true },
+          schedule: { isImportant: true, isUrgent: false },
+          delegate: { isImportant: false, isUrgent: true },
+          eliminate: { isImportant: false, isUrgent: false },
+        } as const;
+        Object.assign(where, map[quadrant]);
+      }
+      if (hasDueDate != null) {
+        where.dueDate = hasDueDate ? { not: null } : null;
+      }
+      if (dueStart || dueEnd) {
+        where.dueDate = {
+          ...(dueStart ? { gte: typeof dueStart === 'string' ? new Date(dueStart) : dueStart } : {}),
+          ...(dueEnd ? { lte: typeof dueEnd === 'string' ? new Date(dueEnd) : dueEnd } : {}),
+        };
+      }
       const config = await getGlobalConfig({ ctx });
       let timeOrderBy = config?.isOrderByCreateTime ? { createdAt: orderBy } : { updatedAt: orderBy };
 
@@ -203,6 +238,7 @@ export const noteRouter = router({
           attachments: {
             orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
           },
+          reactions: true,
           comments: {
             include: {
               account: {
@@ -242,6 +278,7 @@ export const noteRouter = router({
             select: {
               comments: true,
               histories: true,
+              reactions: true,
             },
           },
           internalShares: true,
@@ -293,8 +330,10 @@ export const noteRouter = router({
                 }),
               ),
             ),
+            reactions: z.array(z.any()).optional(),
             _count: z.object({
               comments: z.number(),
+              reactions: z.number().optional(),
             }),
           }),
         ),
@@ -326,9 +365,11 @@ export const noteRouter = router({
                 },
               },
               attachments: true,
+              reactions: true,
               _count: {
                 select: {
                   comments: true,
+                  reactions: true,
                 },
               },
             },
@@ -380,9 +421,11 @@ export const noteRouter = router({
                 }),
               )
               .optional(),
+            reactions: z.array(z.any()).optional(),
             _count: z.object({
               comments: z.number(),
               histories: z.number(),
+              reactions: z.number().optional(),
             }),
           }),
         ),
@@ -397,6 +440,7 @@ export const noteRouter = router({
           attachments: {
             orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
           },
+          reactions: true,
           references: {
             select: {
               toNoteId: true,
@@ -425,6 +469,7 @@ export const noteRouter = router({
             select: {
               comments: true,
               histories: true,
+              reactions: true,
             },
           },
         },
@@ -483,9 +528,11 @@ export const noteRouter = router({
                 })
                 .nullable()
                 .optional(),
+              reactions: z.array(z.any()).optional(),
               _count: z.object({
                 comments: z.number(),
                 histories: z.number(),
+                reactions: z.number().optional(),
               }),
             }),
           ),
@@ -524,10 +571,12 @@ export const noteRouter = router({
           },
           tags: true,
           attachments: true,
+          reactions: true,
           _count: {
             select: {
               comments: true,
               histories: true,
+              reactions: true,
             },
           },
         },
@@ -614,9 +663,11 @@ export const noteRouter = router({
                 }),
               )
               .optional(),
+            reactions: z.array(z.any()).optional(),
             _count: z.object({
               comments: z.number(),
               histories: z.number(),
+              reactions: z.number().optional(),
             }),
           }),
         ),
@@ -639,6 +690,7 @@ export const noteRouter = router({
             },
           },
           attachments: true,
+          reactions: true,
           references: {
             select: {
               toNoteId: true,
@@ -663,7 +715,7 @@ export const noteRouter = router({
               },
             },
           },
-          _count: { select: { comments: true, histories: true } },
+          _count: { select: { comments: true, histories: true, reactions: true } },
         },
       });
     }),
@@ -787,9 +839,11 @@ export const noteRouter = router({
               }),
             )
             .optional(),
+          reactions: z.array(z.any()).optional(),
           _count: z.object({
             comments: z.number(),
             histories: z.number(),
+            reactions: z.number().optional(),
           }),
         }),
       ),
@@ -827,6 +881,16 @@ export const noteRouter = router({
     .mutation(async function ({ input, ctx }) {
       return await prisma.notes.update({ where: { id: input.id, accountId: Number(ctx.id) }, data: { isReviewed: true } });
     }),
+  toggleDone: authProcedure
+    .meta({ openapi: { method: 'POST', path: '/v1/note/toggle-done', summary: 'Toggle a task between done and not-done', protect: true, tags: ['Note'] } })
+    .input(z.object({ id: z.number(), done: z.boolean() }))
+    .output(z.any())
+    .mutation(async function ({ input, ctx }) {
+      return await prisma.notes.update({
+        where: { id: input.id, accountId: Number(ctx.id) },
+        data: { completedAt: input.done ? new Date() : null },
+      });
+    }),
   upsert: authProcedure
     .meta({
       openapi: {
@@ -861,11 +925,17 @@ export const noteRouter = router({
         createdAt: z.date().optional(),
         updatedAt: z.date().optional(),
         metadata: z.any().optional(),
+        // Task attributes. null = leave unchanged; dueDate null clears the date.
+        dueDate: z.union([z.date(), z.string(), z.null()]).optional(),
+        isImportant: z.union([z.boolean(), z.null()]).default(null),
+        isUrgent: z.union([z.boolean(), z.null()]).default(null),
+        completedAt: z.union([z.date(), z.string(), z.null()]).optional(),
       }),
     )
     .output(z.any())
     .mutation(async function ({ input, ctx }) {
-      let { id, isArchived, isRecycle, type, attachments, content, isTop, isShare, references } = input;
+      let { id, isArchived, isRecycle, type, attachments, content, isTop, isShare, references, isImportant, isUrgent } = input;
+      const toDate = (v: unknown) => (typeof v === 'string' ? new Date(v) : (v as Date | null));
 
       // Check for internal sharing permission if updating an existing note
       let isSharedEditor = false;
@@ -939,6 +1009,10 @@ export const noteRouter = router({
         ...(isShare !== null && { isShare }),
         ...(isRecycle !== null && { isRecycle }),
         ...(content != null && { content }),
+        ...(isImportant !== null && { isImportant }),
+        ...(isUrgent !== null && { isUrgent }),
+        ...(input.dueDate !== undefined && { dueDate: toDate(input.dueDate) }),
+        ...(input.completedAt !== undefined && { completedAt: toDate(input.completedAt) }),
         ...(input.createdAt && { createdAt: input.createdAt }),
         ...(input.updatedAt && { updatedAt: input.updatedAt }),
       };
@@ -1124,6 +1198,10 @@ export const noteRouter = router({
               accountId: Number(ctx.id),
               isShare: isShare ? true : false,
               isTop: isTop ? true : false,
+              ...(isImportant !== null && { isImportant }),
+              ...(isUrgent !== null && { isUrgent }),
+              ...(input.dueDate !== undefined && input.dueDate !== null && { dueDate: toDate(input.dueDate) }),
+              ...(input.completedAt !== undefined && input.completedAt !== null && { completedAt: toDate(input.completedAt) }),
               ...(input.createdAt && { createdAt: input.createdAt }),
               ...(input.updatedAt && { updatedAt: input.updatedAt }),
               ...(input.metadata && { metadata: input.metadata }),
@@ -1218,7 +1296,7 @@ export const noteRouter = router({
       }
     }),
 
-  shareNote: authProcedure
+  shareNote: authProcedure.use(requireShare)
     .meta({ openapi: { method: 'POST', path: '/v1/note/share', summary: 'Share note', protect: true, tags: ['Note'] } })
     .input(
       z.object({
@@ -1711,9 +1789,11 @@ export const noteRouter = router({
               image: z.string(),
             }).nullable(),
             canEdit: z.boolean(),
+            reactions: z.array(z.any()).optional(),
             _count: z.object({
               comments: z.number(),
               histories: z.number(),
+              reactions: z.number().optional(),
             }),
           }),
         ),
@@ -1739,6 +1819,7 @@ export const noteRouter = router({
           attachments: {
             orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
           },
+          reactions: true,
           account: {
             select: {
               id: true,
@@ -1759,6 +1840,7 @@ export const noteRouter = router({
             select: {
               comments: true,
               histories: true,
+              reactions: true,
             },
           },
         },

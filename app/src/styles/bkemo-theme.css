@@ -1,0 +1,144 @@
+/*
+ * bkemo — Direction D design tokens.
+ * Scoped under .bkemo so it coexists with the legacy theme during the rewrite.
+ * Dark-first (the "Issue"/Linear palette from the prototype). Light variant
+ * keys off the absence of the next-themes `dark` class on <html>.
+ * --accent and density are overridable from Settings (set inline on the root
+ * or via [data-density]).
+ */
+
+.bkemo {
+  /* Dark (default) — prototype .dir-issue */
+  --bg: #08090a;
+  --bg-2: #101113;
+  --bg-3: #1a1b1f;
+  --fg: #f7f8f8;
+  --fg-2: #8a8f98;
+  --fg-3: #62666d;
+  --border: #23252a;
+  --border-2: #2d2f36;
+  --hover: rgba(255, 255, 255, 0.04);
+  --accent: #5e6ad2;
+  --accent-soft: color-mix(in srgb, var(--accent) 22%, transparent);
+
+  --font-display: "Inter", system-ui, sans-serif;
+  --font-body: "Inter", system-ui, sans-serif;
+  --font-mono: "Berkeley Mono", "JetBrains Mono", ui-monospace, "Menlo", monospace;
+
+  --radius: 6px;
+  --radius-lg: 8px;
+
+  /* Density — drives row padding / line-height across stream + lists. */
+  --row-pad-y: 12px;
+  --row-pad-x: 14px;
+  --row-line: 1.65;
+
+  background: var(--bg);
+  color: var(--fg);
+  /* --font-family is set globally by FontManager when a custom font-style is
+     chosen in Settings; fall back to the bkemo body font otherwise. */
+  font-family: var(--font-family, var(--font-body));
+  font-feature-settings: "ss01", "cv11";
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Light variant of the Issue palette — opt-in via data-theme="light".
+   bkemo is dark by default (no/any other data-theme = dark). */
+.bkemo[data-theme="light"] {
+  --bg: #ffffff;
+  --bg-2: #f7f8fa;
+  --bg-3: #eef0f3;
+  --fg: #1c1d21;
+  --fg-2: #5c616b;
+  --fg-3: #9aa0aa;
+  --border: rgba(28, 29, 33, 0.1);
+  --border-2: rgba(28, 29, 33, 0.18);
+  --hover: rgba(28, 29, 33, 0.05);
+  --accent-soft: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+/* Density modifiers */
+.bkemo[data-density="compact"] {
+  --row-pad-y: 8px;
+  --row-pad-x: 14px;
+  --row-line: 1.5;
+}
+.bkemo[data-density="comfy"] {
+  --row-pad-y: 16px;
+  --row-pad-x: 14px;
+  --row-line: 1.75;
+}
+
+.bkemo * { box-sizing: border-box; }
+.bkemo button { font-family: inherit; cursor: pointer; }
+.bkemo ::selection { background: var(--accent-soft); color: var(--fg); }
+
+/* Scrollbar suppression on dense scroll panes (prototype .scroll) */
+.bkemo .bk-scroll::-webkit-scrollbar { display: none; }
+.bkemo .bk-scroll { scrollbar-width: none; }
+
+/* Layout helpers ported from the prototype's styles.css */
+.bkemo .h-stack { display: flex; align-items: center; }
+.bkemo .v-stack { display: flex; flex-direction: column; }
+.bkemo .spacer { flex: 1; }
+
+/*
+ * Reused Blinko settings sections embedded in the bkemo Settings screen.
+ * They're built on HeroUI (themed via --heroui-* HSL channel vars) and use
+ * `dark:` utilities. We force the dark scope and remap the HeroUI tokens to the
+ * bkemo palette so they blend with the workspace instead of rendering a white
+ * HeroUI card. (Light bkemo theme keeps a darker-but-cohesive settings panel;
+ * acceptable, and avoids re-implementing every control.)
+ */
+.bk-legacy-settings {
+  --heroui-background: 220 11% 4%;
+  --heroui-foreground: 200 6% 97%;
+  --heroui-foreground-500: 218 7% 57%;
+  --heroui-content1: 220 9% 7%;
+  --heroui-content2: 228 8% 11%;
+  --heroui-content3: 222 10% 15%;
+  --heroui-content4: 222 10% 18%;
+  --heroui-divider: 222 10% 17%;
+  --heroui-focus: 232 56% 60%;
+  --heroui-default-50: 220 9% 7%;
+  --heroui-default-100: 222 10% 12%;
+  --heroui-default-200: 222 10% 16%;
+  --heroui-default-300: 222 10% 22%;
+  --heroui-default-400: 218 7% 40%;
+  --heroui-default-500: 218 7% 57%;
+  --heroui-default-600: 218 7% 68%;
+  --heroui-default-foreground: 200 6% 97%;
+  --heroui-primary: 232 56% 60%;
+  --heroui-primary-foreground: 0 0% 100%;
+  color: var(--fg);
+}
+/* Render the section card as a raised bkemo card instead of a HeroUI surface. */
+.bk-legacy-settings .bg-background {
+  background: var(--bg-2) !important;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+/* Inputs/selects/switches inherit the remapped tokens; keep text readable. */
+.bk-legacy-settings .text-default-400,
+.bk-legacy-settings .text-default-500 { color: var(--fg-3) !important; }
+
+/* Avatar chip */
+.bkemo .bk-avatar {
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 40%, #000));
+  color: #fff;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Dynamic form controls focus matching the selected accent color */
+.bkemo input:focus,
+.bkemo select:focus,
+.bkemo textarea:focus {
+  border-color: var(--accent) !important;
+  outline: none !important;
+  box-shadow: 0 0 0 2px var(--accent-soft) !important;
+}

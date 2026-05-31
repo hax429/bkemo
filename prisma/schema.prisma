@@ -23,6 +23,7 @@ model accounts {
   note          Int             @default(0)
   role          String          @default("") @db.VarChar
   loginType     String          @default("") @db.VarChar
+  permissions   Json?           @db.Json
   linkAccountId Int?
   createdAt     DateTime        @default(now()) @db.Timestamptz(6)
   updatedAt     DateTime        @updatedAt @db.Timestamptz(6)
@@ -76,6 +77,11 @@ model notes {
   isShare           Boolean         @default(false)
   isTop             Boolean         @default(false)
   isReviewed        Boolean         @default(false)
+  // Task attributes — a memo is also a todo. done = completedAt != null.
+  dueDate           DateTime?       @db.Timestamptz(6)
+  isImportant       Boolean         @default(false)
+  isUrgent          Boolean         @default(false)
+  completedAt       DateTime?       @db.Timestamptz(6)
   sharePassword     String          @default("") @db.VarChar
   shareEncryptedUrl String?         @db.VarChar
   shareExpiryDate   DateTime?       @db.Timestamptz(6)
@@ -94,6 +100,23 @@ model notes {
   comments          comments[]      @relation("NoteComments")
   histories         noteHistory[]
   internalShares    noteInternalShare[]
+  reactions         reaction[]
+
+  @@index([accountId, dueDate])
+  @@index([accountId, type])
+}
+
+model reaction {
+  id        Int      @id @default(autoincrement())
+  noteId    Int
+  emoji     String   @db.VarChar
+  guestId   String   @db.VarChar // localStorage guest id, or "acct:<accountId>"
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  note notes @relation(fields: [noteId], references: [id], onDelete: Cascade)
+
+  @@unique([noteId, emoji, guestId])
+  @@index([noteId])
 }
 
 model comments {
@@ -103,6 +126,7 @@ model comments {
   guestName String?  @db.VarChar
   guestIP   String?  @db.VarChar
   guestUA   String?  @db.VarChar
+  guestAvatar String? @db.VarChar
   noteId    Int
   parentId  Int?
   createdAt DateTime @default(now()) @db.Timestamptz(6)
