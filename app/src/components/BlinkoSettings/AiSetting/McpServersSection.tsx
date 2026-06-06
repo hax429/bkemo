@@ -388,7 +388,7 @@ const McpServerCard = observer(({ server }: { server: McpServer }) => {
 });
 
 // Parse mcp.json format (Cursor MCP config format)
-function parseMcpJson(jsonContent: string): Array<{
+type ParsedMcpServer = {
   name: string;
   type: 'stdio' | 'sse' | 'streamable-http';
   command?: string;
@@ -396,14 +396,15 @@ function parseMcpJson(jsonContent: string): Array<{
   url?: string;
   headers?: Record<string, string>;
   env?: Record<string, string>;
-}> {
+};
+function parseMcpJson(jsonContent: string): Array<ParsedMcpServer> {
   try {
     const config = JSON.parse(jsonContent);
     if (!config.mcpServers || typeof config.mcpServers !== 'object') {
       throw new Error('Invalid mcp.json format: missing mcpServers');
     }
 
-    const servers = [];
+    const servers: ParsedMcpServer[] = [];
     for (const [name, serverConfig] of Object.entries(config.mcpServers)) {
       const config = serverConfig as any;
       
@@ -423,7 +424,7 @@ function parseMcpJson(jsonContent: string): Array<{
         const isSSE = url.includes('/sse') || url.endsWith('sse');
         servers.push({
           name,
-          type: isSSE ? 'sse' : ('streamable-http' as const),
+          type: (isSSE ? 'sse' : 'streamable-http') as 'sse' | 'streamable-http',
           url,
           headers: config.headers || undefined,
         });

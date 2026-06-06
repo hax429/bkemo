@@ -136,6 +136,9 @@ export class ToastPlugin implements Store {
   error(str: string) {
     toast.error(this.splitTextIntoLines(str, 60))
   };
+  warning(str: string) {
+    toast(this.splitTextIntoLines(str, 60), { icon: '⚠️' })
+  };
   loading = toast.loading;
   custom = toast.custom;
   dismiss = toast.dismiss;

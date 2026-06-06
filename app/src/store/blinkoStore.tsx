@@ -62,6 +62,8 @@ interface UpsertNoteParams {
   isUrgent?: boolean | null;
   /** Task: completion time (null = not done) */
   completedAt?: Date | string | null;
+  /** Optional parent task id when this note is a subtask */
+  parentNoteId?: number | null;
 }
 
 interface OfflineNote extends Omit<Note, 'id' | 'references'> {
@@ -210,6 +212,7 @@ export class BlinkoStore implements Store {
         if (fc.isCompleted != null && (n.completedAt != null) !== !!fc.isCompleted) return false;
         if (fc.isImportant != null && !!n.isImportant !== !!fc.isImportant) return false;
         if (fc.isUrgent != null && !!n.isUrgent !== !!fc.isUrgent) return false;
+        if (fc.parentNoteId !== undefined && (n.parentNoteId ?? null) !== fc.parentNoteId) return false;
         return true;
       },
     });
@@ -237,7 +240,8 @@ export class BlinkoStore implements Store {
         dueDate,
         isImportant,
         isUrgent,
-        completedAt
+        completedAt,
+        parentNoteId
       } = params;
 
       const saveOffline = (reason: 'offline' | 'fallback') => {
@@ -262,7 +266,8 @@ export class BlinkoStore implements Store {
             dueDate: dueDate === undefined || dueDate === null ? null : new Date(dueDate),
             isImportant: !!isImportant,
             isUrgent: !!isUrgent,
-            completedAt: completedAt === undefined || completedAt === null ? null : new Date(completedAt)
+            completedAt: completedAt === undefined || completedAt === null ? null : new Date(completedAt),
+            parentNoteId: parentNoteId ?? null
           };
           this.saveOfflineNote(offlineNote);
           if (showToast) {
@@ -274,7 +279,7 @@ export class BlinkoStore implements Store {
           return offlineNote;
         } else {
           this.offlinePendingOps.push({ type: 'edit', noteId: id, patch: params });
-          patchNoteInCache(id, params).catch(e => console.error('[cache] patch failed:', e));
+          patchNoteInCache(id, params as Partial<Note>).catch(e => console.error('[cache] patch failed:', e));
           showToast && RootStore.Get(ToastPlugin).warning(i18n.t("offline-status"));
           refresh && this.updateTicker++;
           return;
@@ -306,7 +311,8 @@ export class BlinkoStore implements Store {
             dueDate: dueDate === undefined ? undefined : (dueDate === null ? null : new Date(dueDate)),
             isImportant,
             isUrgent,
-            completedAt: completedAt === undefined ? undefined : (completedAt === null ? null : new Date(completedAt))
+            completedAt: completedAt === undefined ? undefined : (completedAt === null ? null : new Date(completedAt)),
+            parentNoteId
           }),
           new Promise<never>((_, reject) =>
             setTimeout(() => reject(new Error('upsert-timeout')), 15000)

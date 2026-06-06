@@ -1,6 +1,6 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
 
 ## Project Overview
 
@@ -8,12 +8,12 @@ Blinko is an open-source, self-hosted note-taking application with AI-powered fe
 
 ## bkemo — Direction D rewrite (current app)
 
-This fork was rebuilt around one idea: **every memo is also a todo**. The new "Direction D" UI is now **the app** — `/` and `/bkemo` render `app/src/pages/bkemo` (a fixed full-screen `.bkemo` surface). The legacy Blinko web UI (`CommonLayout` chrome + the `pages/index|hub|ai|resources|review|settings|plugin|analytics|all|detail` routes) was **removed from routing** in `app/src/App.tsx`; those page files and many legacy components still exist on disk and are not deleted because the Tauri **quick-capture window** (`/quicknote`) and a few shared pieces still import them. The legacy **Vditor** editor has been fully removed from the note-composing paths — `app/src/lib/editorTypes.ts` / `hooks.ts` retain only Vditor-free no-op shims for API compatibility — and **every** composer (Stream, NoteModal, quicknote) now uses TipTap. Global toasts/dialogs come from `<AppProvider/>` (not the removed chrome).
+This fork was rebuilt around one idea: **every memo is also a todo**. The new "Direction D" UI is now **the app** — `/` and `/bkemo` render `app/src/pages/bkemo` (a fixed full-screen `.bkemo` surface). The legacy Blinko web UI (`CommonLayout` chrome + the `pages/index|hub|ai|resources|review|settings|plugin|analytics|all|detail` routes) was **removed from routing** in `app/src/App.tsx`; those page files and many legacy components still exist on disk and are not deleted because the Tauri **quick-capture windows** (`/quicknote|quickai|quicktool`) and a few shared pieces still import them (and still use the legacy **Vditor** editor). Global toasts/dialogs come from `<AppProvider/>` (not the removed chrome).
 
 Key bits of the new architecture:
 - **Data model**: `notes` reuses `type` (`NoteType.TODO`) plus task columns `dueDate`/`isImportant`/`isUrgent`/`completedAt` (`prisma/schema.prisma`). A memo is a task if typed TODO or any task field is set; done = `completedAt != null`. A `reaction` table powers public reactions.
 - **Backend**: `note.list` gained task filters (lane via `dueStart/dueEnd`, `quadrant`, `isImportant/isUrgent/isCompleted`); `note.upsert` persists task fields; `note.toggleDone`. New `reaction` router (`server/routerTrpc/reaction.ts`, public list/toggle). Sharing reuses `note.shareNote` + `note.publicDetail`; comments reuse the public `comment` router.
-- **Frontend**: screens in `app/src/components/bkemo/` (Sidebar, Stream, Todos+Matrix, DailyReview, Random, Trash, Calendar, Stats, SettingsScreen, NoteModal, MobileTabBar, MarkdownView) wired via `BlinkoStore.queryNotes` + the Dexie cache; responsive (sidebar ≥768px, bottom tab bar below). Editor is **TipTap** (`app/src/components/TiptapEditor`, markdown round-trip, slash menu, #-autocomplete, task lists). **Inline task syntax** (`app/src/lib/taskSyntax.ts` → `parseTaskSyntax`) is applied on save in every composer (Stream, NoteModal, quicknote): a markdown checkbox (`-[]` / `- [ ]`) auto-promotes a memo to `NoteType.TODO`, and a `due:` token sets the due date (`due:today`, `due:tmr`/`due:tomorrow`, `due:MM/DD/YYYY`, `due:MM/DD/YY`, ISO, or `due:none` to clear). The `due:` token is stripped from saved content; the checkbox markup is kept. Date parsing uses dayjs `customParseFormat` (`app/src/lib/dayjs.ts`). **Memo links + subtasks**: typing `[[` in any composer opens a memo/todo autocomplete (`app/src/components/TiptapEditor/noteLinkSuggestion.ts`, searches via `queryNotes`) and inserts a markdown link with a relative `/bkemo/n/<id>` href (`app/src/lib/noteLinks.ts`). On save every composer extracts those ids and persists them as `references` (the `noteReference` table) so the link graph mirrors the body; `MarkdownView` renders the href as an in-app chip that emits `bkemo:open-note` (handled in `pages/bkemo/index.tsx`). In `NoteModal`, each linked memo can be promoted to the editing memo's **parent** (`notes.parentNoteId`, self-relation `Subtasks` in `schema.prisma`, migration `20260531000000_add_note_subtasks`) — i.e. the current memo becomes a subtask of the one it links to; opening a memo shows its children underneath (`note.list`/`note.detail` include `subtasks`/`parentNote`). Design tokens in `app/src/styles/bkemo-theme.css` (dark default; theme/accent/density in Settings → Appearance, persisted via `app/src/lib/bkemoSettings.ts`). bkemo Settings embeds the reused Blinko setting sections (`allSettings` from `pages/settings`) retheme​d to bkemo tokens.
+- **Frontend**: screens in `app/src/components/bkemo/` (Sidebar, Stream, Todos+Matrix, DailyReview, Random, Trash, Calendar, Stats, SettingsScreen, NoteModal, MobileTabBar, MarkdownView) wired via `BlinkoStore.queryNotes` + the Dexie cache; responsive (sidebar ≥768px, bottom tab bar below). Editor is **TipTap** (`app/src/components/TiptapEditor`, markdown round-trip, slash menu, #-autocomplete, task lists). Design tokens in `app/src/styles/bkemo-theme.css` (dark default; theme/accent/density in Settings → Appearance, persisted via `app/src/lib/bkemoSettings.ts`). bkemo Settings embeds the reused Blinko setting sections (`allSettings` from `pages/settings`) retheme​d to bkemo tokens.
 - **Public share**: `/m/:id` (`app/src/pages/m/[id].tsx`) — gradient public page showing one memo + reactions + guest comments; guest identity in `app/src/lib/guestId.ts`.
 - **Local dev**: `./debug.sh` provisions Postgres (Docker or Homebrew), writes `.env`, `prisma db push`, creates `admin/123456`, and runs the backend+frontend on :1111. The root `dev:frontend` script is avoided (a Python `dotenv` shadows the Node one); the server's own `bun --env-file` is used instead.
 
@@ -84,7 +84,7 @@ bun run test               # Run tests (if configured)
 - **State Management**: MobX with custom stores in `/app/src/store/`
 - **Routing**: React Router v7
 - **UI Components**: Custom components with HeroUI (@heroui/react)
-- **Editor**: TipTap (markdown round-trip) — see `app/src/components/TiptapEditor`; Vditor has been removed
+- **Editor**: Vditor for markdown editing
 - **Internationalization**: i18next with multiple language support
 - **API Communication**: tRPC client for type-safe API calls
 

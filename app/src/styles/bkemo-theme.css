@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400..700;1,400..700&display=swap');
+
 /*
  * bkemo — Direction D design tokens.
  * Scoped under .bkemo so it coexists with the legacy theme during the rewrite.
@@ -8,25 +10,29 @@
  */
 
 .bkemo {
-  /* Dark (default) — prototype .dir-issue */
-  --bg: #08090a;
-  --bg-2: #101113;
-  --bg-3: #1a1b1f;
-  --fg: #f7f8f8;
-  --fg-2: #8a8f98;
-  --fg-3: #62666d;
-  --border: #23252a;
-  --border-2: #2d2f36;
-  --hover: rgba(255, 255, 255, 0.04);
+  /* Dusk Theme (Default) — dark + violet DNA, warmed from clinical near-black */
+  --bg: #14121a;
+  --bg-2: #1b1923;
+  --bg-3: #24222f;
+  --note-font: "Lora", Georgia, "Times New Roman", serif;
+  --fg: #f4eeff;
+  --fg-2: #a89dbb;
+  --fg-3: #786e8a;
+  --border: rgba(244, 238, 255, 0.075);
+  --border-2: rgba(244, 238, 255, 0.14);
+  --hover: rgba(244, 238, 255, 0.045);
   --accent: #5e6ad2;
-  --accent-soft: color-mix(in srgb, var(--accent) 22%, transparent);
+  --accent-soft: color-mix(in srgb, var(--accent) 20%, transparent);
+  /* Priority signals — deliberately NOT the accent, and distinct from each other. */
+  --important: #e0a83e;   /* gold — high value / matters */
+  --urgent: #e5484d;      /* red — time-critical / now */
 
   --font-display: "Inter", system-ui, sans-serif;
   --font-body: "Inter", system-ui, sans-serif;
   --font-mono: "Berkeley Mono", "JetBrains Mono", ui-monospace, "Menlo", monospace;
 
-  --radius: 6px;
-  --radius-lg: 8px;
+  --radius: 12px;
+  --radius-lg: 14px;
 
   /* Density — drives row padding / line-height across stream + lists. */
   --row-pad-y: 12px;
@@ -43,6 +49,69 @@
   text-rendering: optimizeLegibility;
 }
 
+/* Preset modifications */
+.bkemo[data-preset="coffee"] {
+  --bg: #16130e;        /* deep warm espresso-black */
+  --bg-2: #1e1a13;      /* raised card */
+  --bg-3: #27211a;      /* hover / inset */
+  --fg: #f4eee2;        /* warm cream */
+  --fg-2: #b6aa95;      /* warm taupe */
+  --fg-3: #837868;      /* dim warm */
+  --border: rgba(245, 231, 205, 0.075);
+  --border-2: rgba(245, 231, 205, 0.14);
+  --hover: rgba(245, 231, 205, 0.045);
+  --radius: 12px;
+  --radius-lg: 14px;
+  --accent-soft: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.bkemo[data-preset="developer"] {
+  --bg: #08090a;        /* clinical near-black */
+  --bg-2: #101113;
+  --bg-3: #1a1b1f;
+  --fg: #f7f8f8;
+  --fg-2: #8a8f98;
+  --fg-3: #62666d;
+  --border: #23252a;
+  --border-2: #2d2f36;
+  --hover: rgba(255, 255, 255, 0.04);
+  --radius: 6px;        /* rigid developer corners */
+  --radius-lg: 8px;
+  --accent-soft: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+/* Card metadata hover interactions */
+.bkemo .bk-memo-id {
+  opacity: 0;
+  transition: opacity 0.18s ease-in-out;
+}
+.bkemo .bk-memo-time .bk-exact {
+  display: none;
+}
+.bkemo .bk-memo-time .bk-rel {
+  display: inline;
+}
+
+.bkemo .bk-memo:hover .bk-memo-id {
+  opacity: 0.85;
+}
+.bkemo .bk-memo:hover .bk-memo-time .bk-rel {
+  display: none;
+}
+.bkemo .bk-memo:hover .bk-memo-time .bk-exact {
+  display: inline;
+}
+
+/* Soft card transitions & elevations for journal stream */
+.bkemo .bk-memo {
+  transition: all 0.2s ease-in-out;
+}
+.bkemo .bk-memo:hover {
+  border-color: var(--border-2) !important;
+  transform: translateY(-1px);
+  box-shadow: 0 10px 30px -15px rgba(0, 0, 0, 0.6);
+}
+
 /* Light variant of the Issue palette — opt-in via data-theme="light".
    bkemo is dark by default (no/any other data-theme = dark). */
 .bkemo[data-theme="light"] {
@@ -56,6 +125,9 @@
   --border-2: rgba(28, 29, 33, 0.18);
   --hover: rgba(28, 29, 33, 0.05);
   --accent-soft: color-mix(in srgb, var(--accent) 14%, transparent);
+  /* darker priority tints for legibility on light backgrounds */
+  --important: #b9820f;
+  --urgent: #d23036;
 }
 
 /* Density modifiers */
@@ -83,45 +155,6 @@
 .bkemo .v-stack { display: flex; flex-direction: column; }
 .bkemo .spacer { flex: 1; }
 
-/*
- * Reused Blinko settings sections embedded in the bkemo Settings screen.
- * They're built on HeroUI (themed via --heroui-* HSL channel vars) and use
- * `dark:` utilities. We force the dark scope and remap the HeroUI tokens to the
- * bkemo palette so they blend with the workspace instead of rendering a white
- * HeroUI card. (Light bkemo theme keeps a darker-but-cohesive settings panel;
- * acceptable, and avoids re-implementing every control.)
- */
-.bk-legacy-settings {
-  --heroui-background: 220 11% 4%;
-  --heroui-foreground: 200 6% 97%;
-  --heroui-foreground-500: 218 7% 57%;
-  --heroui-content1: 220 9% 7%;
-  --heroui-content2: 228 8% 11%;
-  --heroui-content3: 222 10% 15%;
-  --heroui-content4: 222 10% 18%;
-  --heroui-divider: 222 10% 17%;
-  --heroui-focus: 232 56% 60%;
-  --heroui-default-50: 220 9% 7%;
-  --heroui-default-100: 222 10% 12%;
-  --heroui-default-200: 222 10% 16%;
-  --heroui-default-300: 222 10% 22%;
-  --heroui-default-400: 218 7% 40%;
-  --heroui-default-500: 218 7% 57%;
-  --heroui-default-600: 218 7% 68%;
-  --heroui-default-foreground: 200 6% 97%;
-  --heroui-primary: 232 56% 60%;
-  --heroui-primary-foreground: 0 0% 100%;
-  color: var(--fg);
-}
-/* Render the section card as a raised bkemo card instead of a HeroUI surface. */
-.bk-legacy-settings .bg-background {
-  background: var(--bg-2) !important;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-}
-/* Inputs/selects/switches inherit the remapped tokens; keep text readable. */
-.bk-legacy-settings .text-default-400,
-.bk-legacy-settings .text-default-500 { color: var(--fg-3) !important; }
 
 /* Avatar chip */
 .bkemo .bk-avatar {
@@ -142,3 +175,6 @@
   outline: none !important;
   box-shadow: 0 0 0 2px var(--accent-soft) !important;
 }
+
+
+

@@ -5,7 +5,7 @@ import { RootStore } from '@/store';
 import { BlinkoStore } from '@/store/blinkoStore';
 import type { Note } from '@shared/lib/types';
 import { isTask, isDone, laneToDueRange } from '@/lib/taskFilters';
-import { renderMemoBody, previewText } from './renderMemoBody';
+import { MarkdownView } from './MarkdownView';
 
 const mono: React.CSSProperties = { fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '.10em', color: 'var(--fg-3)', textTransform: 'uppercase' };
 const card: React.CSSProperties = { background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)' };
@@ -20,7 +20,7 @@ const TaskStripItem = observer(function TaskStripItem({ note, onOpen }: { note: 
         style={{ width: 13, height: 13, marginTop: 2, borderRadius: 3, border: `1.5px solid ${done ? 'var(--accent)' : 'var(--fg-3)'}`, background: done ? 'var(--accent)' : 'transparent', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 9, cursor: 'pointer', flexShrink: 0 }}
       >{done ? '✓' : ''}</span>
       <div style={{ fontSize: 13, lineHeight: 1.5, color: done ? 'var(--fg-3)' : 'var(--fg)', textDecoration: done ? 'line-through' : 'none' }}>
-        {renderMemoBody(previewText(note.content ?? ''))}
+        <MarkdownView content={note.content ?? ''} />
       </div>
     </div>
   );
@@ -93,7 +93,7 @@ export const DailyReview = observer(function DailyReview({ onOpen }: { onOpen?: 
               <div className="h-stack" style={{ ...mono, marginBottom: 8 }}>
                 <span style={{ flex: 1 }}>BK-{it.id} · {it.createdAt ? dayjs(it.createdAt).format('MMM D, YYYY').toUpperCase() : ''}</span>
               </div>
-              <div style={{ fontSize: i === 0 ? 16 : 14, lineHeight: 1.6, color: 'var(--fg)' }}>{renderMemoBody(previewText(it.content ?? ''))}</div>
+              <div style={{ fontSize: i === 0 ? 16 : 14, lineHeight: 1.6, color: 'var(--fg)' }}><MarkdownView content={it.content ?? ''} /></div>
             </div>
           ))}
         </div>

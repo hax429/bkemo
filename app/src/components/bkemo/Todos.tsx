@@ -6,7 +6,7 @@ import { BlinkoStore } from '@/store/blinkoStore';
 import { api } from '@/lib/trpc';
 import { NoteType, type Note } from '@shared/lib/types';
 import { isTask, isDone, bucketQuadrants, laneToDueRange, type TaskLane } from '@/lib/taskFilters';
-import { renderMemoBody, previewText } from './renderMemoBody';
+import { MarkdownView } from './MarkdownView';
 import { ContextMenu, type MenuItem } from './ContextMenu';
 import { CommentsSection, CardFeedback } from './CommentsSection';
 import { getBkemoConfig } from '@/lib/bkemoConfig';
@@ -20,8 +20,8 @@ const card: React.CSSProperties = { background: 'var(--bg-2)', border: '1px soli
 function PriorityDots({ important, urgent }: { important?: boolean; urgent?: boolean }) {
   return (
     <span style={{ display: 'inline-flex', gap: 2 }}>
-      <span title="Important" style={{ width: 6, height: 6, borderRadius: 50, background: important ? 'var(--accent)' : 'transparent', border: important ? 'none' : '1px solid var(--fg-3)', boxSizing: 'border-box' }} />
-      <span title="Urgent" style={{ width: 6, height: 6, borderRadius: 50, background: urgent ? '#E8A35C' : 'transparent', border: urgent ? 'none' : '1px solid var(--fg-3)', boxSizing: 'border-box' }} />
+      <span title="Important" style={{ width: 6, height: 6, borderRadius: 50, background: important ? 'var(--important)' : 'transparent', border: important ? 'none' : '1px solid var(--fg-3)', boxSizing: 'border-box' }} />
+      <span title="Urgent" style={{ width: 6, height: 6, borderRadius: 50, background: urgent ? 'var(--urgent)' : 'transparent', border: urgent ? 'none' : '1px solid var(--fg-3)', boxSizing: 'border-box' }} />
     </span>
   );
 }
@@ -29,7 +29,7 @@ function PriorityDots({ important, urgent }: { important?: boolean; urgent?: boo
 const Check = observer(function Check({ note, size = 14 }: { note: Note; size?: number }) {
   const blinko = RootStore.Get(BlinkoStore);
   const done = isDone(note);
-  const border = done || (note.isImportant && note.isUrgent) ? 'var(--accent)' : 'var(--fg-3)';
+  const border = done ? 'var(--accent)' : (note.isImportant && note.isUrgent) ? 'var(--urgent)' : 'var(--fg-3)';
   return (
     <span
       onClick={(e) => { e.stopPropagation(); blinko.toggleTaskDone.call({ id: note.id!, done: !done }); }}
@@ -50,9 +50,17 @@ function dueLabel(n: Note): string {
   return d.format('MMM D');
 }
 
+function plainTitle(content?: string | null): string {
+  return (content || 'Untitled task').replace(/^#+\s*/, '').replace(/\n+/g, ' ').trim();
+}
+
 const TaskRow = observer(function TaskRow({ note, onOpen, onContext }: { note: Note; onOpen?: (n: Note) => void; onContext?: (e: React.MouseEvent, n: Note) => void }) {
   const done = isDone(note);
   const { hideComments } = getBkemoConfig();
+  const subtasks = (((note as any).subtasks ?? []) as Note[]).filter(isTask);
+  const doneSubtasks = subtasks.filter(isDone).length;
+  const parent = (note as any).parentNote as { id?: number; content?: string } | null | undefined;
+
   return (
     <div
       onContextMenu={(e) => { if (onContext) { e.preventDefault(); onContext(e, note); } }}
@@ -64,14 +72,20 @@ const TaskRow = observer(function TaskRow({ note, onOpen, onContext }: { note: N
         <span style={{ paddingTop: 2 }}><Check note={note} /></span>
         <span style={{ paddingTop: 4 }}><PriorityDots important={note.isImportant} urgent={note.isUrgent} /></span>
         <div style={{ fontSize: 13.5, lineHeight: 'var(--row-line)', color: done ? 'var(--fg-3)' : 'var(--fg)', textDecoration: done ? 'line-through' : 'none' }}>
+          {parent?.id && (
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--fg-3)', textDecoration: 'none', marginBottom: 2 }}>
+              under BK-{parent.id} · {plainTitle(parent.content).slice(0, 64)}
+            </div>
+          )}
           {note.isTop && <span title="Pinned" style={{ color: 'var(--accent)', marginRight: 6 }}>⊕</span>}
-          {renderMemoBody(previewText(note.content ?? ''))}
+          <MarkdownView content={note.content ?? ''} />
         </div>
         <span style={{ ...monoCap, fontSize: 11, color: dueLabel(note) === 'today' ? 'var(--accent)' : 'var(--fg-3)', paddingTop: 3, textAlign: 'right' }}>{dueLabel(note)}</span>
       </div>
       {/* footer: more actions */}
       <div className="h-stack" style={{ gap: 14, marginTop: 6, marginLeft: 26, color: 'var(--fg-3)', fontSize: 12 }}>
         <span className="spacer" />
+        {subtasks.length > 0 && <span style={{ fontFamily: 'var(--font-mono)' }}>{doneSubtasks}/{subtasks.length} subtasks</span>}
         {onContext && <span onClick={(e) => onContext(e, note)} style={{ cursor: 'pointer' }} title="More">···</span>}
       </div>
       {!hideComments && <div style={{ marginLeft: 26 }}><CardFeedback note={note} /></div>}
@@ -116,7 +130,7 @@ function MatrixView({ open, onOpen, onContext }: { open: Note[]; onOpen?: (n: No
         <div style={{ ...mono, fontSize: 11, letterSpacing: '.14em', textAlign: 'center' }}>URGENT</div>
         <div style={{ ...mono, fontSize: 11, letterSpacing: '.14em', textAlign: 'center' }}>NOT URGENT</div>
         <div style={{ ...mono, fontSize: 11, letterSpacing: '.14em', writingMode: 'vertical-rl', transform: 'rotate(180deg)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>IMPORTANT</div>
-        <Quadrant icon="▣" label="Do now" sub="Crises · deadlines" tone="var(--accent)" tasks={q.do} empty="Nothing on fire." onOpen={onOpen} onContext={onContext} />
+        <Quadrant icon="▣" label="Do now" sub="Crises · deadlines" tone="var(--urgent)" tasks={q.do} empty="Nothing on fire." onOpen={onOpen} onContext={onContext} />
         <Quadrant icon="◫" label="Schedule" sub="Strategy · prevention" tone="#5BD0C8" tasks={q.schedule} empty="Plan something." onOpen={onOpen} onContext={onContext} />
         <div style={{ ...mono, fontSize: 11, letterSpacing: '.14em', writingMode: 'vertical-rl', transform: 'rotate(180deg)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>NOT IMPORTANT</div>
         <Quadrant icon="◰" label="Delegate" sub="Interruptions · errands" tone="#E8A35C" tasks={q.delegate} empty="No errands waiting." onOpen={onOpen} onContext={onContext} />
@@ -143,6 +157,7 @@ export const Todos = observer(function Todos({ view, onView, onOpen }: { view: T
     { label: n.isImportant ? 'Not important' : 'Important', icon: '!', onClick: () => blinko.setTaskPriority.call({ id: n.id!, isImportant: !n.isImportant }) },
     { label: n.isUrgent ? 'Not urgent' : 'Urgent', icon: '^', onClick: () => blinko.setTaskPriority.call({ id: n.id!, isUrgent: !n.isUrgent }) },
     { label: n.dueDate ? 'Clear due date' : 'Due today', icon: '●', onClick: () => blinko.setTaskDue.call({ id: n.id!, dueDate: n.dueDate ? null : dayjs().endOf('day').toDate() }) },
+    { label: 'Open subtasks', icon: '↳', onClick: () => onOpen?.(n) },
     { label: n.isTop ? 'Unpin' : 'Pin', icon: '⊕', onClick: () => blinko.upsertNote.call({ id: n.id, isTop: !n.isTop, showToast: false }) },
     { label: 'Make memo', icon: '✦', onClick: () => blinko.upsertNote.call({ id: n.id, type: NoteType.BLINKO, showToast: false }) },
     { label: 'Copy text', icon: '⧉', onClick: () => navigator.clipboard?.writeText(n.content ?? '') },

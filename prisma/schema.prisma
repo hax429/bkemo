@@ -89,12 +89,15 @@ model notes {
   shareViewCount    Int?            @default(0)
   metadata          Json?           @db.Json
   accountId         Int?
+  parentNoteId      Int?
   sortOrder         Int             @default(0)
   createdAt         DateTime        @default(now()) @db.Timestamptz(6)
   updatedAt         DateTime        @updatedAt @db.Timestamptz(6)
   attachments       attachments[]
   tags              tagsToNote[]
   account           accounts?       @relation(fields: [accountId], references: [id])
+  parentNote        notes?          @relation("Subtasks", fields: [parentNoteId], references: [id], onDelete: Cascade)
+  subtasks          notes[]         @relation("Subtasks")
   referencedBy      noteReference[] @relation("ReferencedNote")
   references        noteReference[] @relation("ReferencingNote")
   comments          comments[]      @relation("NoteComments")
@@ -104,6 +107,7 @@ model notes {
 
   @@index([accountId, dueDate])
   @@index([accountId, type])
+  @@index([parentNoteId])
 }
 
 model reaction {

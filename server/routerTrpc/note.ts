@@ -52,6 +52,7 @@ export const noteRouter = router({
         isUrgent: z.union([z.boolean(), z.null()]).default(null).optional(),
         isCompleted: z.union([z.boolean(), z.null()]).default(null).optional(),
         quadrant: z.enum(['do', 'schedule', 'delegate', 'eliminate']).nullish(),
+        parentNoteId: z.union([z.number(), z.null()]).optional(),
       }),
     )
     .output(
@@ -94,6 +95,14 @@ export const noteRouter = router({
                 }),
               )
               .optional(),
+            parentNote: z
+              .object({
+                id: z.number(),
+                content: z.string(),
+              })
+              .nullable()
+              .optional(),
+            subtasks: z.array(z.any()).optional(),
             comments: z.any().optional(),
             reactions: z.array(z.any()).optional(),
             _count: z.object({
@@ -115,7 +124,7 @@ export const noteRouter = router({
       ),
     )
     .mutation(async function ({ input, ctx }) {
-      const { tagId, type, isArchived, isRecycle, searchText, page, size, orderBy, withFile, withoutTag, withLink, isUseAiQuery, startDate, endDate, isShare, hasTodo, dueStart, dueEnd, hasDueDate, isImportant, isUrgent, isCompleted, quadrant } = input;
+      const { tagId, type, isArchived, isRecycle, searchText, page, size, orderBy, withFile, withoutTag, withLink, isUseAiQuery, startDate, endDate, isShare, hasTodo, dueStart, dueEnd, hasDueDate, isImportant, isUrgent, isCompleted, quadrant, parentNoteId } = input;
       if (isUseAiQuery && searchText?.trim() != '') {
         const cleanedQuery = searchText?.replace(/@/g, '').trim();
         if (cleanedQuery && cleanedQuery.length > 0) {
@@ -180,6 +189,9 @@ export const noteRouter = router({
       if (tagId) {
         const tags = await prisma.tagsToNote.findMany({ where: { tagId } });
         where.id = { in: tags?.map((i) => i.noteId) };
+      }
+      if (parentNoteId !== undefined) {
+        where.parentNoteId = parentNoteId;
       }
       if (withFile) {
         where.attachments = { some: {} };
@@ -270,6 +282,37 @@ export const noteRouter = router({
                   content: true,
                   createdAt: true,
                   updatedAt: true,
+                },
+              },
+            },
+          },
+          parentNote: {
+            select: {
+              id: true,
+              content: true,
+            },
+          },
+          subtasks: {
+            where: {
+              isRecycle: false,
+            },
+            orderBy: [{ completedAt: 'asc' }, { dueDate: 'asc' }, { updatedAt: 'desc' }],
+            include: {
+              tags: { include: { tag: true } },
+              attachments: {
+                orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
+              },
+              parentNote: {
+                select: {
+                  id: true,
+                  content: true,
+                },
+              },
+              _count: {
+                select: {
+                  comments: true,
+                  histories: true,
+                  reactions: true,
                 },
               },
             },
@@ -930,6 +973,7 @@ export const noteRouter = router({
         isImportant: z.union([z.boolean(), z.null()]).default(null),
         isUrgent: z.union([z.boolean(), z.null()]).default(null),
         completedAt: z.union([z.date(), z.string(), z.null()]).optional(),
+        parentNoteId: z.union([z.number(), z.null()]).optional(),
       }),
     )
     .output(z.any())
@@ -1013,6 +1057,7 @@ export const noteRouter = router({
         ...(isUrgent !== null && { isUrgent }),
         ...(input.dueDate !== undefined && { dueDate: toDate(input.dueDate) }),
         ...(input.completedAt !== undefined && { completedAt: toDate(input.completedAt) }),
+        ...(input.parentNoteId !== undefined && { parentNote: input.parentNoteId === null ? { disconnect: true } : { connect: { id: input.parentNoteId } } }),
         ...(input.createdAt && { createdAt: input.createdAt }),
         ...(input.updatedAt && { updatedAt: input.updatedAt }),
       };
@@ -1202,6 +1247,7 @@ export const noteRouter = router({
               ...(isUrgent !== null && { isUrgent }),
               ...(input.dueDate !== undefined && input.dueDate !== null && { dueDate: toDate(input.dueDate) }),
               ...(input.completedAt !== undefined && input.completedAt !== null && { completedAt: toDate(input.completedAt) }),
+              ...(input.parentNoteId !== undefined && input.parentNoteId !== null && { parentNote: { connect: { id: input.parentNoteId } } }),
               ...(input.createdAt && { createdAt: input.createdAt }),
               ...(input.updatedAt && { updatedAt: input.updatedAt }),
               ...(input.metadata && { metadata: input.metadata }),

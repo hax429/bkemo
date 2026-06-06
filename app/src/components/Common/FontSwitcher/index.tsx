@@ -1,15 +1,7 @@
 import { useState, useEffect } from 'react';
-import {
-  Dropdown,
-  DropdownTrigger,
-  DropdownMenu,
-  DropdownItem,
-  DropdownSection
-} from "@heroui/dropdown";
-import { Button, Spinner } from '@heroui/react';
-import { Icon } from '@/components/Common/Iconify/icons';
 import { api } from '@/lib/trpc';
 import { FontManager, FontMetadata } from '@/lib/fontManager';
+import { BkemoSelect } from '../BkemoSelect';
 
 interface FontSwitcherProps {
   fontname?: string;
@@ -19,7 +11,6 @@ interface FontSwitcherProps {
 const FontSwitcher = ({ fontname = 'default', onChange }: FontSwitcherProps) => {
   const [fonts, setFonts] = useState<FontMetadata[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadingFont, setLoadingFont] = useState<string | null>(null);
 
   // Fetch font metadata from database on mount (no binary data - fast!)
   useEffect(() => {
@@ -28,14 +19,11 @@ const FontSwitcher = ({ fontname = 'default', onChange }: FontSwitcherProps) => 
         if (!api.fonts) {
           throw new Error('Font API not available');
         }
-        // This only fetches metadata, not binary data
         const fontList = await api.fonts.list.query();
         setFonts(fontList);
-        // Initialize the FontManager with metadata only
         FontManager.initializeRegistry(fontList);
       } catch (error) {
         console.error('Failed to fetch fonts:', error);
-        // Fallback to default font if API fails
         setFonts([
           { id: 0, name: 'default', displayName: 'Default (System)', url: null, isLocal: false, weights: [400], category: 'sans-serif', isSystem: true, sortOrder: 0 }
         ]);
@@ -50,7 +38,6 @@ const FontSwitcher = ({ fontname = 'default', onChange }: FontSwitcherProps) => 
   // Load the current font on mount if not default
   useEffect(() => {
     if (fontname && fontname !== 'default' && fonts.length > 0) {
-      // Apply font immediately (will load in background)
       FontManager.applyFont(fontname).catch((error) => {
         console.warn('Failed to apply font on mount:', error);
       });
@@ -59,68 +46,45 @@ const FontSwitcher = ({ fontname = 'default', onChange }: FontSwitcherProps) => 
 
   const handleFontSelect = async (selectedFont: string) => {
     if (selectedFont === fontname) return;
-
-    setLoadingFont(selectedFont);
-
     try {
-      // Load and apply the font
       await FontManager.applyFont(selectedFont);
       onChange?.(selectedFont);
     } catch (error) {
       console.error('Failed to apply font:', error);
-    } finally {
-      setLoadingFont(null);
     }
   };
 
-
-
-  const currentFont = fonts.find(f => f.name === fontname);
-
   if (loading) {
     return (
-      <Button variant="flat" isLoading>
+      <div style={{
+        background: 'var(--bg-2)',
+        color: 'var(--fg)',
+        border: '1px solid var(--border-2)',
+        borderRadius: 'var(--radius)',
+        padding: '6px 12px',
+        fontSize: 12,
+        fontFamily: 'inherit',
+        minWidth: 140
+      }}>
         Loading...
-      </Button>
+      </div>
     );
   }
 
-  return (
-    <Dropdown>
-      <DropdownTrigger>
-        <Button variant="flat">
-          {currentFont?.displayName || fontname || 'Select Font'}
-        </Button>
-      </DropdownTrigger>
+  const selectOptions = fonts.map(font => ({
+    v: font.name,
+    label: font.displayName,
+    style: {
+      fontFamily: font.isSystem ? undefined : `"${font.name}"`
+    }
+  }));
 
-      <DropdownMenu
-        className="p-2 max-h-[400px] overflow-y-auto"
-        aria-label="Font selection"
-      >
-        {fonts.map((font) => (
-          <DropdownItem
-            key={font.name}
-            className="flex items-center justify-between cursor-pointer"
-            onClick={() => handleFontSelect(font.name)}
-            endContent={
-              loadingFont === font.name ? (
-                <Spinner size="sm" />
-              ) : fontname === font.name ? (
-                <Icon icon="mingcute:check-fill" width="18" height="18" />
-              ) : null
-            }
-          >
-            <span
-              style={{
-                fontFamily: font.isSystem ? undefined : `"${font.name}", ${font.category}`
-              }}
-            >
-              {font.displayName}
-            </span>
-          </DropdownItem>
-        ))}
-      </DropdownMenu>
-    </Dropdown>
+  return (
+    <BkemoSelect
+      value={fontname}
+      options={selectOptions}
+      onChange={handleFontSelect}
+    />
   );
 };
 

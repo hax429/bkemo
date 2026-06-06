@@ -419,14 +419,16 @@ export const BlinkoShareDialog = observer(({ defaultSettings }: ShareDialogProps
                       <Avatar
                         key={user.id}
                         src={user.image ?? undefined}
-                        name={user.nickname || user.name}
+                        name={user.nickname}
                       />
                       <div className="ml-3">
-                        <p className="text-sm font-bold">{user.nickname.toUpperCase() || user.name.toUpperCase()}</p>
+                        <p className="text-sm font-bold">{user.nickname.toUpperCase()}</p>
                       </div>
-                      <Chip variant="bordered" color="warning" className="ml-auto">
-                        {user.role}
-                      </Chip>
+                      {user.description && (
+                        <Chip variant="bordered" color="warning" className="ml-auto">
+                          {user.description}
+                        </Chip>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -444,7 +446,7 @@ export const BlinkoShareDialog = observer(({ defaultSettings }: ShareDialogProps
                     <Avatar
                       key={user.id}
                       src={user.image ?? undefined}
-                      name={user.nickname || user.name}
+                      name={user.nickname}
                     />
                   ))
                 }

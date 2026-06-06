@@ -15,7 +15,7 @@ interface AITaskPayload {
 export class AIScheduledTaskJob {
   private static isWorkerRegistered = false;
   // Store worker references for each scheduled task to allow proper cleanup
-  private static taskWorkers: Map<number, Promise<void>> = new Map();
+  private static taskWorkers: Map<number, Promise<string>> = new Map();
 
   /**
    * Initialize the AI scheduled task worker

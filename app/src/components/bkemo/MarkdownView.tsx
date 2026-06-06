@@ -2,6 +2,8 @@ import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { renderMemoBody } from './renderMemoBody';
+import { NOTE_LINK_HREF_RE } from '@/lib/noteLinks';
+import { eventBus } from '@/lib/event';
 import '../TiptapEditor/tiptap.css';
 
 /** Highlight #tags inside text children while leaving inline markdown elements intact. */
@@ -28,7 +30,22 @@ export function MarkdownView({ content }: { content: string }) {
           h1: ({ children }) => <h1>{hl(children)}</h1>,
           h2: ({ children }) => <h2>{hl(children)}</h2>,
           h3: ({ children }) => <h3>{hl(children)}</h3>,
-          a: ({ href, children }) => <a href={href} target="_blank" rel="noreferrer">{children}</a>,
+          a: ({ href, children }) => {
+            const m = typeof href === 'string' ? href.match(NOTE_LINK_HREF_RE) : null;
+            if (m) {
+              const id = Number(m[1]);
+              // Internal memo link: open the target memo instead of navigating.
+              return (
+                <a
+                  className="bk-note-link"
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); eventBus.emit('bkemo:open-note', { id }); }}
+                >
+                  {children}
+                </a>
+              );
+            }
+            return <a href={href} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>{children}</a>;
+          },
         }}
       >
         {content}

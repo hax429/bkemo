@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { loadPrefs } from '@/lib/bkemoSettings';
 
 export type MenuItem =
   | { type?: 'item'; label: string; icon?: string; danger?: boolean; onClick: () => void }
@@ -37,16 +38,21 @@ export function ContextMenu({ x, y, items, onClose }: { x: number; y: number; it
     };
   }, [onClose]);
 
+  const prefs = loadPrefs();
+  const preset = prefs.theme === 'light' ? 'light' : (prefs.accent?.toLowerCase() === '#5e6ad2' ? 'developer' : (prefs.accent?.toLowerCase() === '#e2a96b' ? 'coffee' : 'dusk'));
+
   return createPortal(
     <div
       ref={ref}
       className="bkemo"
-      data-theme="dark"
+      data-theme={prefs.theme}
+      data-preset={preset}
       onMouseDown={(e) => e.stopPropagation()}
       style={{
         position: 'fixed', left: pos.x, top: pos.y, zIndex: 9999, minWidth: 180, padding: 4,
         background: 'var(--bg)', border: '1px solid var(--border-2)', borderRadius: 'var(--radius-lg)',
         boxShadow: '0 12px 32px rgba(0,0,0,0.5)',
+        ...(prefs.accent ? { ['--accent' as any]: prefs.accent } : {})
       }}
     >
       {items.map((it, i) =>
