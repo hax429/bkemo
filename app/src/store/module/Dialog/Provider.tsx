@@ -87,7 +87,7 @@ const Dialog = observer(() => {
         transition: { type: 'spring', bounce: 0.5, duration: 0.3 },
       },
     }
-  };
+  } as const;
 
   const containerClass = isPc
     ? "fixed inset-0 z-[2001] flex justify-center items-center pointer-events-none max-w-screen-2xl mx-auto left-0 right-0"

@@ -14,19 +14,13 @@ export async function getPgBoss(): Promise<PgBoss> {
       throw new Error('DATABASE_URL environment variable is not set');
     }
 
+    // pg-boss v12 moved retry/retention options (retryLimit, retryDelay,
+    // retryBackoff, deleteAfterSeconds, …) out of the constructor — they are now
+    // per-queue/per-send QueueOptions. Only database + scheduling/maintenance
+    // options belong here.
     boss = new PgBoss({
       connectionString,
       schema: 'pgboss',
-      // Retry configuration
-      retryLimit: 3,
-      retryDelay: 60, // seconds
-      retryBackoff: true,
-      // Archive completed jobs after 1 day
-      archiveCompletedAfterSeconds: 60 * 60 * 24,
-      // Delete archived jobs after 7 days
-      deleteAfterSeconds: 60 * 60 * 24 * 7,
-      // Monitor state every 30 seconds
-      monitorStateIntervalSeconds: 30,
     });
 
     boss.on('error', (error) => {

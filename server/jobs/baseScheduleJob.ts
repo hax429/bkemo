@@ -144,7 +144,8 @@ export abstract class BaseScheduleJob {
   static async getSchedule(): Promise<{ name: string; cron: string; data: any } | null> {
     const boss = await getPgBoss();
     const schedules = await boss.getSchedules();
-    return schedules.find(s => s.name === this.taskName) || null;
+    const found = schedules.find(s => s.name === this.taskName);
+    return found ? { name: found.name, cron: found.cron, data: found.data } : null;
   }
 
   /**

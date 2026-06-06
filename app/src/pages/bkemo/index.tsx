@@ -4,6 +4,7 @@ import { useMediaQuery } from 'usehooks-ts';
 import { RootStore } from '@/store';
 import { BlinkoStore } from '@/store/blinkoStore';
 import { eventBus } from '@/lib/event';
+import { api } from '@/lib/trpc';
 import type { Note } from '@shared/lib/types';
 import { loadPrefs, savePrefs, hydratePrefs, type BkemoPrefs } from '@/lib/bkemoSettings';
 import { getBkemoConfig } from '@/lib/bkemoConfig';
@@ -90,7 +91,21 @@ const BkemoPage = observer(function BkemoPage() {
       setEditing({ content: opts.text ?? '', type: 2 } as Note);
     };
     eventBus.on('bkemo:quick-capture', onQuickCapture);
-    return () => { eventBus.off('bkemo:quick-capture', onQuickCapture); };
+    // Clicking an internal [[memo]] link opens that memo in the editor.
+    const onOpenNote = async (opts: { id?: number } = {}) => {
+      if (!opts.id) return;
+      try {
+        const note = await api.notes.detail.mutate({ id: opts.id });
+        if (note) setEditing(note as Note);
+      } catch (e) {
+        console.error('[bkemo] open linked note failed:', e);
+      }
+    };
+    eventBus.on('bkemo:open-note', onOpenNote);
+    return () => {
+      eventBus.off('bkemo:quick-capture', onQuickCapture);
+      eventBus.off('bkemo:open-note', onOpenNote);
+    };
   }, []);
 
   // Apply the custom font-style (registers the @font-face + sets --font-family,
@@ -126,7 +141,7 @@ const BkemoPage = observer(function BkemoPage() {
   };
 
   return (
-    <BkemoLayout density={prefs.density} accent={prefs.accent} theme={prefs.theme}>
+    <BkemoLayout density={prefs.density} accent={prefs.accent} theme={prefs.theme} bgGradient={prefs.bgGradient}>
       {isMobile ? (
         <div className="v-stack" style={{ height: '100%', width: '100%' }}>
           <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>{render()}</div>

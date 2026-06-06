@@ -7,18 +7,19 @@ A personal, self-hosted note app — derived from [blinkospace/blinko](https://g
 ## What's different from upstream Blinko
 
 - **No Docker.** The server runs from source on a Linux VM under `systemd`. See [`DEPLOYMENT.md`](./DEPLOYMENT.md).
+- **Every memo is a todo ("Direction D").** The web UI was rebuilt around a unified note/task model and a TipTap editor. Inline task syntax in any composer: a `-[]` checkbox promotes a memo to a task, and a `due:` token (`due:today`, `due:tmr`, `due:06/25/2026`, `due:06/25/26`) sets the due date.
 - **iOS / macOS first.** The Tauri shell is the primary client. The web UI still works; the iOS app gets dedicated offline handling, keyboard-aware editor sizing, an OTA bundle updater, and visualViewport-based layout. See [`IOS.md`](./IOS.md).
 - **Single-tenant.** No multi-user provisioning, no PikaPods, no public install.sh.
 - **Renamed.** Bundle id is `me.hax429.bk`, Xcode target is `bkemo-ios`, Cargo crate is `bkemo`.
 
-Everything else — tRPC API, Prisma schema, the React + Vditor frontend, the AI provider abstractions, the tag/note model — is upstream Blinko. Credit and the GPLv3 obligations live with them.
+Everything else — tRPC API, the Prisma schema, much of the React frontend, the AI provider abstractions, the tag/note model — descends from upstream Blinko. Credit and the GPLv3 obligations live with them. (The note composer has since been rewritten on TipTap, replacing upstream's Vditor.)
 
 ## Stack
 
 | Layer    | Tech                                             |
 | -------- | ------------------------------------------------ |
 | Frontend | React 18, TypeScript, Vite, TailwindCSS, MobX    |
-| Editor   | Vditor                                           |
+| Editor   | TipTap (markdown round-trip)                     |
 | API      | tRPC (typed) + Express                           |
 | DB       | PostgreSQL via Prisma                            |
 | Mobile   | Tauri v2 (WKWebView on iOS, custom Swift plugin) |
@@ -62,6 +63,6 @@ bun run dev:frontend    # vite dev server
 
 bkemo is a derivative work of [**blinkospace/blinko**](https://github.com/blinkospace/blinko) by the Blinko authors. The upstream project is licensed under **GNU General Public License v3.0**, and this repository inherits the same license — see [`LICENSE`](./LICENSE).
 
-All design, the original note model, the tRPC architecture, the editor integration, the AI feature surface, and most of the React frontend are upstream work. If you're looking to use a polished version of this software, **use the upstream project**, not this fork.
+The original note model, the tRPC architecture, the AI feature surface, and large parts of the React frontend are upstream work. If you're looking to use a polished version of this software, **use the upstream project**, not this fork.
 
 If you build on bkemo's iOS-specific changes, the GPLv3 obligations carry forward: source must remain available, derivative works must be GPL-compatible, and modifications must be marked. See the [Blinko upstream README](https://github.com/blinkospace/blinko/blob/main/README.md) for the canonical project description and community resources.

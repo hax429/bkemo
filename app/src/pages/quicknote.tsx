@@ -3,10 +3,13 @@ import { TiptapEditor, type TiptapEditorHandle } from "@/components/TiptapEditor
 import { RootStore } from "@/store";
 import { BlinkoStore } from "@/store/blinkoStore";
 import { NoteType } from "@shared/lib/types";
+import { parseTaskSyntax } from "@/lib/taskSyntax";
+import { extractNoteLinkIds, noteLinkTitle } from "@/lib/noteLinks";
 import { useEffect, useRef, useState } from "react";
 import { isInTauri } from "@/lib/tauriHelper";
 import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
+import { loadPrefs } from "@/lib/bkemoSettings";
 
 const QuickNotePage = observer(() => {
   const blinko = RootStore.Get(BlinkoStore);
@@ -146,11 +149,20 @@ const QuickNotePage = observer(() => {
   };
 
   const send = async () => {
-    const md = editorRef.current?.getMarkdown()?.trim() ?? '';
-    if (!md || sending) return;
+    const raw = editorRef.current?.getMarkdown()?.trim() ?? '';
+    if (!raw || sending) return;
+    // Inline task syntax: `-[]` promotes to a task, `due:…` sets the due date.
+    const parsed = parseTaskSyntax(raw);
+    if (!parsed.content && !parsed.isTodo) return;
     setSending(true);
     try {
-      await blinko.upsertNote.call({ content: md, type: NoteType.BLINKO, showToast: false });
+      await blinko.upsertNote.call({
+        content: parsed.content,
+        type: parsed.isTodo ? NoteType.TODO : NoteType.BLINKO,
+        references: extractNoteLinkIds(parsed.content),
+        ...(parsed.isTodo ? { dueDate: parsed.dueDate ?? null } : {}),
+        showToast: false,
+      });
       editorRef.current?.clear();
       await closeWindow();
     } catch (error) {
@@ -160,6 +172,9 @@ const QuickNotePage = observer(() => {
     }
   };
 
+  const prefs = loadPrefs();
+  const preset = prefs.theme === 'light' ? 'light' : (prefs.accent?.toLowerCase() === '#5e6ad2' ? 'developer' : (prefs.accent?.toLowerCase() === '#e2a96b' ? 'coffee' : 'dusk'));
+
   return (
     // Plain .bkemo token scope (no fixed positioning) so the window can size to
     // content via the MutationObserver above.
@@ -168,9 +183,13 @@ const QuickNotePage = observer(() => {
       data-tauri-drag-region
       id="quicknote-editor"
       className="bkemo"
-      data-theme="dark"
-      data-density="regular"
-      style={{ width: '100%', minHeight: '100%', background: 'color-mix(in srgb, var(--bg) 88%, transparent)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', padding: 14, boxSizing: 'border-box' }}
+      data-theme={prefs.theme}
+      data-density={prefs.density}
+      data-preset={preset}
+      style={{
+        width: '100%', minHeight: '100%', background: 'color-mix(in srgb, var(--bg) 88%, transparent)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', padding: 14, boxSizing: 'border-box',
+        ...(prefs.accent ? { ['--accent' as any]: prefs.accent } : {})
+      }}
     >
       <TiptapEditor
         ref={editorRef}
@@ -178,6 +197,10 @@ const QuickNotePage = observer(() => {
         autofocus
         onSubmit={send}
         getTags={() => blinko.tagList.value?.pathTags ?? []}
+        getNotes={async (q) => {
+          const list = await blinko.queryNotes({ searchText: q, type: -1, isRecycle: false, isArchived: false }, 1, 8);
+          return list.filter((n) => n.id != null).map((n) => ({ id: n.id!, title: noteLinkTitle(n.content) }));
+        }}
       />
       <div className="h-stack" style={{ gap: 8, marginTop: 10 }}>
         <span style={{ color: 'var(--fg-3)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>⌘↵ to save</span>

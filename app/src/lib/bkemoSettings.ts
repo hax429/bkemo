@@ -12,6 +12,7 @@ export type BkemoPrefs = {
   theme: BkemoTheme;
   accent: string;
   density: BkemoDensity;
+  bgGradient?: 'none' | 'dusk' | 'warm' | 'aurora';
 };
 
 export type BkemoPreset = {
@@ -22,83 +23,51 @@ export type BkemoPreset = {
   density: BkemoDensity;
   font: string;
   description: string;
+  bgGradient?: 'none' | 'dusk' | 'warm' | 'aurora';
 };
 
 const KEY = 'bkemoPrefs';
 
 export const ACCENT_SWATCHES = [
-  '#5E6AD2', // Default (Issue Blue)
+  '#e2a96b', // Honey / Warm Amber (Default Coffee Latte)
+  '#5E6AD2', // Default Developer (Issue Blue)
   '#D97757', // Warm Orange / Rust
   '#1F8A5B', // Emerald / Green
   '#E2497F', // Pink / Rose
   '#0F62FE', // Blue / Indigo
   '#A45EE0', // Purple / Lavender
   '#9C6644', // Coffee / Brown
-  '#D9A74A', // Amber / Gold
   '#0E7490', // Teal / Cyan
 ];
 
 export const PRESET_THEMES: BkemoPreset[] = [
   {
-    key: 'default',
-    name: 'Default Dark',
+    key: 'coffee',
+    name: 'Coffee Latte',
+    theme: 'dark',
+    accent: '#e2a96b',
+    density: 'regular',
+    font: 'Outfit',
+    bgGradient: 'warm',
+    description: 'Earthy espresso tones paired with warm honey accents and Outfit typography.',
+  },
+  {
+    key: 'developer',
+    name: 'Developer Dark',
     theme: 'dark',
     accent: '#5E6AD2',
     density: 'regular',
     font: 'default',
-    description: 'The standard space dark layout with sleek purple-blue accents.',
-  },
-  {
-    key: 'warm',
-    name: 'Warm Sunset',
-    theme: 'dark',
-    accent: '#D97757',
-    density: 'regular',
-    font: 'Poppins',
-    description: 'A cozy dark theme with warm rust accents and Poppins typography.',
-  },
-  {
-    key: 'efficient',
-    name: 'Efficient Dev',
-    theme: 'dark',
-    accent: '#0F62FE',
-    density: 'compact',
-    font: 'JetBrains Mono',
-    description: 'High-density compact layout with blue accents and developer font.',
-  },
-  {
-    key: 'coffee',
-    name: 'Coffee Latte',
-    theme: 'dark',
-    accent: '#9C6644',
-    density: 'regular',
-    font: 'Outfit',
-    description: 'Earthy brown tones paired with modern Outfit sans-serif typeface.',
-  },
-  {
-    key: 'nordic',
-    name: 'Nordic Light',
-    theme: 'light',
-    accent: '#0E7490',
-    density: 'regular',
-    font: 'Inter',
-    description: 'Crisp light interface with cool teal accents and clean Inter text.',
-  },
-  {
-    key: 'terminal',
-    name: 'Hacker Terminal',
-    theme: 'dark',
-    accent: '#1F8A5B',
-    density: 'compact',
-    font: 'Roboto Mono',
-    description: 'Retro green terminal mode with compact monospaced text.',
+    bgGradient: 'none',
+    description: 'Cold, clinical developer dark mode built for efficiency and focus.',
   },
 ];
 
 export const DEFAULT_PREFS: BkemoPrefs = {
   theme: 'dark',
-  accent: '#5E6AD2',
+  accent: '#e2a96b',
   density: 'regular',
+  bgGradient: 'dusk',
 };
 
 export function loadPrefs(): BkemoPrefs {

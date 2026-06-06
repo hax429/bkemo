@@ -83,6 +83,7 @@ export const notesSchema = z.object({
   shareMaxView: z.number().nullable().optional(),
   shareViewCount: z.number().nullable().optional(),
   metadata: z.any(),
+  parentNoteId: z.number().int().nullable().optional(),
   sortOrder: z.number().nullable().optional(),
   accountId: z.union([z.number().int(), z.null()]),
   createdAt: z.coerce.date(),
@@ -436,4 +437,3 @@ export const mcpServersSchema = z.object({
 })
 
 export type mcpServers = z.infer<typeof mcpServersSchema>
-

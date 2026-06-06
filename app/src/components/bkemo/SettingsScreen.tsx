@@ -9,6 +9,7 @@ import { api } from '@/lib/trpc';
 import { PromiseCall, PageSize } from '@/store/standard/PromiseState';
 import FontSwitcher from '@/components/Common/FontSwitcher';
 import LanguageSwitcher from '@/components/Common/LanguageSwitcher';
+import { BkemoSelect } from '@/components/Common/BkemoSelect';
 import { UsersScreen } from './UsersScreen';
 import { BasicSetting } from '@/components/BlinkoSettings/BasicSetting';
 import AiSetting from '@/components/BlinkoSettings/AiSetting/AiSetting';
@@ -79,7 +80,8 @@ const Appearance = observer(function Appearance({
       p.theme === prefs.theme &&
       p.accent.toLowerCase() === prefs.accent.toLowerCase() &&
       p.density === prefs.density &&
-      p.font === currentFont
+      p.font === currentFont &&
+      (p.bgGradient || 'none') === (prefs.bgGradient || 'none')
   );
 
   return (
@@ -99,7 +101,12 @@ const Appearance = observer(function Appearance({
               <div
                 key={preset.key}
                 onClick={() => {
-                  onChange({ theme: preset.theme, accent: preset.accent, density: preset.density });
+                  onChange({
+                    theme: preset.theme,
+                    accent: preset.accent,
+                    density: preset.density,
+                    bgGradient: preset.bgGradient || 'none',
+                  });
                   onFontChange(preset.font);
                 }}
                 style={{
@@ -137,7 +144,7 @@ const Appearance = observer(function Appearance({
                 <div style={{ fontSize: 11, color: 'var(--fg-2)', lineHeight: 1.4, flex: 1 }}>
                   {preset.description}
                 </div>
-                <div className="h-stack" style={{ gap: 8, marginTop: 4, fontSize: 10, color: 'var(--fg-3)', fontFamily: 'var(--font-mono)' }}>
+                <div className="h-stack" style={{ gap: 8, marginTop: 4, fontSize: 10, color: 'var(--fg-3)', fontFamily: 'var(--font-mono)', flexWrap: 'wrap' }}>
                   <div className="h-stack" style={{ gap: 4 }}>
                     <span style={{ width: 8, height: 8, borderRadius: '50%', background: preset.accent }} />
                     <span>{preset.accent}</span>
@@ -146,6 +153,12 @@ const Appearance = observer(function Appearance({
                   <span>{preset.font === 'default' ? 'System' : preset.font}</span>
                   <span>•</span>
                   <span style={{ textTransform: 'capitalize' }}>{preset.density}</span>
+                  {preset.bgGradient && preset.bgGradient !== 'none' && (
+                    <>
+                      <span>•</span>
+                      <span style={{ textTransform: 'capitalize' }}>{preset.bgGradient}</span>
+                    </>
+                  )}
                 </div>
               </div>
             );
@@ -156,6 +169,20 @@ const Appearance = observer(function Appearance({
       <Row title="Theme" sub="bkemo defaults to dark." control={
         <Segmented<BkemoTheme> options={[{ v: 'dark', label: 'Dark' }, { v: 'light', label: 'Light' }]} active={prefs.theme} onChange={(v) => onChange({ theme: v })} />
       } />
+      {prefs.theme === 'dark' && (
+        <Row title="Background style" sub="Choose a solid color or a soft radial gradient glow." control={
+          <Segmented<'none' | 'dusk' | 'warm' | 'aurora'>
+            options={[
+              { v: 'none', label: 'Solid' },
+              { v: 'dusk', label: 'Dusk' },
+              { v: 'warm', label: 'Warm' },
+              { v: 'aurora', label: 'Aurora' }
+            ]}
+            active={prefs.bgGradient || 'none'}
+            onChange={(v) => onChange({ bgGradient: v })}
+          />
+        } />
+      )}
       <Row title="Accent color" sub="Used for #tags, checkboxes, focus and charts." control={
         <div className="h-stack" style={{ gap: 8, flexWrap: 'wrap', maxWidth: 360, justifyContent: 'flex-end' }}>
           {ACCENT_SWATCHES.map((c) => (
@@ -209,6 +236,9 @@ const Appearance = observer(function Appearance({
       <Row title="Density" sub="How tightly the stream and lists pack." control={
         <Segmented<BkemoDensity> options={[{ v: 'compact', label: 'Compact' }, { v: 'regular', label: 'Regular' }, { v: 'comfy', label: 'Comfy' }]} active={prefs.density} onChange={(v) => onChange({ density: v })} />
       } />
+      <Row title="Default font" sub="Body font for the bkemo workspace." control={
+        <FontSwitcher fontname={currentFont} onChange={onFontChange} />
+      } />
     </div>
   );
 });
@@ -226,9 +256,7 @@ const fieldStyle: React.CSSProperties = { background: 'var(--bg-2)', color: 'var
 
 function NativeSelect({ value, options, onChange }: { value: string; options: { v: string; label: string }[]; onChange: (v: string) => void }) {
   return (
-    <select value={value} onChange={(e) => onChange(e.target.value)} style={fieldStyle}>
-      {options.map((o) => <option key={o.v} value={o.v} style={{ background: 'var(--bg-2)', color: 'var(--fg)' }}>{o.label}</option>)}
-    </select>
+    <BkemoSelect value={value} options={options} onChange={onChange} />
   );
 }
 
@@ -285,16 +313,10 @@ const Preferences = observer(function Preferences() {
       <div style={{ color: 'var(--fg-2)', fontSize: 13, marginTop: 4, marginBottom: 18 }}>How the stream, cards and navigation behave. Synced to your account.</div>
 
       <Row title="Language" sub="Interface language for settings and menus." control={
-        <div className="dark bk-legacy-settings">
-          <LanguageSwitcher value={c.language} onChange={(v: string) => setConfig('language', v)} />
-        </div>
+        <LanguageSwitcher value={c.language} onChange={(v: string) => setConfig('language', v)} />
       } />
 
-      <Row title="Default font" sub="Body font for the bkemo workspace." control={
-        <div className="dark bk-legacy-settings">
-          <FontSwitcher fontname={c.fontStyle} onChange={(v: string) => setConfig('fontStyle', v)} />
-        </div>
-      } />
+
 
       <Row title="Timestamp format" sub="How memo times read on each card." control={
         <NativeSelect value={c.timeFormat ?? 'YYYY-MM-DD HH:mm:ss'} options={TIME_FORMATS} onChange={(v) => setConfig('timeFormat', v)} />
@@ -472,12 +494,10 @@ export const SettingsScreen = observer(function SettingsScreen({ prefs, onChange
             );
           })}
         </div>
-        {/* body — bkemo-native Appearance/Preferences/Account render bare; reused Blinko sections are
-            wrapped in `dark bk-legacy-settings` so HeroUI maps to the bkemo palette. */}
+        {/* body — bkemo-native views rendered bare with native styles. */}
         <div className="bk-scroll" style={{ flex: 1, overflow: 'auto', padding: '24px 28px 48px' }}>
           <div
             key={active.key}
-            className={active.key === 'appear' || active.key === 'about' || active.key === 'account' || active.key === 'prefs' ? undefined : 'dark bk-legacy-settings'}
             style={{ maxWidth: 860 }}
           >
             {active.component}

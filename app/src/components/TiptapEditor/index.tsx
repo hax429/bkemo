@@ -9,6 +9,7 @@ import { useEffect, useImperativeHandle, forwardRef } from 'react';
 import { Hashtag } from './hashtagExtension';
 import { SlashCommand } from './slashCommand';
 import { TagSuggestion } from './tagSuggestion';
+import { NoteLinkSuggestion, type NoteLinkItem } from './noteLinkSuggestion';
 import './tiptap.css';
 
 /** tiptap-markdown stores its serializer on editor.storage.markdown. */
@@ -42,6 +43,10 @@ type Props = {
   onUploadImage?: (file: File) => Promise<string>;
   /** Existing tag paths (no leading #) for the "#" autocomplete. */
   getTags?: () => string[];
+  /** Search existing memos/todos for the "[[" link autocomplete. */
+  getNotes?: (query: string) => Promise<NoteLinkItem[]> | NoteLinkItem[];
+  onFocus?: () => void;
+  onBlur?: () => void;
 };
 
 /**
@@ -50,7 +55,7 @@ type Props = {
  * offline cache stay markdown strings — no storage model change.
  */
 export const TiptapEditor = forwardRef<TiptapEditorHandle, Props>(function TiptapEditor(
-  { value = '', placeholder = 'New memo…', editable = true, autofocus = false, className, onChange, onSubmit, onUploadImage, getTags },
+  { value = '', placeholder = 'New memo…', editable = true, autofocus = false, className, onChange, onSubmit, onUploadImage, getTags, getNotes, onFocus, onBlur },
   ref,
 ) {
   const editor = useEditor({
@@ -68,6 +73,7 @@ export const TiptapEditor = forwardRef<TiptapEditorHandle, Props>(function Tipta
       Hashtag,
       SlashCommand,
       TagSuggestion.configure({ getTags: () => getTags?.() ?? [] }),
+      NoteLinkSuggestion.configure({ getNotes: (q) => getNotes?.(q) ?? [] }),
       Markdown.configure({
         html: false,
         transformPastedText: true,
@@ -78,6 +84,12 @@ export const TiptapEditor = forwardRef<TiptapEditorHandle, Props>(function Tipta
     content: value,
     onUpdate: ({ editor }) => {
       onChange?.(getMd(editor));
+    },
+    onFocus: () => {
+      onFocus?.();
+    },
+    onBlur: () => {
+      onBlur?.();
     },
     editorProps: {
       attributes: { class: 'tiptap-content' },

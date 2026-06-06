@@ -3,10 +3,14 @@
 .tiptap-content {
   outline: none;
   color: var(--fg, #f7f8f8);
-  font-family: var(--font-body, "Inter", system-ui, sans-serif);
-  font-size: 14px;
+  font-family: var(--note-font, var(--font-body, "Inter", system-ui, sans-serif));
+  font-size: 15.5px;
   line-height: 1.65;
   word-break: break-word;
+}
+
+.tiptap-content.ProseMirror {
+  min-height: 90px; /* Cut down starting height to half, auto-growing as text is written */
 }
 
 .tiptap-content:focus { outline: none; }
@@ -36,6 +40,23 @@
   text-decoration: underline;
   text-underline-offset: 2px;
   cursor: pointer;
+}
+
+/* Internal memo links ([[memo]]) — rendered as an accent chip, not a raw URL. */
+.tiptap-content a[href^="/bkemo/n/"],
+.tiptap-content a.bk-note-link {
+  text-decoration: none;
+  background: var(--accent-soft, rgba(94, 106, 210, 0.16));
+  color: var(--accent, #5e6ad2);
+  padding: 0 5px;
+  border-radius: 4px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.tiptap-content a[href^="/bkemo/n/"]::before,
+.tiptap-content a.bk-note-link::before {
+  content: '↳ ';
+  opacity: 0.7;
 }
 
 /* Headings */

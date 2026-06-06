@@ -25,6 +25,7 @@ type CacheFilter = {
   isUrgent?: boolean | null;
   isCompleted?: boolean | null;
   quadrant?: Quadrant | null;
+  parentNoteId?: number | null;
   page: number;
   size: number;
 };
@@ -110,6 +111,9 @@ export async function queryNotesFromCache(filter: CacheFilter): Promise<Note[]> 
   if (filter.quadrant) {
     const q = QUADRANT_MAP[filter.quadrant];
     notes = notes.filter(n => !!n.isImportant === q.isImportant && !!n.isUrgent === q.isUrgent);
+  }
+  if (filter.parentNoteId !== undefined) {
+    notes = notes.filter(n => (n.parentNoteId ?? null) === filter.parentNoteId);
   }
   if (filter.hasDueDate != null) {
     notes = notes.filter(n => (n.dueDate != null) === !!filter.hasDueDate);

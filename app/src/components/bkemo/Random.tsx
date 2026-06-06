@@ -4,7 +4,7 @@ import dayjs from '@/lib/dayjs';
 import { RootStore } from '@/store';
 import { BlinkoStore } from '@/store/blinkoStore';
 import type { Note } from '@shared/lib/types';
-import { renderMemoBody } from './renderMemoBody';
+import { MarkdownView } from './MarkdownView';
 
 const mono: React.CSSProperties = { fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '.06em', color: 'var(--fg-3)', textTransform: 'uppercase' };
 const btn: React.CSSProperties = { background: 'var(--accent)', border: 'none', color: '#fff', padding: '5px 12px', borderRadius: 'var(--radius)', fontSize: 12, fontWeight: 500, cursor: 'pointer' };
@@ -57,7 +57,7 @@ export const Random = observer(function Random({ onOpen }: { onOpen?: (n: Note) 
                 <span>{current.createdAt ? dayjs(current.createdAt).fromNow().toUpperCase() : ''}</span>
               </div>
               <div style={{ fontSize: 22, lineHeight: 1.55, color: 'var(--fg)', marginTop: 16 }}>
-                {renderMemoBody(current.content ?? '')}
+                <MarkdownView content={current.content ?? ''} />
               </div>
             </div>
           )}

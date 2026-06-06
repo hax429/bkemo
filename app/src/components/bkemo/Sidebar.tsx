@@ -35,16 +35,17 @@ function NavRow({ icon, title, count, active, onClick }: { icon: string; title: 
       onClick={onClick}
       className="h-stack"
       style={{
-        gap: 8, padding: '5px 8px', borderRadius: 'var(--radius)',
+        gap: 10, padding: '8px 12px', borderRadius: 'var(--radius-lg, 12px)',
         background: active ? 'var(--hover)' : 'transparent',
         color: active ? 'var(--fg)' : 'var(--fg-2)',
-        fontSize: 13, cursor: 'pointer', userSelect: 'none',
+        fontSize: 13.5, cursor: 'pointer', userSelect: 'none',
         borderLeft: active ? '2px solid var(--accent)' : '2px solid transparent',
+        transition: 'all 0.12s ease-in-out',
       }}
       onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = 'var(--hover)'; }}
       onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = 'transparent'; }}
     >
-      <span style={{ width: 16, fontSize: 12, textAlign: 'center', color: active ? 'var(--accent)' : 'var(--fg-3)', flexShrink: 0 }}>{icon}</span>
+      <span style={{ width: 16, fontSize: 13, textAlign: 'center', color: active ? 'var(--accent)' : 'var(--fg-3)', flexShrink: 0 }}>{icon}</span>
       <span style={{ flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</span>
       {count != null && <span style={{ color: 'var(--fg-3)', fontSize: 11, fontFamily: 'var(--font-mono)' }}>{count}</span>}
     </div>
@@ -52,10 +53,47 @@ function NavRow({ icon, title, count, active, onClick }: { icon: string; title: 
 }
 
 const sectionLbl: React.CSSProperties = {
-  fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '.10em',
-  color: 'var(--fg-3)', textTransform: 'uppercase', fontWeight: 500,
-  padding: '10px 12px 6px',
+  fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '.06em',
+  color: 'var(--fg-3)', textTransform: 'lowercase', fontWeight: 500,
+  padding: '16px 12px 6px',
 };
+
+function TagNavNode({ node, depth, activeRoute, onNav }: { node: any; depth: number; activeRoute: BkemoRoute; onNav: (route: BkemoRoute) => void }) {
+  const path = node.metadata?.path || node.name;
+  const route = `tag:${path}`;
+  const active = activeRoute === route;
+  const hasChildren = !!node.children?.length;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+      <div
+        onClick={() => onNav(route)}
+        className="h-stack"
+        style={{
+          gap: 8,
+          padding: depth === 0 ? '8px 12px' : `6px 12px 6px ${24 + depth * 14}px`,
+          borderRadius: 'var(--radius-lg, 12px)',
+          fontSize: depth === 0 ? 13.5 : 12.5,
+          cursor: 'pointer',
+          transition: 'all 0.12s ease-in-out',
+          color: active ? 'var(--fg)' : 'var(--fg-2)',
+          background: active ? 'var(--hover)' : 'transparent'
+        }}
+        onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = 'var(--hover)'; }}
+        onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = 'transparent'; }}
+        title={`#${path}`}
+      >
+        <span style={{ width: 10, fontSize: 9, color: 'var(--fg-3)', flexShrink: 0 }}>{hasChildren ? '▾' : depth === 0 ? ' ' : '└'}</span>
+        <span style={{ color: 'var(--accent)', opacity: depth === 0 ? 1 : 0.72, fontFamily: 'var(--font-mono)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          #{node.name}
+        </span>
+      </div>
+      {node.children?.map((child: any) => (
+        <TagNavNode key={`${path}/${child.name}`} node={child} depth={depth + 1} activeRoute={activeRoute} onNav={onNav} />
+      ))}
+    </div>
+  );
+}
 
 export const Sidebar = observer(function Sidebar({ activeRoute, onNav, onNewMemo, onSearch }: {
   activeRoute: BkemoRoute;
@@ -67,6 +105,7 @@ export const Sidebar = observer(function Sidebar({ activeRoute, onNav, onNewMemo
   const base = RootStore.Get(BaseStore);
   const user = RootStore.Get(UserStore);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showMore, setShowMore] = useState(true);
 
   useEffect(() => {
     if (!blinko.tagList.value) blinko.tagList.call();
@@ -78,9 +117,14 @@ export const Sidebar = observer(function Sidebar({ activeRoute, onNav, onNewMemo
   const { closeDailyReview } = getBkemoConfig();
   const notesNav = closeDailyReview ? NOTES_NAV.filter((n) => n.id !== 'daily') : NOTES_NAV;
 
+  // Collapsible logic to make sidebar breathe
+  const notesToShow = showMore ? notesNav : notesNav.filter((n) => n.id === 'home');
+  const todosToShow = showMore ? TODOS_NAV : TODOS_NAV.filter((t) => t.id === 'inbox' || t.id === 'today');
+  const tagsToShow = showMore ? tree : tree.slice(0, 3);
+
   return (
-    <div style={{ width: 248, height: '100%', flexShrink: 0, position: 'relative', background: 'var(--bg-2)', borderRight: '1px solid var(--border)' }}>
-      <div className="v-stack bk-scroll" style={{ height: '100%', overflow: 'auto', padding: '10px 6px 8px', gap: 1 }}>
+    <div style={{ width: 248, height: '100%', flexShrink: 0, position: 'relative', background: 'color-mix(in srgb, var(--bg) 60%, #000 6%)', borderRight: '1px solid var(--border)' }}>
+      <div className="v-stack bk-scroll" style={{ height: '100%', overflow: 'auto', padding: '12px 8px 12px', gap: 2 }}>
         {/* workspace trigger */}
         <div style={{ position: 'relative' }}>
           <div
@@ -88,9 +132,9 @@ export const Sidebar = observer(function Sidebar({ activeRoute, onNav, onNewMemo
             className="h-stack"
             style={{
               gap: 8,
-              padding: '6px 10px',
+              padding: '8px 10px',
               margin: '0 2px 10px',
-              borderRadius: 'var(--radius)',
+              borderRadius: 'var(--radius-lg, 12px)',
               cursor: 'pointer',
               userSelect: 'none',
               alignItems: 'center',
@@ -104,10 +148,10 @@ export const Sidebar = observer(function Sidebar({ activeRoute, onNav, onNewMemo
               <img
                 src={getBlinkoEndpoint(`${user.image}?token=${user.tokenData.value?.token}`)}
                 alt="avatar"
-                style={{ width: 22, height: 22, borderRadius: 5, objectFit: 'cover', flexShrink: 0 }}
+                style={{ width: 22, height: 22, borderRadius: 6, objectFit: 'cover', flexShrink: 0 }}
               />
             ) : (
-              <div className="bk-avatar" style={{ width: 22, height: 22, borderRadius: 5, fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <div className="bk-avatar" style={{ width: 22, height: 22, borderRadius: 6, fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                 {initials}
               </div>
             )}
@@ -136,7 +180,7 @@ export const Sidebar = observer(function Sidebar({ activeRoute, onNav, onNewMemo
             <div
               style={{
                 position: 'absolute',
-                top: 34,
+                top: 36,
                 left: 2,
                 zIndex: 70,
                 width: 140,
@@ -210,61 +254,58 @@ export const Sidebar = observer(function Sidebar({ activeRoute, onNav, onNewMemo
         </div>
 
         {/* search */}
-        <div onClick={onSearch} className="h-stack" style={{ margin: '0 6px 8px', padding: '5px 10px', background: 'var(--bg)', border: '1px solid var(--border-2)', borderRadius: 'var(--radius)', gap: 8, color: 'var(--fg-3)', fontSize: 12, cursor: 'pointer' }}>
+        <div onClick={onSearch} className="h-stack" style={{ margin: '0 4px 8px', padding: '7px 12px', background: 'var(--bg-2)', border: '1px solid var(--border-2)', borderRadius: 'var(--radius-lg, 12px)', gap: 10, color: 'var(--fg-3)', fontSize: 13, cursor: 'pointer', transition: 'all 0.12s ease-in-out' }}
+             onMouseEnter={(e) => e.currentTarget.style.borderColor = 'var(--border)'}
+             onMouseLeave={(e) => e.currentTarget.style.borderColor = 'var(--border-2)'}
+        >
           <span>⌕</span><span style={{ flex: 1 }}>Search…</span>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10 }}>⌘K</span>
+          <span className="bk-kbd" style={{ fontSize: 10 }}>⌘K</span>
         </div>
 
         {/* new memo */}
-        <div onClick={onNewMemo} className="h-stack" style={{ margin: '0 6px 14px', padding: '6px 10px', background: 'var(--accent-soft)', border: '1px solid color-mix(in srgb, var(--accent) 40%, transparent)', borderRadius: 'var(--radius)', gap: 8, color: 'var(--accent)', fontSize: 13, cursor: 'pointer', fontWeight: 500 }}>
+        <div onClick={onNewMemo} className="h-stack" style={{ margin: '0 4px 14px', padding: '8px 12px', background: 'var(--accent-soft)', border: '1px solid color-mix(in srgb, var(--accent) 30%, transparent)', borderRadius: 'var(--radius-lg, 12px)', gap: 10, color: 'var(--accent)', fontSize: 13.5, cursor: 'pointer', fontWeight: 600, transition: 'all 0.12s ease-in-out' }}
+             onMouseEnter={(e) => e.currentTarget.style.filter = 'brightness(1.06)'}
+             onMouseLeave={(e) => e.currentTarget.style.filter = 'none'}
+        >
           <span>＋</span><span style={{ flex: 1 }}>New memo</span>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10 }}>⌘N</span>
+          <span className="bk-kbd" style={{ fontSize: 10, background: 'rgba(255,255,255,0.08)' }}>⌘N</span>
         </div>
 
-        <div style={sectionLbl}>Notes</div>
-        {notesNav.map((n) => (
+        <div style={sectionLbl}>journal</div>
+        {notesToShow.map((n) => (
           <NavRow key={n.id} icon={n.icon} title={n.title} active={activeRoute === n.id} onClick={() => onNav(n.id)} />
         ))}
 
-        <div style={sectionLbl}>Todos</div>
-        {TODOS_NAV.map((n) => (
+        <div style={sectionLbl}>tasks</div>
+        {todosToShow.map((n) => (
           <NavRow key={n.id} icon={n.icon} title={n.title} active={activeRoute === n.id} onClick={() => onNav(n.id)} />
         ))}
 
-        <div className="h-stack" style={{ ...sectionLbl, alignItems: 'center', gap: 6 }}>
-          <span style={{ flex: 1 }}>Projects (tags)</span>
-        </div>
-        {tree.map((t: any) => (
-          <div key={t.name}>
-            <div
-              onClick={() => onNav(`tag:${t.name}`)}
-              className="h-stack"
-              style={{ gap: 6, padding: '4px 8px', borderRadius: 'var(--radius)', fontSize: 13, cursor: 'pointer' }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--hover)')}
-              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-            >
-              <span style={{ width: 10, fontSize: 9, color: 'var(--fg-3)' }}>{t.children?.length ? '▾' : ' '}</span>
-              <span style={{ color: 'var(--accent)', fontFamily: 'var(--font-mono)', flex: 1 }}>#{t.name}</span>
-            </div>
-            {t.children?.map((c: any) => (
-              <div
-                key={c.name}
-                onClick={() => onNav(`tag:${t.name}/${c.name}`)}
-                className="h-stack"
-                style={{ gap: 6, padding: '3px 8px 3px 30px', fontSize: 12, cursor: 'pointer', borderRadius: 'var(--radius)' }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--hover)')}
-                onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-              >
-                <span style={{ color: 'var(--accent)', opacity: 0.75, fontFamily: 'var(--font-mono)', flex: 1 }}>#{c.name}</span>
-              </div>
-            ))}
+        <div style={sectionLbl}>projects</div>
+        {tagsToShow.map((t: any) => <TagNavNode key={t.metadata?.path || t.name} node={t} depth={0} activeRoute={activeRoute} onNav={onNav} />)}
+
+        {/* Collapsible trigger */}
+        {(notesNav.length > notesToShow.length || TODOS_NAV.length > todosToShow.length || tree.length > tagsToShow.length) && (
+          <div
+            onClick={() => setShowMore(!showMore)}
+            className="h-stack"
+            style={{
+              gap: 10, padding: '8px 12px', marginTop: 8, borderRadius: 'var(--radius-lg, 12px)',
+              color: 'var(--fg-3)', fontSize: 13, cursor: 'pointer', userSelect: 'none',
+              transition: 'all 0.12s ease-in-out',
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.background = 'var(--hover)'}
+            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+          >
+            <span style={{ width: 16, fontSize: 12, textAlign: 'center' }}>{showMore ? '▴' : '▾'}</span>
+            <span>{showMore ? 'Show less' : 'More…'}</span>
           </div>
-        ))}
+        )}
 
         <div style={{ flex: 1 }} />
 
         {/* footer sync status */}
-        <div className="h-stack" style={{ padding: '10px 12px 4px', borderTop: '1px solid var(--border)', gap: 8, fontSize: 12, color: 'var(--fg-3)' }}>
+        <div className="h-stack" style={{ padding: '12px 12px 4px', borderTop: '1px solid var(--border)', gap: 8, fontSize: 12, color: 'var(--fg-3)' }}>
           <span style={{ width: 6, height: 6, borderRadius: 50, background: base.isOnline ? '#3FCB7E' : '#E0696B' }} />
           <span>{base.isOnline ? 'Synced' : 'Offline'}{pending > 0 ? ` · ${pending} pending` : ''}</span>
         </div>
