@@ -28,8 +28,10 @@ import { MastraVoice } from '@mastra/core/voice';
 
 export class AiModelFactory {
   static async queryAndDeleteVectorById(targetId: number) {
-    const { VectorStore } = await AiModelFactory.GetProvider();
     try {
+      // Embeddings are optional — when no AI model is configured GetProvider()
+      // throws, so keep it inside the try so deletion never rejects unhandled.
+      const { VectorStore } = await AiModelFactory.GetProvider();
       const query = `
           WITH target_record AS (
             SELECT vector_id 

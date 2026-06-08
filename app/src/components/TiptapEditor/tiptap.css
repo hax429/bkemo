@@ -13,6 +13,30 @@
   min-height: 90px; /* Cut down starting height to half, auto-growing as text is written */
 }
 
+/* Article reader (NoteModal reading mode for long memos): comfortable long-form
+   typography on top of the shared .tiptap-content rendering. */
+.bk-article .tiptap-content {
+  font-size: 17.5px;
+  line-height: 1.85;
+}
+.bk-article .tiptap-content > * + * { margin-top: 1.1em; }
+.bk-article .tiptap-content h1 { font-size: 1.75em; font-weight: 650; line-height: 1.25; margin-top: 1.5em; }
+.bk-article .tiptap-content h2 { font-size: 1.4em; font-weight: 650; line-height: 1.3; margin-top: 1.4em; }
+.bk-article .tiptap-content h3 { font-size: 1.18em; font-weight: 600; margin-top: 1.2em; }
+.bk-article .tiptap-content li { margin: 0.35em 0; }
+.bk-article .tiptap-content blockquote { margin: 1.2em 0; padding-left: 1em; }
+.bk-icon-btn:hover { background: var(--hover); }
+@keyframes bk-spin { to { transform: rotate(360deg); } }
+.bk-spin { animation: bk-spin 0.7s linear infinite; }
+@keyframes bk-sheet-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
+
+/* Full-page (telegra.ph-style) editor: roomier writing surface, same editor. */
+.bk-article-edit .tiptap-content { font-size: 18px; line-height: 1.8; }
+.bk-article-edit .tiptap-content > * + * { margin-top: 0.9em; }
+.bk-article-edit .tiptap-content h1 { font-size: 1.7em; font-weight: 650; }
+.bk-article-edit .tiptap-content h2 { font-size: 1.4em; font-weight: 650; }
+.bk-article-edit .tiptap-content h3 { font-size: 1.18em; font-weight: 600; }
+
 .tiptap-content:focus { outline: none; }
 
 .tiptap-content > * + * { margin-top: 0.6em; }
@@ -98,6 +122,24 @@
 .tiptap-content ul[data-type="taskList"] li[data-checked="true"] > div {
   color: var(--fg-3, #62666d);
   text-decoration: line-through;
+}
+
+/* GFM task lists rendered by react-markdown (MarkdownView preview).
+   remark-gfm emits `ul.contains-task-list` / `li.task-list-item`; without this
+   the default disc bullet shows next to the checkbox ("two boxes"). */
+.tiptap-content ul.contains-task-list {
+  list-style: none;
+  padding-left: 0.2em;
+}
+.tiptap-content li.task-list-item {
+  list-style: none;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.tiptap-content li.task-list-item input[type="checkbox"] {
+  margin-top: 4px;
+  accent-color: var(--accent, #5e6ad2);
 }
 
 /* Inline code + code blocks */

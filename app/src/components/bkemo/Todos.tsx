@@ -6,10 +6,12 @@ import { BlinkoStore } from '@/store/blinkoStore';
 import { api } from '@/lib/trpc';
 import { NoteType, type Note } from '@shared/lib/types';
 import { isTask, isDone, bucketQuadrants, laneToDueRange, type TaskLane } from '@/lib/taskFilters';
+import { stripLoneCheckbox } from '@/lib/taskSyntax';
 import { MarkdownView } from './MarkdownView';
 import { ContextMenu, type MenuItem } from './ContextMenu';
 import { CommentsSection, CardFeedback } from './CommentsSection';
 import { getBkemoConfig } from '@/lib/bkemoConfig';
+import { eventBus } from '@/lib/event';
 
 export type TodoView = TaskLane | 'matrix';
 
@@ -54,7 +56,7 @@ function plainTitle(content?: string | null): string {
   return (content || 'Untitled task').replace(/^#+\s*/, '').replace(/\n+/g, ' ').trim();
 }
 
-const TaskRow = observer(function TaskRow({ note, onOpen, onContext }: { note: Note; onOpen?: (n: Note) => void; onContext?: (e: React.MouseEvent, n: Note) => void }) {
+const TaskRow = observer(function TaskRow({ note, onOpen, onContext, compact }: { note: Note; onOpen?: (n: Note) => void; onContext?: (e: React.MouseEvent, n: Note) => void; compact?: boolean }) {
   const done = isDone(note);
   const { hideComments } = getBkemoConfig();
   const subtasks = (((note as any).subtasks ?? []) as Note[]).filter(isTask);
@@ -64,31 +66,42 @@ const TaskRow = observer(function TaskRow({ note, onOpen, onContext }: { note: N
   return (
     <div
       onContextMenu={(e) => { if (onContext) { e.preventDefault(); onContext(e, note); } }}
-      style={{ padding: 'var(--row-pad-y) var(--row-pad-x)', borderBottom: '1px solid var(--border)', background: 'var(--bg)' }}
+      style={{ padding: compact ? '7px 12px' : 'var(--row-pad-y) var(--row-pad-x)', borderBottom: '1px solid var(--border)', background: 'var(--bg)' }}
       onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-2)')}
       onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--bg)')}
     >
-      <div onClick={() => onOpen?.(note)} style={{ display: 'grid', gridTemplateColumns: 'auto auto 1fr auto', columnGap: 12, alignItems: 'start', cursor: 'pointer' }}>
+      <div onClick={() => onOpen?.(note)} style={{ display: 'grid', gridTemplateColumns: 'auto auto 1fr auto', columnGap: compact ? 8 : 12, alignItems: 'start', cursor: 'pointer' }}>
         <span style={{ paddingTop: 2 }}><Check note={note} /></span>
         <span style={{ paddingTop: 4 }}><PriorityDots important={note.isImportant} urgent={note.isUrgent} /></span>
-        <div style={{ fontSize: 13.5, lineHeight: 'var(--row-line)', color: done ? 'var(--fg-3)' : 'var(--fg)', textDecoration: done ? 'line-through' : 'none' }}>
+        <div style={{ fontSize: compact ? 12.5 : 13.5, lineHeight: 'var(--row-line)', color: done ? 'var(--fg-3)' : 'var(--fg)', textDecoration: done ? 'line-through' : 'none', minWidth: 0 }}>
           {parent?.id && (
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--fg-3)', textDecoration: 'none', marginBottom: 2 }}>
-              under BK-{parent.id} · {plainTitle(parent.content).slice(0, 64)}
-            </div>
+            <span
+              onClick={(e) => { e.stopPropagation(); eventBus.emit('bkemo:open-note', { id: parent.id! }); }}
+              title={`Subtask of BK-${parent.id} · ${plainTitle(parent.content).slice(0, 64)}`}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginRight: 6, padding: '1px 8px 1px 6px', borderRadius: 100, border: '1px solid var(--border-2)', background: 'var(--hover)', color: 'var(--fg-2)', fontSize: 10.5, fontFamily: 'var(--font-mono)', textDecoration: 'none', cursor: 'pointer', verticalAlign: 'middle' }}
+            >
+              <span style={{ color: 'var(--accent)' }}>↳</span>
+              <span>BK-{parent.id}</span>
+            </span>
           )}
           {note.isTop && <span title="Pinned" style={{ color: 'var(--accent)', marginRight: 6 }}>⊕</span>}
-          <MarkdownView content={note.content ?? ''} />
+          {/* A task's lone body checkbox duplicates the row's own toggle — hide it. */}
+          <MarkdownView content={stripLoneCheckbox(note.content ?? '')} />
         </div>
-        <span style={{ ...monoCap, fontSize: 11, color: dueLabel(note) === 'today' ? 'var(--accent)' : 'var(--fg-3)', paddingTop: 3, textAlign: 'right' }}>{dueLabel(note)}</span>
+        <span style={{ ...monoCap, fontSize: compact ? 10 : 11, color: dueLabel(note) === 'today' ? 'var(--accent)' : 'var(--fg-3)', paddingTop: 3, textAlign: 'right', whiteSpace: 'nowrap' }}>{dueLabel(note)}</span>
       </div>
-      {/* footer: more actions */}
-      <div className="h-stack" style={{ gap: 14, marginTop: 6, marginLeft: 26, color: 'var(--fg-3)', fontSize: 12 }}>
-        <span className="spacer" />
-        {subtasks.length > 0 && <span style={{ fontFamily: 'var(--font-mono)' }}>{doneSubtasks}/{subtasks.length} subtasks</span>}
-        {onContext && <span onClick={(e) => onContext(e, note)} style={{ cursor: 'pointer' }} title="More">···</span>}
-      </div>
-      {!hideComments && <div style={{ marginLeft: 26 }}><CardFeedback note={note} /></div>}
+      {/* footer: more actions (hidden in the dense matrix layout) */}
+      {!compact && (
+        <div className="h-stack" style={{ gap: 14, marginTop: 6, marginLeft: 26, color: 'var(--fg-3)', fontSize: 12 }}>
+          <span className="spacer" />
+          {subtasks.length > 0 && <span style={{ fontFamily: 'var(--font-mono)' }}>{doneSubtasks}/{subtasks.length} subtasks</span>}
+          {onContext && <span onClick={(e) => onContext(e, note)} style={{ cursor: 'pointer' }} title="More">···</span>}
+        </div>
+      )}
+      {compact && subtasks.length > 0 && (
+        <div style={{ marginLeft: 26, marginTop: 2, color: 'var(--fg-3)', fontSize: 10.5, fontFamily: 'var(--font-mono)' }}>{doneSubtasks}/{subtasks.length} subtasks</div>
+      )}
+      {!compact && !hideComments && <div style={{ marginLeft: 26 }}><CardFeedback note={note} /></div>}
     </div>
   );
 });
@@ -104,35 +117,37 @@ const TABS: { id: TodoView; label: string }[] = [
 function Quadrant({ icon, label, sub, tone, tasks, empty, onOpen, onContext }: { icon: string; label: string; sub: string; tone: string; tasks: Note[]; empty: string; onOpen?: (n: Note) => void; onContext?: (e: React.MouseEvent, n: Note) => void }) {
   return (
     <div style={{ ...card, padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-      <div className="h-stack" style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', background: 'var(--bg-2)', gap: 10 }}>
-        <span style={{ width: 24, height: 24, borderRadius: 5, background: `color-mix(in srgb, ${tone} 18%, var(--bg-3))`, color: tone, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 600 }}>{icon}</span>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--fg)' }}>{label}</div>
-          <div style={{ ...mono, fontSize: 9, marginTop: 2 }}>{sub}</div>
-        </div>
-        <span style={{ ...monoCap, fontSize: 11, color: tone, fontWeight: 600 }}>{tasks.length}</span>
+      {/* Single-line header: icon · label · muted sub · count */}
+      <div className="h-stack" style={{ padding: '7px 12px', borderBottom: '1px solid var(--border)', background: 'var(--bg-2)', gap: 8 }}>
+        <span style={{ width: 20, height: 20, borderRadius: 5, background: `color-mix(in srgb, ${tone} 18%, var(--bg-3))`, color: tone, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, flexShrink: 0 }}>{icon}</span>
+        <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--fg)', flexShrink: 0 }}>{label}</span>
+        <span style={{ ...mono, fontSize: 9, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{sub}</span>
+        <span className="spacer" />
+        <span style={{ ...monoCap, fontSize: 11, color: tone, fontWeight: 600, flexShrink: 0 }}>{tasks.length}</span>
       </div>
       <div className="bk-scroll" style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
         {tasks.length === 0 ? (
-          <div style={{ ...monoCap, padding: 24, textAlign: 'center', color: 'var(--fg-3)' }}>{empty}</div>
-        ) : tasks.map((t) => <TaskRow key={t.id} note={t} onOpen={onOpen} onContext={onContext} />)}
+          <div style={{ ...monoCap, padding: 16, textAlign: 'center', color: 'var(--fg-3)', fontSize: 10.5 }}>{empty}</div>
+        ) : tasks.map((t) => <TaskRow key={t.id} note={t} onOpen={onOpen} onContext={onContext} compact />)}
       </div>
     </div>
   );
 }
 
+const axisLabel: React.CSSProperties = { ...mono, fontSize: 10, letterSpacing: '.14em' };
+
 function MatrixView({ open, onOpen, onContext }: { open: Note[]; onOpen?: (n: Note) => void; onContext?: (e: React.MouseEvent, n: Note) => void }) {
   const q = useMemo(() => bucketQuadrants(open), [open]);
   return (
-    <div style={{ flex: 1, overflow: 'hidden', padding: 18, background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: '40px 1fr 1fr', gridTemplateRows: 'auto 1fr 1fr', gap: 14, flex: 1, minHeight: 0 }}>
+    <div style={{ flex: 1, overflow: 'hidden', padding: 12, background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '20px 1fr 1fr', gridTemplateRows: 'auto 1fr 1fr', gap: 10, flex: 1, minHeight: 0 }}>
         <div />
-        <div style={{ ...mono, fontSize: 11, letterSpacing: '.14em', textAlign: 'center' }}>URGENT</div>
-        <div style={{ ...mono, fontSize: 11, letterSpacing: '.14em', textAlign: 'center' }}>NOT URGENT</div>
-        <div style={{ ...mono, fontSize: 11, letterSpacing: '.14em', writingMode: 'vertical-rl', transform: 'rotate(180deg)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>IMPORTANT</div>
+        <div style={{ ...axisLabel, textAlign: 'center' }}>URGENT</div>
+        <div style={{ ...axisLabel, textAlign: 'center' }}>NOT URGENT</div>
+        <div style={{ ...axisLabel, writingMode: 'vertical-rl', transform: 'rotate(180deg)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>IMPORTANT</div>
         <Quadrant icon="▣" label="Do now" sub="Crises · deadlines" tone="var(--urgent)" tasks={q.do} empty="Nothing on fire." onOpen={onOpen} onContext={onContext} />
         <Quadrant icon="◫" label="Schedule" sub="Strategy · prevention" tone="#5BD0C8" tasks={q.schedule} empty="Plan something." onOpen={onOpen} onContext={onContext} />
-        <div style={{ ...mono, fontSize: 11, letterSpacing: '.14em', writingMode: 'vertical-rl', transform: 'rotate(180deg)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>NOT IMPORTANT</div>
+        <div style={{ ...axisLabel, writingMode: 'vertical-rl', transform: 'rotate(180deg)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>NOT IMPORTANT</div>
         <Quadrant icon="◰" label="Delegate" sub="Interruptions · errands" tone="#E8A35C" tasks={q.delegate} empty="No errands waiting." onOpen={onOpen} onContext={onContext} />
         <Quadrant icon="◱" label="Eliminate" sub="Time-wasters · trivia" tone="#9B6B6B" tasks={q.eliminate} empty="Inbox zero on this one." onOpen={onOpen} onContext={onContext} />
       </div>
@@ -143,11 +158,15 @@ function MatrixView({ open, onOpen, onContext }: { open: Note[]; onOpen?: (n: No
 export const Todos = observer(function Todos({ view, onView, onOpen }: { view: TodoView; onView: (v: TodoView) => void; onOpen?: (n: Note) => void }) {
   const blinko = RootStore.Get(BlinkoStore);
   const [openTasks, setOpenTasks] = useState<Note[]>([]);
+  // All open memos/notes (not just to-dos) — the matrix also surfaces important/
+  // urgent/due-today memos that aren't typed to-dos.
+  const [openAll, setOpenAll] = useState<Note[]>([]);
   const [doneTasks, setDoneTasks] = useState<Note[]>([]);
   const [menu, setMenu] = useState<{ x: number; y: number; note: Note } | null>(null);
 
   const removeLocal = (id: number) => {
     setOpenTasks((p) => p.filter((n) => n.id !== id));
+    setOpenAll((p) => p.filter((n) => n.id !== id));
     setDoneTasks((p) => p.filter((n) => n.id !== id));
   };
 
@@ -174,6 +193,7 @@ export const Todos = observer(function Todos({ view, onView, onOpen }: { view: T
       blinko.queryNotes({ type: -1, isCompleted: true }, 1, 100),
     ]).then(([open, done]) => {
       if (cancelled) return;
+      setOpenAll(open);
       setOpenTasks(open.filter(isTask));
       setDoneTasks(done.filter(isTask));
     }).catch((e) => console.error('[todos] load failed:', e));
@@ -215,7 +235,7 @@ export const Todos = observer(function Todos({ view, onView, onOpen }: { view: T
       </div>
 
       {view === 'matrix' ? (
-        <MatrixView open={openTasks} onOpen={onOpen} onContext={openMenu} />
+        <MatrixView open={openAll} onOpen={onOpen} onContext={openMenu} />
       ) : (
         <div className="bk-scroll" style={{ flex: 1, overflow: 'auto' }}>
           <div style={{ padding: '20px 18px 0', maxWidth: 980, margin: '0 auto' }}>

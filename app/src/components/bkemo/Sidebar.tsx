@@ -12,7 +12,7 @@ import { getBlinkoEndpoint } from '@/lib/blinkoEndpoint';
 export type BkemoRoute =
   | 'home' | 'daily' | 'random' | 'trash'
   | 'inbox' | 'today' | 'tomorrow' | 'week' | 'matrix'
-  | 'stats' | 'calendar' | 'settings'
+  | 'stats' | 'calendar' | 'graph' | 'files' | 'settings'
   | string; // tag:<id>
 
 const NOTES_NAV: { id: BkemoRoute; icon: string; title: string }[] = [
@@ -22,7 +22,6 @@ const NOTES_NAV: { id: BkemoRoute; icon: string; title: string }[] = [
   { id: 'trash', icon: '⌫', title: 'Trash' },
 ];
 const TODOS_NAV: { id: BkemoRoute; icon: string; title: string }[] = [
-  { id: 'inbox', icon: '▤', title: 'Inbox' },
   { id: 'today', icon: '●', title: 'Today' },
   { id: 'tomorrow', icon: '○', title: 'Tomorrow' },
   { id: 'week', icon: '▦', title: 'This week' },
@@ -119,7 +118,7 @@ export const Sidebar = observer(function Sidebar({ activeRoute, onNav, onNewMemo
 
   // Collapsible logic to make sidebar breathe
   const notesToShow = showMore ? notesNav : notesNav.filter((n) => n.id === 'home');
-  const todosToShow = showMore ? TODOS_NAV : TODOS_NAV.filter((t) => t.id === 'inbox' || t.id === 'today');
+  const todosToShow = showMore ? TODOS_NAV : TODOS_NAV.filter((t) => t.id === 'today');
   const tagsToShow = showMore ? tree : tree.slice(0, 3);
 
   return (
@@ -183,7 +182,7 @@ export const Sidebar = observer(function Sidebar({ activeRoute, onNav, onNewMemo
                 top: 36,
                 left: 2,
                 zIndex: 70,
-                width: 140,
+                width: 160,
                 background: 'var(--bg-2)',
                 border: '1px solid var(--border-2)',
                 borderRadius: 'var(--radius-lg)',
@@ -194,29 +193,34 @@ export const Sidebar = observer(function Sidebar({ activeRoute, onNav, onNewMemo
                 gap: 1
               }}
             >
-              <div
-                onClick={() => {
-                  onNav('settings');
-                  setShowUserMenu(false);
-                }}
-                style={{
-                  padding: '8px 12px',
-                  fontSize: 12.5,
-                  color: 'var(--fg)',
-                  borderRadius: 'var(--radius)',
-                  cursor: 'pointer',
-                  userSelect: 'none',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  fontWeight: 500
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.background = 'var(--hover)'}
-                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-              >
-                <span style={{ fontSize: 13 }}>⚙</span>
-                <span>Settings</span>
-              </div>
+              {[
+                { id: 'graph' as BkemoRoute, icon: '⊚', label: 'Graph' },
+                { id: 'calendar' as BkemoRoute, icon: '▦', label: 'Calendar' },
+                { id: 'files' as BkemoRoute, icon: '◳', label: 'Files' },
+                { id: 'settings' as BkemoRoute, icon: '⚙', label: 'Settings' },
+              ].map((item) => (
+                <div
+                  key={item.id}
+                  onClick={() => { onNav(item.id); setShowUserMenu(false); }}
+                  style={{
+                    padding: '8px 12px',
+                    fontSize: 12.5,
+                    color: 'var(--fg)',
+                    borderRadius: 'var(--radius)',
+                    cursor: 'pointer',
+                    userSelect: 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    fontWeight: 500
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = 'var(--hover)'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                >
+                  <span style={{ fontSize: 13, width: 16, textAlign: 'center' }}>{item.icon}</span>
+                  <span>{item.label}</span>
+                </div>
+              ))}
               <div
                 style={{
                   height: 1,

@@ -16,8 +16,12 @@ import { ContextMenu, type MenuItem } from './ContextMenu';
 import { CommentsSection, CardFeedback } from './CommentsSection';
 import { MultiSelectBar } from './MultiSelectBar';
 import { isTask, isDone } from '@/lib/taskFilters';
-import { parseTaskSyntax } from '@/lib/taskSyntax';
+import { parseTaskSyntax, stripLoneCheckbox } from '@/lib/taskSyntax';
 import { extractNoteLinkIds, noteLinkTitle } from '@/lib/noteLinks';
+import { eventBus } from '@/lib/event';
+import { toUpsertAttachment } from '@/lib/attachments';
+import { useAttachments, PendingAttachments } from './useAttachments';
+import { AttachmentList } from './AttachmentList';
 
 function dayLabel(d: Dayjs): string {
   const today = dayjs().startOf('day');
@@ -26,6 +30,18 @@ function dayLabel(d: Dayjs): string {
   if (diff === 1) return 'Yesterday';
   if (diff < 7) return `${diff} days ago`;
   return d.format('MMM D, YYYY');
+}
+
+/** Compact, human due label (`today`, `2d overdue`, `Mon`, `Jun 18`). */
+function dueLabel(d: Date | string): string {
+  const day = dayjs(d).startOf('day');
+  const diff = day.diff(dayjs().startOf('day'), 'day');
+  if (diff === 0) return 'today';
+  if (diff === 1) return 'tomorrow';
+  if (diff === -1) return 'yesterday';
+  if (diff < 0) return `${-diff}d overdue`;
+  if (diff < 7) return day.format('ddd');
+  return day.format('MMM D');
 }
 
 const TaskCheck = observer(function TaskCheck({ note }: { note: Note }) {
@@ -62,8 +78,9 @@ const Composer = observer(function Composer() {
   const [urgent, setUrgent] = useState(false);
   const [due, setDue] = useState(''); // yyyy-mm-dd, optional
   const [focused, setFocused] = useState(false);
+  const att = useAttachments();
 
-  const reset = () => { setImportant(false); setUrgent(false); setDue(''); setIsTodo(false); };
+  const reset = () => { setImportant(false); setUrgent(false); setDue(''); setIsTodo(false); att.clear(); };
 
   // Live-reflect inline task syntax (`- [ ]` checkbox, `due:…`) in the toolbar so
   // the user sees the memo turning into a task as they type.
@@ -71,16 +88,23 @@ const Composer = observer(function Composer() {
     setContent(md);
     const parsed = parseTaskSyntax(md);
     if (parsed.isTodo && !isTodo) setIsTodo(true);
+    if (parsed.isImportant && !important) setImportant(true);
+    if (parsed.isUrgent && !urgent) setUrgent(true);
     if (parsed.dueDate) setDue(dayjs(parsed.dueDate).format('YYYY-MM-DD'));
     else if (parsed.dueDate === null) setDue('');
   };
 
   const send = async () => {
+    if (sending) return;
     const raw = ref.current?.getMarkdown()?.trim() ?? '';
-    if (!raw || sending) return;
     const parsed = parseTaskSyntax(raw);
-    if (!parsed.content && !parsed.isTodo) return;
+    // Allow an attachment-only memo (no text, no checkbox).
+    if (!parsed.content && !parsed.isTodo && att.items.length === 0) return;
     const todo = isTodo || parsed.isTodo;
+    // Priority flags apply to any memo (task or not); `#important`/`#urgent` tags
+    // OR the toolbar buttons set them.
+    const flagImportant = important || !!parsed.isImportant;
+    const flagUrgent = urgent || !!parsed.isUrgent;
     // Inline `due:` wins over the picker; otherwise fall back to the picked date.
     const dueDate = parsed.dueDate !== undefined
       ? parsed.dueDate
@@ -93,11 +117,11 @@ const Composer = observer(function Composer() {
         type: todo ? NoteType.TODO : NoteType.BLINKO,
         // Persist [[memo]] links as references so the link graph mirrors the body.
         references: extractNoteLinkIds(parsed.content),
-        ...(todo ? {
-          isImportant: important,
-          isUrgent: urgent,
-          dueDate,
-        } : {}),
+        attachments: att.items.map(toUpsertAttachment),
+        isImportant: flagImportant,
+        isUrgent: flagUrgent,
+        // A due date only applies to tasks (and itself makes a memo a task).
+        dueDate: todo ? dueDate : null,
       });
       ref.current?.clear();
       setContent('');
@@ -107,19 +131,21 @@ const Composer = observer(function Composer() {
     }
   };
 
-  const showChrome = focused || content.trim().length > 0;
+  const showChrome = focused || content.trim().length > 0 || att.items.length > 0 || att.uploading > 0;
 
   return (
     <div
+      {...att.dragProps}
       style={{
         background: 'var(--bg-2)',
-        border: '1px solid var(--border)',
+        // Single `border` shorthand (no separate borderColor) to avoid React's
+        // shorthand/longhand conflict warning on focus/drag transitions.
+        border: `1px solid ${att.dragOver ? 'var(--accent)' : focused ? 'color-mix(in srgb, var(--accent) 55%, transparent)' : 'var(--border)'}`,
         borderRadius: 'var(--radius-lg, 14px)',
         padding: '16px 20px',
         marginBottom: 20,
         transition: 'all 0.2s ease-in-out',
         ...(focused ? {
-          borderColor: 'color-mix(in srgb, var(--accent) 55%, transparent)',
           boxShadow: '0 0 0 4px var(--accent-soft), 0 12px 30px -10px rgba(0,0,0,0.5)',
           transform: 'translateY(-1px)',
         } : {}),
@@ -139,6 +165,8 @@ const Composer = observer(function Composer() {
           return list.filter((n) => n.id != null).map((n) => ({ id: n.id!, title: noteLinkTitle(n.content) }));
         }}
       />
+      {att.fileInput}
+      <PendingAttachments items={att.items} uploading={att.uploading} onRemove={att.remove} />
       {showChrome && (
         <div className="h-stack" style={{ gap: 8, marginTop: 12, borderTop: '1px solid var(--border)', paddingTop: 12, justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
           {/* List out everything as small icons/buttons underneath the editor */}
@@ -222,6 +250,17 @@ const Composer = observer(function Composer() {
             >
               #
             </button>
+            <button
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={att.openPicker}
+              style={{
+                width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6,
+                color: 'var(--fg-2)', fontSize: 15, border: 'none', cursor: 'pointer', transition: 'all 0.12s'
+              }}
+              title="Attach a file (any type)"
+            >
+              📎
+            </button>
 
             <span style={{ width: 1, height: 16, background: 'var(--border-2)', margin: '0 6px' }} />
 
@@ -278,18 +317,23 @@ const Composer = observer(function Composer() {
           </div>
 
           {/* Right Action Button */}
-          <button
-            onClick={send}
-            disabled={sending || !content.trim()}
-            style={{
-              background: 'var(--accent)', border: 'none', color: '#fff', padding: '6px 14px',
-              borderRadius: 'var(--radius-lg, 8px)', fontSize: 12.5, fontWeight: 600,
-              opacity: (sending || !content.trim()) ? 0.55 : 1, transition: 'all 0.15s ease',
-              flexShrink: 0
-            }}
-          >
-            {isTodo ? 'Add task' : 'Send'}
-          </button>
+          {(() => {
+            const canSend = !sending && att.uploading === 0 && (content.trim().length > 0 || att.items.length > 0);
+            return (
+              <button
+                onClick={send}
+                disabled={!canSend}
+                style={{
+                  background: 'var(--accent)', border: 'none', color: '#fff', padding: '6px 14px',
+                  borderRadius: 'var(--radius-lg, 8px)', fontSize: 12.5, fontWeight: 600,
+                  opacity: canSend ? 1 : 0.55, transition: 'all 0.15s ease',
+                  flexShrink: 0
+                }}
+              >
+                {isTodo ? 'Add task' : 'Send'}
+              </button>
+            );
+          })()}
         </div>
       )}
     </div>
@@ -364,9 +408,28 @@ const MemoRow = observer(function MemoRow({ note, onOpen, selected, selectionAct
         {task && <TaskCheck note={note} />}
         {note.isTop && <span title="Pinned" style={{ color: 'var(--accent)' }}>⊕</span>}
         <span className="bk-memo-id">BK-{note.id}</span>
-        {parent?.id && <span style={{ color: 'var(--fg-3)' }}>↳ BK-{parent.id}</span>}
         <PriorityDots important={note.isImportant} urgent={note.isUrgent} />
-        {subtasks.length > 0 && <span style={{ color: 'var(--accent)' }}>{doneSubtasks}/{subtasks.length} subtasks</span>}
+        {task && note.dueDate && (() => {
+          const overdue = dayjs(note.dueDate).endOf('day').isBefore(dayjs());
+          const soon = dueLabel(note.dueDate) === 'today';
+          const color = done ? 'var(--fg-3)' : overdue ? 'var(--urgent)' : soon ? 'var(--accent)' : 'var(--fg-2)';
+          return (
+            <span title={dayjs(note.dueDate).format('YYYY-MM-DD')} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color, border: `1px solid color-mix(in srgb, ${color} 35%, transparent)`, borderRadius: 100, padding: '1px 7px', fontSize: 10 }}>
+              <span>◷</span><span>{dueLabel(note.dueDate)}</span>
+            </span>
+          );
+        })()}
+        {subtasks.length > 0 && (
+          <span
+            title="Subtasks"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--accent)' }}
+          >
+            <span style={{ display: 'inline-block', width: 22, height: 3, borderRadius: 2, background: 'var(--border-2)', position: 'relative', overflow: 'hidden' }}>
+              <span style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${(doneSubtasks / subtasks.length) * 100}%`, background: 'var(--accent)' }} />
+            </span>
+            <span>{doneSubtasks}/{subtasks.length}</span>
+          </span>
+        )}
         {!!(note as any).shareEncryptedUrl && (
           <span style={{ color: 'var(--accent)', fontSize: 10, display: 'inline-flex', alignItems: 'center', gap: 2, background: 'var(--accent-soft)', padding: '2px 6px', borderRadius: 4, fontWeight: 500 }} title="Shared memo">
             <span>↗</span>
@@ -382,12 +445,18 @@ const MemoRow = observer(function MemoRow({ note, onOpen, selected, selectionAct
       {/* body — markdown preview, consistent with the editor */}
       <div style={{ position: 'relative', maxHeight: collapsed ? 150 : undefined, overflow: collapsed ? 'hidden' : undefined }}>
         {parent?.id && (
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg-3)', marginBottom: 6 }}>
-            under BK-{parent.id} · {plainTitle(parent.content).slice(0, 72)}
+          <div
+            onClick={(e) => { e.stopPropagation(); eventBus.emit('bkemo:open-note', { id: parent.id! }); }}
+            title={`Subtask of BK-${parent.id} · ${plainTitle(parent.content).slice(0, 72)}`}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginBottom: 8, padding: '2px 9px 2px 7px', borderRadius: 100, border: '1px solid var(--border-2)', background: 'var(--hover)', color: 'var(--fg-2)', fontSize: 11, fontFamily: 'var(--font-mono)', cursor: 'pointer' }}
+          >
+            <span style={{ color: 'var(--accent)' }}>↳</span>
+            <span>BK-{parent.id}</span>
           </div>
         )}
         <div style={{ color: done ? 'var(--fg-3)' : 'var(--fg)', textDecoration: done ? 'line-through' : 'none' }}>
-          <MarkdownView content={note.content ?? ''} />
+          {/* A task's lone body checkbox duplicates the meta-row toggle — hide it. */}
+          <MarkdownView content={task ? stripLoneCheckbox(note.content ?? '') : (note.content ?? '')} />
         </div>
         {collapsed && (
           <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 48, background: 'linear-gradient(transparent, var(--bg-2))', pointerEvents: 'none' }} />
@@ -399,6 +468,7 @@ const MemoRow = observer(function MemoRow({ note, onOpen, selected, selectionAct
           style={{ display: 'inline-block', marginTop: 4, color: 'var(--accent)', fontSize: 12, cursor: 'pointer', fontFamily: 'var(--font-mono)' }}
         >{expanded ? 'Show less' : 'Show more'}</span>
       )}
+      <AttachmentList attachments={(note as any).attachments} />
       {/* footer: feedback & actions */}
       <div className="h-stack" style={{ gap: 14, marginTop: 8, color: 'var(--fg-3)', fontSize: 12 }}>
         <span className="spacer" />

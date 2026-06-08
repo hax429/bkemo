@@ -19,6 +19,8 @@ import { Trash } from '@/components/bkemo/Trash';
 import { Random } from '@/components/bkemo/Random';
 import { DailyReview } from '@/components/bkemo/DailyReview';
 import { Calendar } from '@/components/bkemo/Calendar';
+import { Graph } from '@/components/bkemo/Graph';
+import { FilesScreen } from '@/components/bkemo/FilesScreen';
 import { Stats } from '@/components/bkemo/Stats';
 import { NoteModal } from '@/components/bkemo/NoteModal';
 import { UserStore } from '@/store/user';
@@ -38,8 +40,9 @@ function ComingSoon({ title }: { title: string }) {
 }
 
 const MORE_ITEMS: { id: BkemoRoute; label: string }[] = [
-  { id: 'inbox', label: 'Inbox' }, { id: 'tomorrow', label: 'Tomorrow' }, { id: 'week', label: 'This week' }, { id: 'matrix', label: 'Matrix' },
-  { id: 'random', label: 'Random' }, { id: 'calendar', label: 'Calendar' }, { id: 'stats', label: 'Stats' }, { id: 'trash', label: 'Trash' },
+  { id: 'tomorrow', label: 'Tomorrow' }, { id: 'week', label: 'This week' }, { id: 'matrix', label: 'Matrix' }, { id: 'random', label: 'Random' },
+  { id: 'calendar', label: 'Calendar' }, { id: 'graph', label: 'Graph' }, { id: 'files', label: 'Files' }, { id: 'stats', label: 'Stats' },
+  { id: 'trash', label: 'Trash' }, { id: 'settings', label: 'Settings' },
 ];
 
 function MoreSheet({ onPick, onClose }: { onPick: (r: BkemoRoute) => void; onClose: () => void }) {
@@ -129,6 +132,8 @@ const BkemoPage = observer(function BkemoPage() {
     if (route === 'random') return <Random onOpen={setEditing} />;
     if (route === 'trash') return <Trash />;
     if (route === 'calendar') return <Calendar onOpen={setEditing} />;
+    if (route === 'graph') return <Graph onOpen={setEditing} showAll={prefs.graphShowAll} />;
+    if (route === 'files') return <FilesScreen />;
     if (route === 'stats') return <Stats />;
     if (route === 'settings') return <SettingsScreen prefs={prefs} onChange={updatePrefs} />;
     if (TODO_VIEWS.includes(route as TodoView)) {

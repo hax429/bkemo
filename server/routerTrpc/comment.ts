@@ -346,7 +346,9 @@ export const commentRouter = router({
               nickname: true,
               image: true
             }
-          }
+          },
+          // Required by commentWithRelationsSchema (the output validator).
+          note: { select: { account: { select: { id: true } } } }
         }
       });
     })

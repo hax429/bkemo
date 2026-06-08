@@ -11,6 +11,8 @@ import FontSwitcher from '@/components/Common/FontSwitcher';
 import LanguageSwitcher from '@/components/Common/LanguageSwitcher';
 import { BkemoSelect } from '@/components/Common/BkemoSelect';
 import { UsersScreen } from './UsersScreen';
+import { SecurityScreen } from './SecurityScreen';
+import { ApiDocsScreen } from './ApiDocsScreen';
 import { BasicSetting } from '@/components/BlinkoSettings/BasicSetting';
 import AiSetting from '@/components/BlinkoSettings/AiSetting/AiSetting';
 import { TaskSetting } from '@/components/BlinkoSettings/TaskSetting';
@@ -27,6 +29,8 @@ const GROUP_OF: Record<string, 'you' | 'system' | 'data'> = {
   prefs: 'you',
   appear: 'you',
   account: 'you',
+  security: 'you',
+  apidocs: 'you',
   ai: 'system',
   task: 'system',
   storage: 'system',
@@ -239,6 +243,9 @@ const Appearance = observer(function Appearance({
       <Row title="Default font" sub="Body font for the bkemo workspace." control={
         <FontSwitcher fontname={currentFont} onChange={onFontChange} />
       } />
+      <Row title="Show all notes in graph" sub="Include notes with no [[ ]] links as isolated nodes in the Graph view. Off shows only the link graph." control={
+        <Toggle on={!!prefs.graphShowAll} onChange={(v) => onChange({ graphShowAll: v })} />
+      } />
     </div>
   );
 });
@@ -428,6 +435,8 @@ const displayTitle = (s: { key: string; title: string }) => {
   if (s.key === 'prefs') return 'Preferences';
   if (s.key === 'appear') return 'Appearance';
   if (s.key === 'account') return 'Account & Users';
+  if (s.key === 'security') return 'Security & API';
+  if (s.key === 'apidocs') return 'API Docs';
   return s.title;
 };
 
@@ -456,6 +465,8 @@ export const SettingsScreen = observer(function SettingsScreen({ prefs, onChange
       ),
     },
     { key: 'account', title: 'Account', icon: 'tabler:user', requireAdmin: false, component: <Account /> },
+    { key: 'security', title: 'Security & API', icon: 'tabler:key', requireAdmin: false, component: <SecurityScreen /> },
+    { key: 'apidocs', title: 'API Docs', icon: 'tabler:code', requireAdmin: false, component: <ApiDocsScreen /> },
     ...(user.canManageSite ? [
       { key: 'ai', title: 'AI', icon: 'hugeicons:ai-beautify', requireAdmin: true, component: <AiSetting /> },
       { key: 'task', title: 'Schedule Task', icon: 'tabler:list-check', requireAdmin: true, component: <TaskSetting /> },

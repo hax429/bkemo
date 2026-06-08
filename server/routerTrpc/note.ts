@@ -905,17 +905,24 @@ export const noteRouter = router({
       if (!originalNote) {
         throw new Error('Note not found or you do not have access');
       }
-      const agent = await AiModelFactory.RelatedNotesAgent();
-      const extractionPrompt = `
+      // Related notes is a semantic (embeddings) feature — when no AI model is
+      // configured the provider throws; degrade gracefully to "no related notes".
+      try {
+        const agent = await AiModelFactory.RelatedNotesAgent();
+        const extractionPrompt = `
         Please extract keywords from the following note content:
-        
+
         ${originalNote.content.substring(0, 2000)}
       `;
-      const keywordsResult = await agent.generate(extractionPrompt);
-      const keywords = keywordsResult.text.trim();
-      console.log("Extracted keywords:", keywords);
-      const { notes } = await AiModelFactory.queryVector(keywords, Number(ctx.id), 10);
-      return notes;
+        const keywordsResult = await agent.generate(extractionPrompt);
+        const keywords = keywordsResult.text.trim();
+        console.log("Extracted keywords:", keywords);
+        const { notes } = await AiModelFactory.queryVector(keywords, Number(ctx.id), 10);
+        return notes;
+      } catch (error) {
+        console.log('related notes unavailable (AI not configured?):', error instanceof Error ? error.message : error);
+        return [];
+      }
     }),
   reviewNote: authProcedure
     .meta({ openapi: { method: 'POST', path: '/v1/note/review', summary: 'Review a note', protect: true, tags: ['Note'] } })
@@ -1247,7 +1254,9 @@ export const noteRouter = router({
               ...(isUrgent !== null && { isUrgent }),
               ...(input.dueDate !== undefined && input.dueDate !== null && { dueDate: toDate(input.dueDate) }),
               ...(input.completedAt !== undefined && input.completedAt !== null && { completedAt: toDate(input.completedAt) }),
-              ...(input.parentNoteId !== undefined && input.parentNoteId !== null && { parentNote: { connect: { id: input.parentNoteId } } }),
+              // Scalar FK (not the `parentNote` relation form) so it can coexist
+              // with the scalar `accountId` above — Prisma rejects mixing them.
+              ...(input.parentNoteId !== undefined && input.parentNoteId !== null && { parentNoteId: input.parentNoteId }),
               ...(input.createdAt && { createdAt: input.createdAt }),
               ...(input.updatedAt && { updatedAt: input.updatedAt }),
               ...(input.metadata && { metadata: input.metadata }),
@@ -1337,7 +1346,9 @@ export const noteRouter = router({
 
           return note;
         } catch (error) {
-          console.log(error);
+          // Don't swallow — a failed create should surface, not return null 200.
+          console.error('note.upsert create failed:', error);
+          throw error;
         }
       }
     }),
@@ -1995,7 +2006,8 @@ export async function deleteNotes(ids: number[], ctx: Context) {
         });
       }
 
-      AiModelFactory.queryAndDeleteVectorById(note.id);
+      // Fire-and-forget; never let a missing AI config reject unhandled.
+      AiModelFactory.queryAndDeleteVectorById(note.id).catch((e) => console.log('delete vector error:', e));
     }
   };
 
