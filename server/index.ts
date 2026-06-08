@@ -245,6 +245,41 @@ async function setupApiRoutes(app: express.Application) {
     }
   }));
 
+  // Human-readable API reference (Redoc) — a clean docs webpage rendered from the
+  // live OpenAPI spec, served alongside the API for users to read.
+  app.get('/docs', (_req, res) => {
+    res.type('html').send(`<!DOCTYPE html>
+<html>
+  <head>
+    <title>bkemo API reference</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" href="/favicon.ico" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet" />
+    <style>body { margin: 0; padding: 0; background: #16171a; }</style>
+  </head>
+  <body>
+    <div id="redoc"></div>
+    <script src="https://cdn.jsdelivr.net/npm/redoc@2/bundles/redoc.standalone.js"></script>
+    <script>
+      Redoc.init('/api/openapi.json', {
+        scrollYOffset: 0,
+        hideDownloadButton: false,
+        expandResponses: '200,201',
+        theme: {
+          colors: { primary: { main: '#e2a96b' } },
+          typography: {
+            fontFamily: 'Inter, system-ui, sans-serif',
+            headings: { fontFamily: 'Inter, system-ui, sans-serif' },
+            code: { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }
+          }
+        }
+      }, document.getElementById('redoc'));
+    </script>
+  </body>
+</html>`);
+  });
+
   // OpenAPI integration
   app.use('/api',
     // @ts-ignore

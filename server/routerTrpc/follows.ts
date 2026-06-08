@@ -32,8 +32,8 @@ export const followsRouter = router({
           value: true
         }
       })
-      const recommandList = res?.value?.[String(ctx.id)] as RecommandListType
-      // console.log(recommandList, 'recommand_list')
+      // No background-job cache yet (fresh instance) → empty recommendations.
+      const recommandList = (res?.value?.[String(ctx.id)] as RecommandListType) ?? []
       return recommandList.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()).filter(item => item.content.includes(searchText))
     }),
   // i want to follow a site

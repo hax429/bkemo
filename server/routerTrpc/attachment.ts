@@ -39,6 +39,8 @@ const mapAttachmentResult = (item: any): AttachmentResult => ({
 
 export const attachmentsRouter = router({
   createFolder: authProcedure
+    .meta({ openapi: { method: 'POST', path: '/v1/attachment/create-folder', summary: 'Create a folder', protect: true, tags: ['Attachment'] } })
+    .output(z.object({ success: z.boolean(), folderName: z.string(), folderPath: z.string() }))
     .input(z.object({
       folderName: z.string(),
       parentFolder: z.string().optional()
@@ -72,7 +74,67 @@ export const attachmentsRouter = router({
         folderPath
       };
     }),
-  
+
+  // Flat list of every file attached across the account's notes (memos / todos /
+  // subtasks) plus standalone uploads, newest first, with the source note. Backs
+  // the Files management page and the public `attachments:read` API.
+  allFiles: authProcedure
+    .meta({ openapi: { method: 'GET', path: '/v1/attachment/all-files', summary: 'List all files across notes', protect: true, tags: ['Attachment'] } })
+    .input(z.object({
+      page: z.number().default(1),
+      size: z.number().default(500),
+      searchText: z.string().optional().default(''),
+    }).optional())
+    .output(z.array(z.object({
+      id: z.number(),
+      name: z.string(),
+      path: z.string(),
+      type: z.string().nullable(),
+      size: z.string().nullable(),
+      noteId: z.number().nullable(),
+      createdAt: z.date().nullable(),
+      note: z.object({ id: z.number(), content: z.string() }).nullable(),
+    })))
+    .query(async ({ input, ctx }) => {
+      const page = input?.page ?? 1;
+      const size = input?.size ?? 500;
+      const searchText = (input?.searchText ?? '').trim();
+      const accountId = Number(ctx.id);
+
+      const where: Prisma.attachmentsWhereInput = {
+        OR: [{ accountId }, { note: { accountId } }],
+        type: { not: 'folder' },
+        name: { not: '.folder' },
+        ...(searchText ? {
+          AND: {
+            OR: [
+              { name: { contains: searchText, mode: 'insensitive' } },
+              { note: { content: { contains: searchText, mode: 'insensitive' } } },
+            ],
+          },
+        } : {}),
+      };
+
+      const rows = await prisma.attachments.findMany({
+        where,
+        include: { note: { select: { id: true, content: true } } },
+        orderBy: { createdAt: 'desc' },
+        take: size,
+        skip: (page - 1) * size,
+      });
+
+      return rows.map((r) => ({
+        id: r.id,
+        name: r.name,
+        path: r.path,
+        type: r.type,
+        size: r.size?.toString() ?? null,
+        noteId: r.noteId,
+        createdAt: r.createdAt,
+        note: r.note ? { id: r.note.id, content: r.note.content } : null,
+      }));
+    }),
+
   list: authProcedure
     .input(z.object({
       page: z.number().default(1),
@@ -399,11 +461,13 @@ export const attachmentsRouter = router({
     }),
 
   delete: authProcedure
+    .meta({ openapi: { method: 'POST', path: '/v1/attachment/delete', summary: 'Delete a file or folder', protect: true, tags: ['Attachment'] } })
     .input(z.object({
       id: z.union([z.number(),z.null()]).optional(),
       isFolder: z.boolean().optional(),
       folderPath: z.string().optional(),
     }))
+    .output(z.object({ success: z.boolean(), message: z.string().optional() }))
     .mutation(async ({ input, ctx }) => {
       const { id, isFolder, folderPath } = input;
 

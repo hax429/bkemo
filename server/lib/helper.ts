@@ -154,6 +154,33 @@ export const generateApiToken = async (user: { id: number, name: string, role: s
   );
 };
 
+/**
+ * Mint a named, scope-limited access token (a JWT carrying expanded permission
+ * paths). `jti` ties it to an `accessToken` row so it can be listed/revoked;
+ * `expSeconds` is the absolute expiry (default: effectively never).
+ */
+export const generateAccessToken = async (
+  user: { id: number; name: string; role: string },
+  permissions: string[],
+  jti: string,
+  expSeconds?: number,
+) => {
+  const secret = await getNextAuthSecret();
+  return jwt.sign(
+    {
+      role: user.role,
+      name: user.name,
+      sub: user.id.toString(),
+      tokenType: 'access',
+      jti,
+      permissions,
+      exp: expSeconds ?? Math.floor(Date.now() / 1000) + (60 * 60 * 24 * 365 * 100),
+      iat: Math.floor(Date.now() / 1000),
+    },
+    secret,
+  );
+};
+
 export const generateToken = async (user: any, twoFactorVerified = false) => {
   const secret = await getNextAuthSecret();
   return jwt.sign(
@@ -181,6 +208,23 @@ export const verifyToken = async (token: string) => {
   }
 };
 
+/**
+ * For managed access tokens (`tokenType: 'access'`), confirm the backing row
+ * still exists (i.e. not revoked) and refresh `lastUsedAt` (throttled to ~1/min
+ * to avoid a write per request). Returns false when the token has been revoked.
+ * Session/legacy tokens have no `tokenType` and always pass.
+ */
+const validateAccessToken = async (tokenData: any): Promise<boolean> => {
+  if (tokenData?.tokenType !== 'access' || !tokenData?.jti) return true;
+  const row = await prisma.accessToken.findUnique({ where: { jti: tokenData.jti } });
+  if (!row) return false; // revoked
+  const now = Date.now();
+  if (!row.lastUsedAt || now - new Date(row.lastUsedAt).getTime() > 60_000) {
+    prisma.accessToken.update({ where: { id: row.id }, data: { lastUsedAt: new Date() } }).catch(() => { /* best-effort */ });
+  }
+  return true;
+};
+
 export const getTokenFromRequest = async (req: ExpressRequest) => {
   try {
     if (req.headers && typeof req.headers === 'object') {
@@ -188,14 +232,14 @@ export const getTokenFromRequest = async (req: ExpressRequest) => {
       if (authHeader) {
         const token = authHeader.replace("Bearer ", "");
         const tokenData = await verifyToken(token);
-        if (tokenData) return { ...tokenData, id: tokenData.sub, token };
+        if (tokenData && await validateAccessToken(tokenData)) return { ...tokenData, id: tokenData.sub, token };
       }
     }
 
     if (req.query && req.query.token) {
       const token = req.query.token as string;
       const tokenData = await verifyToken(token);
-      if (tokenData) return { ...tokenData, id: tokenData.sub, token };
+      if (tokenData && await validateAccessToken(tokenData)) return { ...tokenData, id: tokenData.sub, token };
     }
 
     return null;

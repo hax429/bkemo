@@ -5,6 +5,8 @@ import { BlinkoStore } from "@/store/blinkoStore";
 import { NoteType } from "@shared/lib/types";
 import { parseTaskSyntax } from "@/lib/taskSyntax";
 import { extractNoteLinkIds, noteLinkTitle } from "@/lib/noteLinks";
+import { toUpsertAttachment } from "@/lib/attachments";
+import { useAttachments, PendingAttachments } from "@/components/bkemo/useAttachments";
 import { useEffect, useRef, useState } from "react";
 import { isInTauri } from "@/lib/tauriHelper";
 import { invoke } from "@tauri-apps/api/core";
@@ -16,6 +18,7 @@ const QuickNotePage = observer(() => {
   const { t } = useTranslation();
   const editorRef = useRef<TiptapEditorHandle>(null);
   const [sending, setSending] = useState(false);
+  const att = useAttachments();
   const containerRef = useRef<HTMLDivElement>(null);
   const lastHeightRef = useRef<number>(0);
   const resizeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -149,21 +152,26 @@ const QuickNotePage = observer(() => {
   };
 
   const send = async () => {
+    if (sending) return;
     const raw = editorRef.current?.getMarkdown()?.trim() ?? '';
-    if (!raw || sending) return;
     // Inline task syntax: `-[]` promotes to a task, `due:…` sets the due date.
     const parsed = parseTaskSyntax(raw);
-    if (!parsed.content && !parsed.isTodo) return;
+    if (!parsed.content && !parsed.isTodo && att.items.length === 0) return;
     setSending(true);
     try {
       await blinko.upsertNote.call({
         content: parsed.content,
         type: parsed.isTodo ? NoteType.TODO : NoteType.BLINKO,
         references: extractNoteLinkIds(parsed.content),
+        attachments: att.items.map(toUpsertAttachment),
+        // Priority tags (`#important` / `#urgent`) apply to any memo.
+        isImportant: !!parsed.isImportant,
+        isUrgent: !!parsed.isUrgent,
         ...(parsed.isTodo ? { dueDate: parsed.dueDate ?? null } : {}),
         showToast: false,
       });
       editorRef.current?.clear();
+      att.clear();
       await closeWindow();
     } catch (error) {
       console.error('Quick note save failed:', error);
@@ -186,6 +194,7 @@ const QuickNotePage = observer(() => {
       data-theme={prefs.theme}
       data-density={prefs.density}
       data-preset={preset}
+      {...att.dragProps}
       style={{
         width: '100%', minHeight: '100%', background: 'color-mix(in srgb, var(--bg) 88%, transparent)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', padding: 14, boxSizing: 'border-box',
         ...(prefs.accent ? { ['--accent' as any]: prefs.accent } : {})
@@ -202,13 +211,16 @@ const QuickNotePage = observer(() => {
           return list.filter((n) => n.id != null).map((n) => ({ id: n.id!, title: noteLinkTitle(n.content) }));
         }}
       />
-      <div className="h-stack" style={{ gap: 8, marginTop: 10 }}>
+      {att.fileInput}
+      <PendingAttachments items={att.items} uploading={att.uploading} onRemove={att.remove} />
+      <div className="h-stack" style={{ gap: 8, marginTop: 10, alignItems: 'center' }}>
+        <button onClick={att.openPicker} title="Attach a file" style={{ background: 'transparent', border: 'none', color: 'var(--fg-2)', fontSize: 15, cursor: 'pointer', padding: 2 }}>📎</button>
         <span style={{ color: 'var(--fg-3)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>⌘↵ to save</span>
         <span className="spacer" />
         <button
           onClick={send}
-          disabled={sending}
-          style={{ background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 'var(--radius)', padding: '4px 14px', fontSize: 12, fontWeight: 500, opacity: sending ? 0.6 : 1, cursor: 'pointer' }}
+          disabled={sending || att.uploading > 0}
+          style={{ background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 'var(--radius)', padding: '4px 14px', fontSize: 12, fontWeight: 500, opacity: (sending || att.uploading > 0) ? 0.6 : 1, cursor: 'pointer' }}
         >Send</button>
       </div>
     </div>

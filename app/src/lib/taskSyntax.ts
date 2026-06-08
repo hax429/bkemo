@@ -17,7 +17,7 @@ import dayjs from '@/lib/dayjs';
  */
 
 export type ParsedTaskSyntax = {
-  /** Markdown with the recognized `due:` token removed. */
+  /** Markdown with the recognized `due:`/`#important`/`#urgent` tokens removed. */
   content: string;
   /** True when the content carries a task-list checkbox. */
   isTodo: boolean;
@@ -28,13 +28,58 @@ export type ParsedTaskSyntax = {
    *   - undefined when no recognized `due:` token was present.
    */
   dueDate?: Date | null;
+  /** True when a `#important` tag was present (priority flag, applies to any memo). */
+  isImportant?: boolean;
+  /** True when an `#urgent` tag was present (priority flag, applies to any memo). */
+  isUrgent?: boolean;
 };
 
 /** A markdown task-list item: `- [ ]`, `-[x]`, `* [X]`, `+ []`, etc. */
 const TASK_ITEM_RE = /^[ \t]*[-*+][ \t]*\[[ xX]?\]/m;
 
+/**
+ * A task-list checkbox at the start of a line, possibly with the markdown
+ * punctuation backslash-escaped. The TipTap composer serializes a plain-text
+ * `-[]` (typed without the space its input rule needs) as `\-\[\]`, so we must
+ * tolerate the escapes both when detecting the checkbox and when normalizing it
+ * back to canonical GFM (`- [ ]` / `- [x]`) so it renders as a real checkbox.
+ */
+const ESCAPED_CHECKBOX_RE = /^([ \t]*)\\?[-*+][ \t]*\\?\[[ \t]*([xX]?)[ \t]*\\?\]/gm;
+
 /** First `due:<value>` token, anchored to a word boundary so `https://…` is safe. */
 const DUE_RE = /(^|\s)due:(\S+)/i;
+
+/**
+ * Priority hashtags. `#important` / `#urgent` are a typing shortcut for the
+ * priority flags (same as the `!` / `▲` toolbar buttons) and apply to any memo,
+ * task or not. They are stripped from the saved content so they don't show up as
+ * project tags — the priority dot is the indicator.
+ */
+const IMPORTANT_TAG_RE = /(^|\s)#important(?=$|\s)/i;
+const URGENT_TAG_RE = /(^|\s)#urgent(?=$|\s)/i;
+
+/** Normalize any (possibly escaped) leading checkbox to canonical GFM markup. */
+function normalizeCheckboxes(markdown: string): string {
+  return markdown.replace(ESCAPED_CHECKBOX_RE, (_full, indent: string, mark: string) =>
+    `${indent}- [${mark ? 'x' : ' '}]`,
+  );
+}
+
+/** Canonical task-list checkbox at the start of a line (global, for counting). */
+const CHECKBOX_LINE_RE = /^[ \t]*[-*+][ \t]*\[[ xX]?\]/gm;
+
+/**
+ * A memo promoted to a task with a single `- [ ]` carries a body checkbox that
+ * just duplicates the memo-level task toggle. Strip that lone checkbox marker
+ * (leaving its text) so the card shows one checkbox, not two. Multi-item
+ * checklists (>1 checkbox) are real content and left untouched. No-op otherwise.
+ */
+export function stripLoneCheckbox(markdown: string): string {
+  const normalized = normalizeCheckboxes(markdown);
+  const matches = normalized.match(CHECKBOX_LINE_RE);
+  if (!matches || matches.length !== 1) return markdown;
+  return normalized.replace(/^([ \t]*)[-*+][ \t]*\[[ xX]?\][ \t]*/m, '$1');
+}
 
 /** Resolve a `due:` value to a Date (end of day), null (clear), or undefined (unknown). */
 function parseDueValue(raw: string): Date | null | undefined {
@@ -51,20 +96,29 @@ function parseDueValue(raw: string): Date | null | undefined {
 }
 
 export function parseTaskSyntax(markdown: string): ParsedTaskSyntax {
-  const hasCheckbox = TASK_ITEM_RE.test(markdown);
-  const m = markdown.match(DUE_RE);
+  // Normalize escaped checkbox markup first so detection and the saved content
+  // both see canonical `- [ ]` (TipTap escapes plain-text `-[]` → `\-\[\]`).
+  const normalized = normalizeCheckboxes(markdown);
+  const hasCheckbox = TASK_ITEM_RE.test(normalized);
+  const m = normalized.match(DUE_RE);
   const dueDate = m ? parseDueValue(m[2]) : undefined;
 
-  // Unknown `due:` value (typo / unrelated text) → leave content untouched.
-  if (dueDate === undefined) {
-    return { content: markdown, isTodo: hasCheckbox };
+  // Priority hashtags → flags (stripped from saved content, like `due:`).
+  const isImportant = IMPORTANT_TAG_RE.test(normalized) || undefined;
+  const isUrgent = URGENT_TAG_RE.test(normalized) || undefined;
+
+  // Strip the recognized tokens, keeping the leading separator so words don't collide.
+  let content = normalized
+    .replace(IMPORTANT_TAG_RE, (_full, lead: string) => lead)
+    .replace(URGENT_TAG_RE, (_full, lead: string) => lead);
+  // Only strip the `due:` token when its value was recognized; an unknown value
+  // (typo / unrelated text) is left in place.
+  if (dueDate !== undefined) {
+    content = content.replace(DUE_RE, (_full, lead: string) => lead);
   }
+  // Drop a lone promotion checkbox (redundant with the memo-level task toggle).
+  content = stripLoneCheckbox(content);
+  content = content.replace(/[ \t]+$/gm, '').trim();
 
-  // Strip the token, keeping the leading separator so words don't collide.
-  const content = markdown
-    .replace(DUE_RE, (_full, lead: string) => lead)
-    .replace(/[ \t]+$/gm, '')
-    .trim();
-
-  return { content, isTodo: hasCheckbox || dueDate != null, dueDate };
+  return { content, isTodo: hasCheckbox || dueDate != null, dueDate, isImportant, isUrgent };
 }

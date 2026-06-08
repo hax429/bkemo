@@ -24,6 +24,7 @@ import { aiScheduledTaskRouter } from './aiScheduledTask';
 import { mcpServersRouter } from './mcpServers';
 import { fontRouter } from './font';
 import { reactionRouter } from './reaction';
+import { accessTokenRouter } from './accessToken';
 export const appRouter = router({
   ai: aiRouter,
   notes: noteRouter,
@@ -44,6 +45,7 @@ export const appRouter = router({
   mcpServers: mcpServersRouter,
   fonts: fontRouter,
   reaction: reactionRouter,
+  accessTokens: accessTokenRouter,
 });
 
 export const createCaller = t.createCallerFactory(appRouter);

@@ -13,6 +13,8 @@ export type BkemoPrefs = {
   accent: string;
   density: BkemoDensity;
   bgGradient?: 'none' | 'dusk' | 'warm' | 'aurora';
+  /** Graph view: include notes with no `[[ ]]` links (isolated nodes), not just the link graph. */
+  graphShowAll?: boolean;
 };
 
 export type BkemoPreset = {

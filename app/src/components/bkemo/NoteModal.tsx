@@ -1,5 +1,6 @@
 import { observer } from 'mobx-react-lite';
 import { useEffect, useRef, useState } from 'react';
+import { useMediaQuery } from 'usehooks-ts';
 import dayjs from '@/lib/dayjs';
 import { RootStore } from '@/store';
 import { BlinkoStore } from '@/store/blinkoStore';
@@ -12,6 +13,13 @@ import { UserStore } from '@/store/user';
 import { loadPrefs } from '@/lib/bkemoSettings';
 import { api } from '@/lib/trpc';
 import { eventBus } from '@/lib/event';
+import { MarkdownView } from './MarkdownView';
+import { toUpsertAttachment } from '@/lib/attachments';
+import { useAttachments, PendingAttachments } from './useAttachments';
+import { AttachmentList } from './AttachmentList';
+
+/** Memos past this length auto-open in the distraction-free article reader. */
+const ARTICLE_THRESHOLD = 500;
 
 const pill = (active: boolean, color: string): React.CSSProperties => ({
   padding: '4px 10px', borderRadius: 100, fontSize: 12, fontFamily: 'var(--font-mono)', cursor: 'pointer',
@@ -96,6 +104,16 @@ export const NoteModal = observer(function NoteModal({ note, onClose }: { note: 
   const [done, setDone] = useState(isDone(note));
   const [saving, setSaving] = useState(false);
   const [updateTicker, setUpdateTicker] = useState(0);
+  // Long memos are read as an article by default; the pencil switches to editing.
+  const isLong = (note.content?.length ?? 0) >= ARTICLE_THRESHOLD;
+  const [reading, setReading] = useState(isLong);
+  const readMins = Math.max(1, Math.round((note.content?.trim().split(/\s+/).filter(Boolean).length ?? 0) / 220));
+  // Track live length so the collapse/expand affordance follows what's typed.
+  const [contentLen, setContentLen] = useState(note.content?.length ?? 0);
+  const longEditor = contentLen >= ARTICLE_THRESHOLD;
+  // Full-page (telegra.ph-style) editing: full viewport, centered wide column.
+  const [fullscreen, setFullscreen] = useState(false);
+  const att = useAttachments();
   const [subtasks, setSubtasks] = useState<Note[]>(() => ((note as any).subtasks ?? []) as Note[]);
   const [subtaskText, setSubtaskText] = useState('');
   const [subtaskDue, setSubtaskDue] = useState('');
@@ -184,6 +202,10 @@ export const NoteModal = observer(function NoteModal({ note, onClose }: { note: 
     const parsed = parseTaskSyntax(ref.current?.getMarkdown() ?? note.content ?? '');
     // Inline syntax can promote a memo to a task or set/clear its due date.
     const todo = isTodo || parsed.isTodo;
+    // Priority flags apply to any memo (task or not); toolbar buttons or the
+    // `#important` / `#urgent` tags set them.
+    const flagImportant = important || !!parsed.isImportant;
+    const flagUrgent = urgent || !!parsed.isUrgent;
     const dueValue = parsed.dueDate !== undefined
       ? parsed.dueDate
       : (due ? dayjs(due).endOf('day').toDate() : null);
@@ -195,11 +217,12 @@ export const NoteModal = observer(function NoteModal({ note, onClose }: { note: 
         type: todo ? NoteType.TODO : NoteType.BLINKO,
         // Keep references in sync with the [[memo]] links in the body.
         references: extractNoteLinkIds(parsed.content),
+        // Newly uploaded files (existing ones stay linked server-side).
+        attachments: att.items.map(toUpsertAttachment),
         parentNoteId: parentId,
-        // When demoted from task, clear task attributes; a To-do with no due date
-        // stays in the Inbox lane.
-        isImportant: todo ? important : false,
-        isUrgent: todo ? urgent : false,
+        // Priority is independent of task state; a due date only applies to tasks.
+        isImportant: flagImportant,
+        isUrgent: flagUrgent,
         dueDate: todo ? dueValue : null,
         completedAt: todo && done ? (note.completedAt ? new Date(note.completedAt as any) : new Date()) : null,
         showToast: true,
@@ -217,6 +240,27 @@ export const NoteModal = observer(function NoteModal({ note, onClose }: { note: 
 
   const prefs = loadPrefs();
   const preset = prefs.theme === 'light' ? 'light' : (prefs.accent?.toLowerCase() === '#5e6ad2' ? 'developer' : (prefs.accent?.toLowerCase() === '#e2a96b' ? 'coffee' : 'dusk'));
+  const isMobile = useMediaQuery('(max-width: 768px)');
+  // Track the visual viewport so the bottom sheet sits *above* the on-screen
+  // keyboard (the toolbar stays reachable), like a native composer.
+  const [vvH, setVvH] = useState<number | null>(null);
+  useEffect(() => {
+    const vv = (typeof window !== 'undefined') ? window.visualViewport : null;
+    if (!isMobile || !vv) { setVvH(null); return; }
+    const onResize = () => setVvH(vv.height);
+    onResize();
+    vv.addEventListener('resize', onResize);
+    return () => vv.removeEventListener('resize', onResize);
+  }, [isMobile]);
+
+  // On phones the editor is a bottom sheet that slides up and takes most of the
+  // screen (sits above the keyboard); desktop keeps the centered modal.
+  const sheet = isMobile && !fullscreen;
+  const editContainerStyle: React.CSSProperties = fullscreen
+    ? { width: '100vw', height: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg)' }
+    : sheet
+      ? { width: '100%', height: '92%', maxHeight: '92%', display: 'flex', flexDirection: 'column', background: 'var(--bg)', borderTop: '1px solid var(--border-2)', borderRadius: '18px 18px 0 0', boxShadow: '0 -8px 40px rgba(0,0,0,0.5)', animation: 'bk-sheet-up 0.24s cubic-bezier(0.32,0.72,0,1)' }
+      : { width: 'min(680px, 100%)', maxHeight: '86vh', display: 'flex', flexDirection: 'column', background: 'var(--bg)', border: '1px solid var(--border-2)', borderRadius: 'var(--radius-lg)', boxShadow: '0 16px 48px rgba(0,0,0,0.5)' };
 
   return (
     <div
@@ -225,25 +269,68 @@ export const NoteModal = observer(function NoteModal({ note, onClose }: { note: 
       data-preset={preset}
       onClick={onClose}
       style={{
-        position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
+        position: 'fixed', left: 0, right: 0, top: 0,
+        // On mobile, size the overlay to the visual viewport so a bottom-anchored
+        // sheet rests above the keyboard; otherwise fill the whole viewport.
+        bottom: (isMobile && vvH) ? undefined : 0,
+        height: (isMobile && vvH) ? `${vvH}px` : undefined,
+        zIndex: 60, background: 'rgba(0,0,0,0.5)', display: 'flex',
+        alignItems: (sheet || (reading && isMobile)) ? 'flex-end' : 'center', justifyContent: 'center',
+        padding: (fullscreen || isMobile) ? 0 : 24,
         ...(prefs.accent ? { ['--accent' as any]: prefs.accent } : {})
       }}
     >
+      {reading && (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          style={isMobile
+            ? { width: '100%', height: '96%', display: 'flex', flexDirection: 'column', background: 'var(--bg)', borderTop: '1px solid var(--border-2)', borderRadius: '18px 18px 0 0', boxShadow: '0 -8px 40px rgba(0,0,0,0.5)', animation: 'bk-sheet-up 0.24s cubic-bezier(0.32,0.72,0,1)' }
+            : { width: 'min(900px, 100%)', height: 'calc(100vh - 48px)', display: 'flex', flexDirection: 'column', background: 'var(--bg)', border: '1px solid var(--border-2)', borderRadius: 'var(--radius-lg)', boxShadow: '0 16px 48px rgba(0,0,0,0.5)' }}
+        >
+          {/* reader header */}
+          <div className="h-stack" style={{ padding: '14px 22px', gap: 12, alignItems: 'center', borderBottom: '1px solid var(--border)' }}>
+            <span onClick={onClose} title="Back" className="bk-icon-btn" style={{ cursor: 'pointer', fontSize: 18, color: 'var(--fg-2)', width: 30, height: 30, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8 }}>←</span>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg-3)' }}>{note.id ? `BK-${note.id}` : 'NEW'}{note.createdAt ? ` · ${dayjs(note.createdAt).format('MMM D, YYYY')}` : ''}</span>
+            <span className="spacer" />
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg-3)' }}>{readMins} min read</span>
+            <span onClick={() => setReading(false)} title="Edit" className="bk-icon-btn" style={{ cursor: 'pointer', fontSize: 15, color: 'var(--fg-2)', width: 30, height: 30, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8 }}>✎</span>
+          </div>
+          {/* article body — comfortable long-form typography */}
+          <div className="bk-scroll bk-article" style={{ flex: 1, overflow: 'auto', padding: '28px 24px 96px' }}>
+            <div style={{ maxWidth: 720, margin: '0 auto' }}>
+              {parentId && (
+                <div onClick={() => eventBus.emit('bkemo:open-note', { id: parentId })} className="h-stack" style={{ marginBottom: 24, gap: 8, fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--fg-3)', cursor: 'pointer' }}>
+                  <span style={{ color: 'var(--accent)' }}>↳</span>
+                  <span>subtask of BK-{parentId}</span>
+                  <span style={{ color: 'var(--fg-2)' }}>{linkTitles[parentId] ?? ''}</span>
+                </div>
+              )}
+              <MarkdownView content={note.content ?? ''} />
+              <AttachmentList attachments={(note as any).attachments} />
+            </div>
+          </div>
+        </div>
+      )}
+      {!reading && (
       <div
         onClick={(e) => e.stopPropagation()}
-        style={{ width: 'min(680px, 100%)', maxHeight: '86vh', display: 'flex', flexDirection: 'column', background: 'var(--bg)', border: '1px solid var(--border-2)', borderRadius: 'var(--radius-lg)', boxShadow: '0 16px 48px rgba(0,0,0,0.5)' }}
+        style={editContainerStyle}
       >
+        {sheet && <div style={{ width: 36, height: 4, borderRadius: 2, background: 'var(--border-2)', margin: '8px auto 2px', flexShrink: 0 }} />}
         {/* header */}
         <div className="h-stack" style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', gap: 10, fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg-3)' }}>
           <span>{note.id ? `BK-${note.id}` : 'NEW'}</span>
           <span>·</span>
           <span>{note.createdAt ? dayjs(note.createdAt).format('MMM D, YYYY HH:mm') : ''}</span>
           <span className="spacer" />
+          {isLong && <span onClick={() => setReading(true)} title="Read as article" style={{ cursor: 'pointer', color: 'var(--fg-2)' }}>❏ read</span>}
+          {longEditor && <span onClick={() => setFullscreen((v) => !v)} title={fullscreen ? 'Exit full page' : 'Full-page editor'} style={{ cursor: 'pointer', color: 'var(--fg-2)' }}>{fullscreen ? '⤡ exit' : '⤢ full page'}</span>}
           <span onClick={onClose} style={{ cursor: 'pointer', fontSize: 14 }}>✕</span>
         </div>
 
-        {/* editor */}
-        <div className="bk-scroll" style={{ flex: 1, overflow: 'auto', padding: '16px 18px' }}>
+        {/* editor — long memos collapse to the first lines until expanded */}
+        <div {...att.dragProps} className="bk-scroll" style={{ flex: 1, overflow: 'auto', padding: fullscreen ? '40px 24px 96px' : '16px 18px', maxHeight: (isLong && !fullscreen) ? 240 : undefined, outline: att.dragOver ? '2px dashed var(--accent)' : 'none', outlineOffset: -4 }}>
+          <div className={fullscreen ? 'bk-article-edit' : undefined} style={fullscreen ? { maxWidth: 760, margin: '0 auto', width: '100%' } : undefined}>
           <TiptapEditor
             ref={ref}
             value={note.content ?? ''}
@@ -251,9 +338,12 @@ export const NoteModal = observer(function NoteModal({ note, onClose }: { note: 
             onSubmit={save}
             onChange={(md) => {
               setUpdateTicker((v) => v + 1);
+              setContentLen(md.length);
               setLinkIds(extractNoteLinkIds(md));
               const parsed = parseTaskSyntax(md);
               if (parsed.isTodo && !isTodo) setIsTodo(true);
+              if (parsed.isImportant && !important) setImportant(true);
+              if (parsed.isUrgent && !urgent) setUrgent(true);
               if (parsed.dueDate) setDue(dayjs(parsed.dueDate).format('YYYY-MM-DD'));
               else if (parsed.dueDate === null) setDue('');
             }}
@@ -265,6 +355,10 @@ export const NoteModal = observer(function NoteModal({ note, onClose }: { note: 
                 .map((n) => ({ id: n.id!, title: noteLinkTitle(n.content) }));
             }}
           />
+          {/* Already-attached files + pending uploads. */}
+          <AttachmentList attachments={(note as any).attachments} />
+          {att.fileInput}
+          <PendingAttachments items={att.items} uploading={att.uploading} onRemove={att.remove} />
           {/* This memo is a subtask of another → quick jump to the parent. */}
           {parentId && (
             <div
@@ -342,7 +436,13 @@ export const NoteModal = observer(function NoteModal({ note, onClose }: { note: 
               </div>
             </div>
           )}
+          </div>
         </div>
+
+        {/* Collapsed long memo → jump into the full-page editor. */}
+        {longEditor && !fullscreen && (
+          <div onClick={() => setFullscreen(true)} className="bk-icon-btn" style={{ textAlign: 'center', padding: '8px', borderTop: '1px solid var(--border)', color: 'var(--accent)', fontSize: 12, fontFamily: 'var(--font-mono)', cursor: 'pointer' }}>⤢ Expand to full page</div>
+        )}
 
         {/* task controls — convert to a to-do first, then due/priority/done reveal */}
         <div className="h-stack" style={{ gap: 8, padding: '12px 16px', borderTop: '1px solid var(--border)', flexWrap: 'wrap', alignItems: 'center' }}>
@@ -427,6 +527,17 @@ export const NoteModal = observer(function NoteModal({ note, onClose }: { note: 
             >
               #
             </button>
+            <button
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={att.openPicker}
+              style={{
+                width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6,
+                color: 'var(--fg-2)', fontSize: 15, border: 'none', cursor: 'pointer', transition: 'all 0.12s'
+              }}
+              title="Attach a file (any type)"
+            >
+              📎
+            </button>
           </div>
 
           <span style={{ width: 1, height: 16, background: 'var(--border-2)', margin: '0 4px' }} />
@@ -457,6 +568,7 @@ export const NoteModal = observer(function NoteModal({ note, onClose }: { note: 
           <button onClick={save} disabled={saving} style={{ background: 'var(--accent)', border: 'none', color: '#fff', padding: '5px 14px', borderRadius: 'var(--radius)', fontSize: 12, fontWeight: 500, opacity: saving ? 0.6 : 1 }}>Save · ⌘↵</button>
         </div>
       </div>
+      )}
     </div>
   );
 });

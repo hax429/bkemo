@@ -6,6 +6,8 @@ import { BlinkoStore } from '@/store/blinkoStore';
 import type { Note } from '@shared/lib/types';
 import { isTask, isDone, laneToDueRange } from '@/lib/taskFilters';
 import { MarkdownView } from './MarkdownView';
+import { AttachmentList } from './AttachmentList';
+import { CardFeedback } from './CommentsSection';
 
 const mono: React.CSSProperties = { fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '.10em', color: 'var(--fg-3)', textTransform: 'uppercase' };
 const card: React.CSSProperties = { background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)' };
@@ -21,6 +23,7 @@ const TaskStripItem = observer(function TaskStripItem({ note, onOpen }: { note: 
       >{done ? '✓' : ''}</span>
       <div style={{ fontSize: 13, lineHeight: 1.5, color: done ? 'var(--fg-3)' : 'var(--fg)', textDecoration: done ? 'line-through' : 'none' }}>
         <MarkdownView content={note.content ?? ''} />
+        <AttachmentList attachments={(note as any).attachments} compact />
       </div>
     </div>
   );
@@ -94,6 +97,8 @@ export const DailyReview = observer(function DailyReview({ onOpen }: { onOpen?: 
                 <span style={{ flex: 1 }}>BK-{it.id} · {it.createdAt ? dayjs(it.createdAt).format('MMM D, YYYY').toUpperCase() : ''}</span>
               </div>
               <div style={{ fontSize: i === 0 ? 16 : 14, lineHeight: 1.6, color: 'var(--fg)' }}><MarkdownView content={it.content ?? ''} /></div>
+              <AttachmentList attachments={(it as any).attachments} compact />
+              <CardFeedback note={it} />
             </div>
           ))}
         </div>

@@ -26,7 +26,10 @@ export function MarkdownView({ content }: { content: string }) {
         remarkPlugins={[remarkGfm]}
         components={{
           p: ({ children }) => <p>{hl(children)}</p>,
-          li: ({ children }) => <li>{hl(children)}</li>,
+          // Keep GFM's `contains-task-list` / `task-list-item` classes so task
+          // checkboxes render without a duplicate list bullet (see tiptap.css).
+          ul: ({ node, children, ...props }) => <ul {...props}>{children}</ul>,
+          li: ({ node, children, ...props }) => <li {...props}>{hl(children)}</li>,
           h1: ({ children }) => <h1>{hl(children)}</h1>,
           h2: ({ children }) => <h2>{hl(children)}</h2>,
           h3: ({ children }) => <h3>{hl(children)}</h3>,

@@ -37,6 +37,26 @@ model accounts {
   conversations conversation[]
   sharedNotes   noteInternalShare[]
   aiScheduledTasks aiScheduledTask[]
+  accessTokens  accessToken[]
+}
+
+// Named, scope-limited API access tokens (GitHub-PAT style). The actual bearer
+// credential is a JWT (verified via JWT_SECRET) carrying the expanded permission
+// paths; this row tracks/revokes it by `jti` and stores only a display preview.
+model accessToken {
+  id         Int       @id @default(autoincrement())
+  accountId  Int
+  name       String    @default("") @db.VarChar
+  jti        String    @unique @db.VarChar
+  scopes     Json?     @db.Json
+  preview    String    @default("") @db.VarChar
+  lastUsedAt DateTime? @db.Timestamptz(6)
+  expiresAt  DateTime? @db.Timestamptz(6)
+  createdAt  DateTime  @default(now()) @db.Timestamptz(6)
+
+  account    accounts  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
 }
 
 model attachments {
