@@ -163,6 +163,33 @@
   font-size: 0.85em;
 }
 
+/* Syntax-highlighted fenced code blocks (MarkdownView CodeBlock). */
+.tiptap-content .bk-code-block {
+  position: relative;
+  margin: 0.65em 0;
+}
+.tiptap-content .bk-code-block code,
+.tiptap-content .bk-code-block pre {
+  background: none !important;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  font-size: inherit;
+}
+.tiptap-content .bk-code-block .bk-code-lang {
+  position: absolute;
+  top: 7px;
+  right: 11px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-3, #62666d);
+  opacity: 0.75;
+  pointer-events: none;
+  z-index: 1;
+}
+
 /* Blockquote */
 .tiptap-content blockquote {
   border-left: 2px solid var(--border-2, #2d2f36);

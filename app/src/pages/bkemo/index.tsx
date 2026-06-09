@@ -127,7 +127,7 @@ const BkemoPage = observer(function BkemoPage() {
   const newMemo = () => setEditing({ content: '', type: 2 } as Note);
 
   const render = () => {
-    if (route === 'home') return <Stream onOpen={setEditing} onNew={newMemo} />;
+    if (route === 'home') return <Stream onOpen={setEditing} onNew={newMemo} onExpand={setEditing} />;
     if (route === 'daily') return <DailyReview onOpen={setEditing} />;
     if (route === 'random') return <Random onOpen={setEditing} />;
     if (route === 'trash') return <Trash />;
@@ -140,7 +140,7 @@ const BkemoPage = observer(function BkemoPage() {
       return <Todos view={route as TodoView} onView={(v) => setRoute(v)} onOpen={setEditing} />;
     }
     if (typeof route === 'string' && route.startsWith('tag:')) {
-      return <Stream onOpen={setEditing} onNew={newMemo} tag={route.slice(4)} />;
+      return <Stream onOpen={setEditing} onNew={newMemo} onExpand={setEditing} tag={route.slice(4)} />;
     }
     return <ComingSoon title="bkemo" />;
   };

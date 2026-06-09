@@ -93,7 +93,7 @@ const SubtaskRow = observer(function SubtaskRow({ subtask, onOpen, onRefresh }: 
 });
 
 /** Edit a single memo/task: content (TipTap) + due date + important/urgent + done. */
-export const NoteModal = observer(function NoteModal({ note, onClose }: { note: Note; onClose: () => void }) {
+export const NoteModal = observer(function NoteModal({ note, onClose, startFullscreen }: { note: Note; onClose: () => void; startFullscreen?: boolean }) {
   const blinko = RootStore.Get(BlinkoStore);
   const user = RootStore.Get(UserStore);
   const ref = useRef<TiptapEditorHandle>(null);
@@ -112,8 +112,9 @@ export const NoteModal = observer(function NoteModal({ note, onClose }: { note: 
   const [contentLen, setContentLen] = useState(note.content?.length ?? 0);
   const longEditor = contentLen >= ARTICLE_THRESHOLD;
   // Full-page (telegra.ph-style) editing: full viewport, centered wide column.
-  const [fullscreen, setFullscreen] = useState(false);
-  const att = useAttachments();
+  const [fullscreen, setFullscreen] = useState(!!startFullscreen || !!(note as any).__fullscreen);
+  // Seed pending uploads from a composer "expand" draft so they aren't lost.
+  const att = useAttachments((note as any).__draftAttachments);
   const [subtasks, setSubtasks] = useState<Note[]>(() => ((note as any).subtasks ?? []) as Note[]);
   const [subtaskText, setSubtaskText] = useState('');
   const [subtaskDue, setSubtaskDue] = useState('');
@@ -238,6 +239,16 @@ export const NoteModal = observer(function NoteModal({ note, onClose }: { note: 
     onClose();
   };
 
+  // Closing a NEW note that has content saves it as a draft instead of
+  // discarding (so expanding to the full-page editor never loses your writing).
+  const handleClose = () => {
+    if (saving) return;
+    const md = ref.current?.getMarkdown()?.trim() ?? '';
+    const hasContent = md.length > 0 || att.items.length > 0;
+    if (!note.id && hasContent) save();
+    else onClose();
+  };
+
   const prefs = loadPrefs();
   const preset = prefs.theme === 'light' ? 'light' : (prefs.accent?.toLowerCase() === '#5e6ad2' ? 'developer' : (prefs.accent?.toLowerCase() === '#e2a96b' ? 'coffee' : 'dusk'));
   const isMobile = useMediaQuery('(max-width: 768px)');
@@ -267,7 +278,7 @@ export const NoteModal = observer(function NoteModal({ note, onClose }: { note: 
       className="bkemo"
       data-theme={prefs.theme}
       data-preset={preset}
-      onClick={onClose}
+      onClick={handleClose}
       style={{
         position: 'fixed', left: 0, right: 0, top: 0,
         // On mobile, size the overlay to the visual viewport so a bottom-anchored
@@ -289,7 +300,7 @@ export const NoteModal = observer(function NoteModal({ note, onClose }: { note: 
         >
           {/* reader header */}
           <div className="h-stack" style={{ padding: '14px 22px', gap: 12, alignItems: 'center', borderBottom: '1px solid var(--border)' }}>
-            <span onClick={onClose} title="Back" className="bk-icon-btn" style={{ cursor: 'pointer', fontSize: 18, color: 'var(--fg-2)', width: 30, height: 30, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8 }}>←</span>
+            <span onClick={handleClose} title="Back" className="bk-icon-btn" style={{ cursor: 'pointer', fontSize: 18, color: 'var(--fg-2)', width: 30, height: 30, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8 }}>←</span>
             <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg-3)' }}>{note.id ? `BK-${note.id}` : 'NEW'}{note.createdAt ? ` · ${dayjs(note.createdAt).format('MMM D, YYYY')}` : ''}</span>
             <span className="spacer" />
             <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg-3)' }}>{readMins} min read</span>
@@ -324,8 +335,8 @@ export const NoteModal = observer(function NoteModal({ note, onClose }: { note: 
           <span>{note.createdAt ? dayjs(note.createdAt).format('MMM D, YYYY HH:mm') : ''}</span>
           <span className="spacer" />
           {isLong && <span onClick={() => setReading(true)} title="Read as article" style={{ cursor: 'pointer', color: 'var(--fg-2)' }}>❏ read</span>}
-          {longEditor && <span onClick={() => setFullscreen((v) => !v)} title={fullscreen ? 'Exit full page' : 'Full-page editor'} style={{ cursor: 'pointer', color: 'var(--fg-2)' }}>{fullscreen ? '⤡ exit' : '⤢ full page'}</span>}
-          <span onClick={onClose} style={{ cursor: 'pointer', fontSize: 14 }}>✕</span>
+          <span onClick={() => setFullscreen((v) => !v)} title={fullscreen ? 'Exit full page' : 'Full-page (article) editor'} style={{ cursor: 'pointer', color: 'var(--fg-2)' }}>{fullscreen ? '⤡ exit' : '⤢ full page'}</span>
+          <span onClick={handleClose} style={{ cursor: 'pointer', fontSize: 14 }}>✕</span>
         </div>
 
         {/* editor — long memos collapse to the first lines until expanded */}

@@ -10,8 +10,8 @@ import {
  * `dragProps` to spread on the editor container. Pending uploads are passed to
  * `note.upsert` via `items` (see `toUpsertAttachment`).
  */
-export function useAttachments() {
-  const [items, setItems] = useState<UploadedAttachment[]>([]);
+export function useAttachments(initial?: UploadedAttachment[]) {
+  const [items, setItems] = useState<UploadedAttachment[]>(initial ?? []);
   const [uploading, setUploading] = useState(0);
   const [dragOver, setDragOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);

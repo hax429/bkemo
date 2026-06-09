@@ -68,7 +68,7 @@ const composerPill = (active: boolean, color: string): React.CSSProperties => ({
   color: active ? color : 'var(--fg-2)',
 });
 
-const Composer = observer(function Composer() {
+const Composer = observer(function Composer({ onExpand }: { onExpand?: (draft: Note) => void }) {
   const blinko = RootStore.Get(BlinkoStore);
   const ref = useRef<TiptapEditorHandle>(null);
   const [content, setContent] = useState('');
@@ -129,6 +129,26 @@ const Composer = observer(function Composer() {
     } finally {
       setSending(false);
     }
+  };
+
+  // Move the current draft into the full-page (article) editor, keeping content,
+  // task flags, due date, and any pending uploads.
+  const expand = () => {
+    const md = ref.current?.getMarkdown() ?? '';
+    const todo = isTodo || parseTaskSyntax(md).isTodo;
+    const draft = {
+      content: md,
+      type: todo ? NoteType.TODO : NoteType.BLINKO,
+      isImportant: important,
+      isUrgent: urgent,
+      dueDate: due ? dayjs(due).endOf('day').toDate() : null,
+      __fullscreen: true,
+      __draftAttachments: att.items,
+    } as unknown as Note;
+    onExpand?.(draft);
+    ref.current?.clear();
+    setContent('');
+    reset();
   };
 
   const showChrome = focused || content.trim().length > 0 || att.items.length > 0 || att.uploading > 0;
@@ -260,6 +280,17 @@ const Composer = observer(function Composer() {
               title="Attach a file (any type)"
             >
               📎
+            </button>
+            <button
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={expand}
+              style={{
+                width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6,
+                color: 'var(--fg-2)', fontSize: 14, border: 'none', cursor: 'pointer', transition: 'all 0.12s'
+              }}
+              title="Expand to full-page (article) editor"
+            >
+              ⤢
             </button>
 
             <span style={{ width: 1, height: 16, background: 'var(--border-2)', margin: '0 6px' }} />
@@ -481,7 +512,7 @@ const MemoRow = observer(function MemoRow({ note, onOpen, selected, selectionAct
   );
 });
 
-export const Stream = observer(function Stream({ onOpen, onNew, tag }: { onOpen?: (n: Note) => void; onNew?: () => void; tag?: string }) {
+export const Stream = observer(function Stream({ onOpen, onNew, onExpand, tag }: { onOpen?: (n: Note) => void; onNew?: () => void; onExpand?: (draft: Note) => void; tag?: string }) {
   const blinko = RootStore.Get(BlinkoStore);
   const cfg = getBkemoConfig();
   const [allNotes, setAllNotes] = useState<Note[]>([]);
@@ -629,7 +660,7 @@ export const Stream = observer(function Stream({ onOpen, onNew, tag }: { onOpen?
       <div className="bk-scroll" style={{ flex: 1, overflow: 'auto' }}>
         <div style={{ maxWidth: maxW, margin: '0 auto', padding: '20px 20px 48px' }}>
           {showComposer ? (
-            <Composer />
+            <Composer onExpand={onExpand} />
           ) : (
             <div
               onClick={onNew}
