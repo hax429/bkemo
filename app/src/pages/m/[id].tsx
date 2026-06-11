@@ -4,6 +4,9 @@ import dayjs from '@/lib/dayjs';
 import { api } from '@/lib/trpc';
 import { getGuestId, getGuestName, setGuestName } from '@/lib/guestId';
 import { MarkdownView } from '@/components/bkemo/MarkdownView';
+import { AttachmentList } from '@/components/bkemo/AttachmentList';
+import { GradientBackground } from '@/components/Common/GradientBackground';
+import { loadPrefs } from '@/lib/bkemoSettings';
 import { observer } from 'mobx-react-lite';
 import { RootStore } from '@/store';
 import { UserStore } from '@/store/user';
@@ -13,7 +16,7 @@ import '@/styles/bkemo-theme.css';
 
 const REACTION_PALETTE = ['👍', '❤️', '🎉', '👀', '🔥', '💯'];
 
-type PublicNote = { id: number; content: string; createdAt?: string | Date; tags?: any[] } | null;
+type PublicNote = { id: number; content: string; createdAt?: string | Date; tags?: any[]; attachments?: any[] } | null;
 type Reaction = { emoji: string; count: number; reactedByMe: boolean };
 type Comment = {
   id: number;
@@ -44,6 +47,15 @@ const PublicMemoPage = observer(function PublicMemoPage() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   const user = RootStore.Get(UserStore);
+
+  // Follow the viewer's saved bkemo appearance (theme + accent) so the share
+  // page matches the app instead of a hardcoded palette.
+  const prefs = loadPrefs();
+  const preset = prefs.theme === 'light'
+    ? 'light'
+    : (prefs.accent?.toLowerCase() === '#5e6ad2'
+        ? 'developer'
+        : (prefs.accent?.toLowerCase() === '#e2a96b' ? 'coffee' : 'dusk'));
 
   const loadNote = useCallback(async (pw?: string) => {
     setLoading(true);
@@ -182,13 +194,15 @@ const PublicMemoPage = observer(function PublicMemoPage() {
   };
 
   return (
+    <GradientBackground accent={prefs.accent} theme={prefs.theme}>
     <div
       className="bkemo bk-scroll"
-      data-theme="dark"
+      data-theme={prefs.theme}
+      data-preset={preset}
       style={{
-        position: 'fixed', inset: 0, zIndex: 100, overflow: 'auto',
-        background: 'radial-gradient(1200px 800px at 20% 10%, #4b2db8 0%, transparent 55%), radial-gradient(1000px 700px at 90% 80%, #c23cc2 0%, transparent 55%), #0a0a12',
+        position: 'absolute', inset: 0, overflow: 'auto', background: 'transparent',
         display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '6vh 20px 80px',
+        ['--accent' as any]: prefs.accent,
       }}
     >
       <div style={{ width: 'min(760px, 100%)' }}>
@@ -205,7 +219,7 @@ const PublicMemoPage = observer(function PublicMemoPage() {
         ) : note ? (
           <>
             {/* memo card */}
-            <div style={{ background: 'rgba(10,10,18,0.55)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 20, padding: '28px 32px', boxShadow: '0 24px 64px rgba(0,0,0,0.4)' }}>
+            <div style={{ background: 'rgba(8,8,14,0.78)', backdropFilter: 'blur(28px)', WebkitBackdropFilter: 'blur(28px)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 20, padding: '28px 32px', boxShadow: '0 24px 64px rgba(0,0,0,0.5)' }}>
               <div className="h-stack" style={{ gap: 10, marginBottom: 14 }}>
                 <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'rgba(255,255,255,0.55)' }}>{note.createdAt ? dayjs(note.createdAt).format('YYYY-MM-DD HH:mm:ss') : ''}</span>
                 <span className="spacer" />
@@ -215,6 +229,10 @@ const PublicMemoPage = observer(function PublicMemoPage() {
               <div style={{ color: '#fff' }}>
                 <MarkdownView content={note.content ?? ''} />
               </div>
+              {/* attachments */}
+              {Array.isArray(note.attachments) && note.attachments.length > 0 && (
+                <AttachmentList attachments={note.attachments as any} />
+              )}
               {/* tags */}
               {Array.isArray(note.tags) && note.tags.length > 0 && (
                 <div className="h-stack" style={{ gap: 8, marginTop: 18, flexWrap: 'wrap' }}>
@@ -254,12 +272,14 @@ const PublicMemoPage = observer(function PublicMemoPage() {
               {/* composer */}
               {user.isLogin ? (
                 <div style={{
-                  background: 'rgba(255,255,255,0.03)',
-                  border: '1px solid rgba(255,255,255,0.08)',
+                  background: 'rgba(8,8,14,0.72)',
+                  backdropFilter: 'blur(28px)',
+                  WebkitBackdropFilter: 'blur(28px)',
+                  border: '1px solid rgba(255,255,255,0.12)',
                   borderRadius: 16,
                   padding: 16,
                   marginBottom: 20,
-                  boxShadow: '0 4px 20px rgba(0,0,0,0.15)'
+                  boxShadow: '0 8px 28px rgba(0,0,0,0.4)'
                 }}>
                   <div className="h-stack" style={{ gap: 10, marginBottom: 12, alignItems: 'center' }}>
                     {user.image ? (
@@ -318,12 +338,14 @@ const PublicMemoPage = observer(function PublicMemoPage() {
                 </div>
               ) : (
                 <div style={{
-                  background: 'rgba(255,255,255,0.03)',
-                  border: '1px solid rgba(255,255,255,0.08)',
+                  background: 'rgba(8,8,14,0.72)',
+                  backdropFilter: 'blur(28px)',
+                  WebkitBackdropFilter: 'blur(28px)',
+                  border: '1px solid rgba(255,255,255,0.12)',
                   borderRadius: 16,
                   padding: 16,
                   marginBottom: 20,
-                  boxShadow: '0 4px 20px rgba(0,0,0,0.15)'
+                  boxShadow: '0 8px 28px rgba(0,0,0,0.4)'
                 }}>
                   <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
@@ -509,6 +531,7 @@ const PublicMemoPage = observer(function PublicMemoPage() {
         ) : null}
       </div>
     </div>
+    </GradientBackground>
   );
 });
 

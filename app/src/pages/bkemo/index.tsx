@@ -8,6 +8,9 @@ import { api } from '@/lib/trpc';
 import type { Note } from '@shared/lib/types';
 import { loadPrefs, savePrefs, hydratePrefs, type BkemoPrefs } from '@/lib/bkemoSettings';
 import { getBkemoConfig } from '@/lib/bkemoConfig';
+import { isInTauri } from '@/lib/tauriHelper';
+import { isTask } from '@/lib/taskFilters';
+import { ensureNotificationPermission, syncTaskNotifications } from '@/lib/taskNotifications';
 import { FontManager } from '@/lib/fontManager';
 import { SettingsScreen } from '@/components/bkemo/SettingsScreen';
 import { BkemoLayout } from '@/components/bkemo/BkemoLayout';
@@ -123,6 +126,25 @@ const BkemoPage = observer(function BkemoPage() {
   useEffect(() => {
     if (cfg.closeDailyReview && route === 'daily') setRoute('home');
   }, [cfg.closeDailyReview, route]);
+
+  // Native task reminders: in the desktop/mobile app, schedule OS notifications
+  // for open tasks at their due time. Reconciles on note changes + reconnect.
+  useEffect(() => {
+    if (!isInTauri() || prefs.taskReminders === false) return;
+    const blinko = RootStore.Get(BlinkoStore);
+    let cancelled = false;
+    const sync = async () => {
+      try {
+        if (!(await ensureNotificationPermission())) return;
+        const tasks = await blinko.queryNotes({ type: -1, isCompleted: false }, 1, 500);
+        if (!cancelled) await syncTaskNotifications(tasks.filter(isTask));
+      } catch (e) { console.warn('[notif] task sync failed:', e); }
+    };
+    sync();
+    eventBus.on('app:online', sync);
+    return () => { cancelled = true; eventBus.off('app:online', sync); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefs.taskReminders, RootStore.Get(BlinkoStore).updateTicker]);
 
   const newMemo = () => setEditing({ content: '', type: 2 } as Note);
 

@@ -133,17 +133,27 @@ ANTHROPIC_API_KEY=
 4. **State Management**: Follow MobX patterns in store files
 5. **Component Structure**: React components follow a modular structure with separate index.tsx files
 
-## Deployment
+## Workflow & Deployment
 
-### Docker
-```bash
-docker-compose -f docker-compose.prod.yml up -d
-```
+**This machine is the local dev + testing server.** The loop is: edit → `./run-dev.sh`
+(http://localhost:1111) → **the user tests** → on the user's go-ahead, commit + push
+to `github.com/hax429/bkemo` (`main`) → deploy to the cloud. **Never commit, push,
+`ssh Oracle`, or deploy on your own initiative — only after the user confirms the
+local test passed.** Full loop + rules in [`WORKFLOW.md`](./WORKFLOW.md).
 
-### Manual Deployment
-1. Build the application: `bun run build:web`
-2. Run migrations: `bun run prisma:migrate:deploy`
-3. Start the server: `bun run start`
+Production is **source-built**, not Docker: host alias **`Oracle`** (`ubuntu@129.80.246.6`),
+repo at `/home/ubuntu/services/notes/bkemo`, run by `bkemo.service` (systemd,
+`bun dist/index.js`, port 1111), behind nginx as **https://bk.hax429.me** — the
+default endpoint the iOS/macOS shells connect to. Deploy = `git pull` + `bun install`
+(if deps) + `prisma migrate deploy` (if schema) + `bun run build:web` + `build:seed`
++ `systemctl restart bkemo` (see [`DEPLOYMENT.md`](./DEPLOYMENT.md) §11 / `WORKFLOW.md` §3).
+A server restart updates the web + Tauri-shell frontend on next client launch.
+
+### Roadmap / what's next (planned, recorded in the per-area docs)
+- **iOS**: flip the window URL to `bundle://localhost` after an on-device OTA test, then TestFlight ([`IOS.md`](./IOS.md)).
+- **macOS**: global-shortcut **Quick Note** (Apple-Quick-Note style) + more native chrome ([`MAC.md`](./MAC.md)).
+- **MCP server** over the existing scoped-token REST API ([`MCP.md`](./MCP.md)).
+- **Native direction**: macOS + iOS should lean on native elements (panels, menus, notifications, fast offline) while keeping **one coherent web UI** across web/mobile/desktop ([`MOBILE_CLIENT_DESIGN.md`](./MOBILE_CLIENT_DESIGN.md) §1).
 
 ## Port Configuration
 - Frontend/Full App: 1111 (default)
@@ -152,12 +162,12 @@ docker-compose -f docker-compose.prod.yml up -d
 ## Mobile / Desktop App (Tauri)
 
 - Android development: `bun run tauri:android:dev`
-- iOS / macOS: see [`IOS.md`](./IOS.md) for the full plan, build process, debug commands, and verification checklists.
+- iOS / macOS: see [`IOS.md`](./IOS.md) and [`MAC.md`](./MAC.md) for the full plan, build process, debug commands, and verification checklists. Client design + remaining gaps live in [`MOBILE_CLIENT_DESIGN.md`](./MOBILE_CLIENT_DESIGN.md).
 - Custom plugin in `/app/tauri-plugin-blinko/`
 
 ### iOS / macOS architecture in one paragraph
 
-The iOS and macOS apps are Tauri v2 WKWebView shells with native Swift/Rust plugins for status-bar, share sheet, and permissions. They ship **no backend code** — all data calls go to `https://bk.hax429.me` via `getBlinkoEndpoint()` (`app/src/lib/blinkoEndpoint.ts`). Offline support is provided by IndexedDB note cache (`noteCache.ts`), localStorage operation queues (`blinkoStore.tsx` — `offlineNoteStorage` + `offlinePendingOps`), and a filesystem attachment cache (`attachmentCache.ts`); the queues are replayed on the `app:online` event. Currently the iOS app loads its shell from the remote URL on every launch (`devUrl` in `tauri.ios.conf.json`), which means **a cold launch with no network shows a blank screen**. Phase 8 (in progress) introduces an OTA bundle updater: a `bundle://localhost` URI scheme served from a downloaded bundle in AppData, with a build-time `dist/public/app-bundle/{manifest.json, bundle-<ver>.zip}` produced by `scripts/build-app-bundle.ts` on every `bun run build:web`. The frontend on the server still updates the app automatically — just on the next launch instead of on every launch — and offline cold-launch works because the shell lives on disk. macOS keeps the existing `tauri-plugin-updater` GitHub-releases path (Gatekeeper/notarization make runtime-extracted code paths painful on macOS).
+The iOS and macOS apps are Tauri v2 WKWebView shells with native Swift/Rust plugins for status-bar, share sheet, and permissions. They ship **no backend code** — all data calls go to `https://bk.hax429.me` via `getBlinkoEndpoint()` (`app/src/lib/blinkoEndpoint.ts`, which defaults to that URL in Tauri). Offline support is provided by IndexedDB note cache (`noteCache.ts`), localStorage operation queues (`blinkoStore.tsx` — `offlineNoteStorage` + `offlinePendingOps`), and a filesystem attachment cache (`attachmentCache.ts`); the queues are replayed on the `app:online` event. iOS production builds **bundle the frontend** (`frontendDist: "../../dist/public"` in `tauri.ios.conf.json`, Phase 4.5), so cold-launch offline works. **Phase 8 OTA** (auto frontend update without a store release) is implemented in Rust but **landed behind the baseline**: `app/src-tauri/src/bundle_resolver.rs` + `bundle_updater.rs` resolve/serve and fetch-verify-extract bundles under AppData, the `bundle://localhost` URI scheme is registered (mobile) and the updater is spawned in `setup()`, fed by `dist/public/app-bundle/{manifest.json, bundle-<ver>.zip}` from `scripts/build-app-bundle.ts` (`bun run build:web:ota`). The window still loads `tauri://localhost` (baked baseline) until a one-line URL flip is device-verified. **Task notifications** (`app/src/lib/taskNotifications.ts` + `tauri-plugin-notification`) are wired but need a native rebuild to activate. macOS keeps the existing `tauri-plugin-updater` GitHub-releases path for native changes (Gatekeeper/notarization make runtime-extracted code paths painful on macOS); its headline pending feature is the global-shortcut **Quick Note** ([`MAC.md`](./MAC.md)).
 
 ## Key Dependencies Notes
 - Uses Bun as package manager and runtime

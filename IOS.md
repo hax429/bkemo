@@ -27,7 +27,7 @@ Make the iOS and macOS apps feel like real applications on top of the `bk.hax429
 | G7 | iOS share sheet for file downloads | Tapping download opens iOS share sheet | ✅ Done |
 | G8 | iOS status bar color syncs with theme | Dark/light mode changes status bar tint | ✅ Done |
 | G9 | **Cold-launch offline** | Airplane mode at app start → shell still loads, can capture notes | ✅ Done (build-time bundle, 2026-05-25) |
-| G10 | **Auto frontend update from server** | Push to `dist/public` on server → next app launch shows new code | ⏳ Pending (Phase 8 — OTA) |
+| G10 | **Auto frontend update from server** | Push to `dist/public` on server → next app launch shows new code | 🟡 OTA Rust layer landed behind baseline (`bundle_resolver`/`bundle_updater` + `bundle://` scheme); needs window-URL flip + on-device test |
 | G11 | App Store / TestFlight ready | Passes Xcode archive + App Store validation | ⏳ Pending |
 
 ---
@@ -133,9 +133,9 @@ iOS dev (`tauri:ios:dev`) still uses `devUrl: "https://bk.hax429.me"` for fast i
 | 4 | Enhanced Offline Support (queue, sync, attachment cache) | ✅ Complete | 2026-04-25 |
 | 4.5 | Build-time bundled frontend (G9 — cold-launch offline) | ✅ Complete | 2026-05-25 |
 | 5 | macOS Polish (signing, distribution) | ⏳ Pending | — |
-| 6 | Testing Suite (offline queue + helpers unit tests) | ⏳ Pending | — |
+| 6 | Testing Suite (offline queue + helpers unit tests) | 🟡 Partial (helper + endpoint + Rust unit tests; store-queue tests deferred) | — |
 | 7 | Distribution (TestFlight / GitHub releases) | ⏳ Pending | — |
-| **8** | **OTA Bundle Updater (G10 — auto frontend update without rebuild)** | ⏳ Pending | — |
+| **8** | **OTA Bundle Updater (G10 — auto frontend update without rebuild)** | 🟡 Rust layer landed behind baseline; window-URL flip + on-device test pending | — |
 
 ### Phase 0–4 — completed work summary
 
@@ -161,10 +161,12 @@ iOS dev (`tauri:ios:dev`) still uses `devUrl: "https://bk.hax429.me"` for fast i
 | 8a | Design OTA protocol (manifest, on-device layout, fallback) | ✅ See §2.2 |
 | 8b | Server: `scripts/build-app-bundle.ts` produces `dist/public/app-bundle/{manifest.json, bundle-<ver>.zip}`; wire into `app/package.json:build:web` | ⏳ Pending |
 | 8c | App: switch `tauri.ios.conf.json` from `devUrl` to `frontendDist` | ✅ Done in Phase 4.5 (window URL still `tauri://localhost/index.html`; OTA will swap to `bundle://localhost/index.html` later) |
-| 8d | App: Rust `bundle_updater` module — fetch manifest, download, verify SHA-256, extract, flip pointer | ⏳ Pending |
-| 8e | App: Rust `bundle_resolver` + custom URI scheme `bundle://localhost/` — serves from active extracted bundle, falls back to baseline | ⏳ Pending |
+| 8d | App: Rust `bundle_updater` module — fetch manifest, download, verify SHA-256, extract, flip pointer | ✅ Done (`src/bundle_updater.rs`) |
+| 8e | App: Rust `bundle_resolver` + custom URI scheme `bundle://localhost/` — serves from active extracted bundle, falls back to baseline | ✅ Done (`src/bundle_resolver.rs` + `bundle://` scheme in `lib.rs`) |
 | 8f | App: `app/src/lib/blinkoEndpoint.ts` — default endpoint to `https://bk.hax429.me` if unset; keep prompt as override | ✅ Done in Phase 4.5 |
-| 8g | Verification: airplane-mode cold launch → shell loads (✅ in Phase 4.5) → online → new bundle downloaded → next launch uses new bundle | ⏳ Pending (OTA portion) |
+| 8g | Verification: airplane-mode cold launch → shell loads (✅ in Phase 4.5) → online → new bundle downloaded → next launch uses new bundle | ⏳ Pending on-device — **window URL flip outstanding** (see below) |
+
+> **Status (this change):** the OTA Rust layer (8d/8e) is implemented and **landed behind the current baseline** — the `bundle://` scheme is registered and the background updater downloads/verifies/installs bundles, but the iOS window still loads `tauri://localhost/index.html` (the baked baseline). Validated on desktop + `aarch64-apple-ios-sim` via `cargo check`/`cargo test` (resolver + updater unit tests pass); it has **not** been built/signed or run on a device. The remaining step to activate OTA is a **one-line flip** of the window URL to `bundle://localhost/index.html` in `tauri.ios.conf.json`, done only after the on-device cold-launch + update test in 8g passes.
 
 ---
 
@@ -650,38 +652,53 @@ networksetup -setairportpower en0 on     # on
 | `app/src-tauri/tauri.ios.conf.json` | Phase 4.5 — added `frontendDist` + `beforeBuildCommand` (G9) | ✅ |
 | `app/src/lib/blinkoEndpoint.ts` | Phase 4.5 — default endpoint to `https://bk.hax429.me` in Tauri | ✅ |
 
-### Planned (Phase 8 — OTA)
+### Phase 8 — OTA
 
 | File | Change | Status |
 |------|--------|--------|
-| `scripts/build-app-bundle.ts` | Create — produce `manifest.json` + `bundle-<ver>.zip` after vite build | ⏳ |
-| `app/package.json` | `build:web` post-step calls bundle generator | ⏳ |
-| `app/src-tauri/tauri.ios.conf.json` | Remove `devUrl`; add `frontendDist`; window URL `bundle://localhost/index.html` | ⏳ |
-| `app/src-tauri/Cargo.toml` | Add deps `zip`, `sha2`, `reqwest` (or use `tauri-plugin-http`) | ⏳ |
-| `app/src-tauri/src/bundle_updater.rs` | Create — fetch manifest, download, verify, extract, flip pointer | ⏳ |
-| `app/src-tauri/src/bundle_resolver.rs` | Create — resolves a request path → file path in active bundle or baseline | ⏳ |
-| `app/src-tauri/src/lib.rs` | Register `bundle://` URI scheme; spawn updater task on `setup()` | ⏳ |
-| `app/src/lib/blinkoEndpoint.ts` | Default endpoint to `https://bk.hax429.me` if unset | ⏳ |
+| `scripts/build-app-bundle.ts` | Create — produce `manifest.json` + `bundle-<ver>.zip` after vite build | ✅ |
+| `app/package.json` | `bundle:ota` / `build:web:ota` scripts call the bundle generator | ✅ |
+| `app/src-tauri/Cargo.toml` | Add deps `zip`, `sha2`, `reqwest` (rustls) | ✅ |
+| `app/src-tauri/src/bundle_resolver.rs` | Create — resolve request path → file in active bundle (mime, atomic state, traversal guard) + unit tests | ✅ |
+| `app/src-tauri/src/bundle_updater.rs` | Create — fetch manifest, download, SHA-256 verify, extract, flip pointer, prune + unit tests | ✅ |
+| `app/src-tauri/src/lib.rs` | Register `bundle://` URI scheme (mobile); spawn updater on `setup()` | ✅ |
+| `app/src/lib/blinkoEndpoint.ts` | Default endpoint to `https://bk.hax429.me` if unset | ✅ (Phase 4.5) |
+| `app/src-tauri/tauri.ios.conf.json` | **Flip** window URL to `bundle://localhost/index.html` | ⏳ — after on-device 8g test |
 
-### Planned (Phase 6 — Tests)
+### Phase 6 — Tests
 
 | File | Change | Status |
 |------|--------|--------|
-| `app/src/store/__tests__/offlineQueue.test.ts` | Offline queue unit tests | ⏳ |
-| `app/src/lib/__tests__/tauriHelper.test.ts` | Platform detection unit tests | ⏳ |
-| `app/src/lib/__tests__/attachmentCache.test.ts` | Cache unit tests | ⏳ |
+| `app/vitest.config.ts` | Create — jsdom env + `@`/`@shared` aliases; `test` script in `package.json` | ✅ |
+| `app/src/lib/__tests__/taskNotifications.test.ts` | `notificationId` determinism / 31-bit range tests | ✅ |
+| `app/src/lib/__tests__/blinkoEndpoint.test.ts` | Tauri-default / saved-override / web-origin endpoint tests | ✅ |
+| `bundle_resolver.rs` / `bundle_updater.rs` `#[cfg(test)]` | Rust unit tests (normalize, mime, sha256, version compare, zip roundtrip) | ✅ |
+| `app/src/store/__tests__/offlineQueue.test.ts` | Offline queue ordering — **deferred** (needs pure-reducer extraction; MobX/tRPC-coupled) | ⏳ |
 
 ---
 
 ## 9. Next Steps
 
-After Phase 4.5 shipped (cold-launch offline via build-time bundle on 2026-05-25), in priority order:
+> **Related docs:** [`WORKFLOW.md`](./WORKFLOW.md) (how a change reaches production),
+> [`MAC.md`](./MAC.md) (macOS native + Quick Note), [`MCP.md`](./MCP.md) (MCP server
+> over the REST API), [`MOBILE_CLIENT_DESIGN.md`](./MOBILE_CLIENT_DESIGN.md) (client
+> design + the coherent-UI contract).
+>
+> **Native direction (locked):** iOS + macOS should lean on native elements (panels,
+> menus, notifications, share sheets, fast offline) to feel quick — but the *content*
+> stays the one shared web UI. No platform forks of screens; native code only wraps it.
 
-1. **Test on physical iPhone** — follow §5.1 Steps 0–5. This is the validation gate for Phase 4.5; nothing else should happen until offline cold-launch is confirmed on Gabriel Wang's iPhone 17 Pro Max.
-2. **Phase 7 — TestFlight upload** (§5.5). Once §5.1 verifies on one device, push to TestFlight so the build is reproducible and reachable on devices without a paired Mac. Pre-req: a one-time App Store Connect listing for `me.hax429.bk`.
-3. **Phase 6 — Tests.** Lock in regression coverage for the offline queue (`offlinePendingOps`, `offlineNoteStorage`, `syncOfflineNotes` ordering) and `blinkoEndpoint.ts` default behavior before more refactors layer on top. Files planned in §8.
-4. **Phase 8 — OTA bundle updater** (delivers G10). Only worth doing once you start shipping frontend changes that you don't want to push through TestFlight every time. Phase 4.5 already covers tasks 8c and 8f, so the remaining work is server-side bundle generation + Rust updater/resolver.
-5. **Phase 5 — macOS polish.** Signing, notarization, GitHub releases. Independent of iOS work — schedule whenever a macOS distribution is needed.
+Status update (this change): **Phase 6** partially landed (helper/endpoint vitest
++ Rust unit tests; store-queue tests deferred) and **Phase 8** Rust layer landed
+behind the baseline (`bundle_resolver`/`bundle_updater` + `bundle://` scheme;
+window-URL flip pending). Remaining, in priority order:
+
+1. **Test on physical iPhone** — follow §5.1 Steps 0–5. Validation gate for Phase 4.5 + the OTA path; confirm offline cold-launch on Gabriel Wang's iPhone 17 Pro Max.
+2. **Flip the OTA window URL** to `bundle://localhost/index.html` in `tauri.ios.conf.json` once §5.1 + an OTA download/update cycle pass on-device (Phase 8 task 8g). One-line change; activates auto frontend updates.
+3. **Phase 7 — TestFlight upload** (§5.5). Pre-req: a one-time App Store Connect listing for `me.hax429.bk`.
+4. **Activate task notifications** — needs a native rebuild (Cargo/Xcode); JS + wiring already landed. Create a task due in ~2 min, background the app, confirm the banner.
+5. **Phase 5 / macOS** — signing, notarization, GitHub releases, and the global-shortcut Quick Note ([`MAC.md`](./MAC.md)). Independent of iOS.
+6. **Phase 6 remainder** — extract a pure offline-queue reducer and cover `syncOfflineNotes` ordering.
 
 ---
 

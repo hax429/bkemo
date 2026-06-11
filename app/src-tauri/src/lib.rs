@@ -4,6 +4,13 @@ mod desktop;
 use desktop::*;
 use tauri::Manager;
 
+// OTA frontend bundle (Phase 8). Compiled on all targets so a desktop build
+// type-checks them; only wired into the runtime on mobile (see below).
+#[allow(dead_code)]
+mod bundle_resolver;
+#[allow(dead_code)]
+mod bundle_updater;
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let mut builder = tauri::Builder::default()
@@ -14,6 +21,7 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_blinko::init())
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init());
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -94,9 +102,44 @@ pub fn run() {
 
     #[cfg(any(target_os = "android", target_os = "ios"))]
     {
+        use std::borrow::Cow;
+        use tauri::http::{header::CONTENT_TYPE, Response};
+
         builder
+            // OTA bundle scheme (Phase 8). Registered so downloaded bundles can be
+            // served; the window URL still loads `tauri://localhost` (baked baseline)
+            // until the one-line flip to `bundle://localhost/index.html` is verified
+            // on-device. Serves from the active extracted bundle, falling back to the
+            // baked-in baseline asset, then 404.
+            .register_uri_scheme_protocol("bundle", |ctx, request| {
+                let app = ctx.app_handle();
+                let path = request.uri().path().to_string();
+
+                if let Some((bytes, mime)) = bundle_resolver::resolve(app, &path) {
+                    return Response::builder()
+                        .status(200)
+                        .header(CONTENT_TYPE, mime)
+                        .body(Cow::<'static, [u8]>::Owned(bytes))
+                        .unwrap();
+                }
+
+                let norm = bundle_resolver::normalize(&path);
+                if let Some(asset) = app.asset_resolver().get(format!("/{norm}")) {
+                    return Response::builder()
+                        .status(200)
+                        .header(CONTENT_TYPE, asset.mime_type)
+                        .body(Cow::<'static, [u8]>::Owned(asset.bytes))
+                        .unwrap();
+                }
+
+                Response::builder()
+                    .status(404)
+                    .body(Cow::<'static, [u8]>::Owned(Vec::new()))
+                    .unwrap()
+            })
             .invoke_handler(tauri::generate_handler![])
-            .setup(|_app| {
+            .setup(|app| {
+                bundle_updater::spawn_update_check(app.handle().clone());
                 Ok(())
             })
             .run(tauri::generate_context!())
