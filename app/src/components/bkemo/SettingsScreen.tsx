@@ -21,6 +21,8 @@ import { ImportSetting } from '@/components/BlinkoSettings/ImportSetting';
 import { ExportSetting } from '@/components/BlinkoSettings/ExportSetting';
 import { AboutSetting } from '@/components/BlinkoSettings/AboutSetting';
 import { ACCENT_SWATCHES, PRESET_THEMES, type BkemoPreset, type BkemoPrefs, type BkemoTheme, type BkemoDensity } from '@/lib/bkemoSettings';
+import { isInTauri } from '@/lib/tauriHelper';
+import { ensureNotificationPermission, clearTaskNotifications } from '@/lib/taskNotifications';
 
 const mono: React.CSSProperties = { fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '.06em', color: 'var(--fg-3)', textTransform: 'uppercase' };
 
@@ -246,6 +248,11 @@ const Appearance = observer(function Appearance({
       <Row title="Show all notes in graph" sub="Include notes with no [[ ]] links as isolated nodes in the Graph view. Off shows only the link graph." control={
         <Toggle on={!!prefs.graphShowAll} onChange={(v) => onChange({ graphShowAll: v })} />
       } />
+      {isInTauri() && (
+        <Row title="Task reminders" sub="In the desktop/mobile app, send a native OS notification when a task is due." control={
+          <Toggle on={prefs.taskReminders !== false} onChange={(v) => { onChange({ taskReminders: v }); if (v) ensureNotificationPermission(); else clearTaskNotifications(); }} />
+        } />
+      )}
     </div>
   );
 });

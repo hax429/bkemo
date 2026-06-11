@@ -15,6 +15,8 @@ export type BkemoPrefs = {
   bgGradient?: 'none' | 'dusk' | 'warm' | 'aurora';
   /** Graph view: include notes with no `[[ ]]` links (isolated nodes), not just the link graph. */
   graphShowAll?: boolean;
+  /** Native app: schedule local OS notifications for tasks at their due time. */
+  taskReminders?: boolean;
 };
 
 export type BkemoPreset = {
