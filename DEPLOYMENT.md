@@ -199,8 +199,11 @@ curl https://your.domain.tld/api/v1/public/site-info
 
 ```bash
 cd /opt/bkemo
-git pull
+# Source nvm — a non-login ssh shell otherwise uses the system node (often v12),
+# which can't run modern turbo/vite (SyntaxError on ?./??). Repo needs Node >= 20.
+export NVM_DIR=$HOME/.nvm; [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"; nvm use default
 export PATH=$HOME/.bun/bin:$PATH
+git pull
 bun install                                                # if deps changed
 bunx prisma migrate deploy --schema=prisma/schema.prisma   # if schema changed
 bun run build:web
