@@ -80,6 +80,7 @@ real server path):
 
 ```bash
 ssh Oracle 'set -e
+  export NVM_DIR=$HOME/.nvm; [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"; nvm use default >/dev/null
   export PATH=$HOME/.bun/bin:$PATH
   cd /home/ubuntu/services/notes/bkemo
   git pull
@@ -89,6 +90,17 @@ ssh Oracle 'set -e
   bun run build:seed
   sudo systemctl restart bkemo'
 ```
+
+> ⚠️ **Two non-obvious gotchas (learned the hard way):**
+> 1. **Source nvm first.** `ssh Oracle '<cmd>'` is a *non-login* shell, so it does
+>    **not** load nvm — `node` would resolve to the system `/usr/bin/node` (v12),
+>    which can't run modern `turbo`/`vite` (`SyntaxError: Unexpected token '.'` on
+>    `?.`/`??`). The repo needs Node ≥ 20; the server's nvm default is v24. The
+>    `. "$NVM_DIR/nvm.sh"; nvm use default` line above fixes it.
+> 2. **Don't pipe build steps to `tail`.** `cmd | tail` makes the pipeline's exit
+>    code `tail`'s (0), so `set -e` won't catch a failed build and the service
+>    restarts anyway. Run each step plain (a failed `build:web` aborts before the
+>    restart, leaving prod on the previous good build).
 
 ### 3c. Verify production
 ```bash
