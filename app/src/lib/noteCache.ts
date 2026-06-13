@@ -55,6 +55,39 @@ const QUADRANT_MAP: Record<Quadrant, { isImportant: boolean; isUrgent: boolean }
 
 const db = new NoteCacheDB();
 
+/**
+ * The note cache is a single IndexedDB shared by the browser, but notes are
+ * per-account. When the signed-in account changes (logout, a different user
+ * logging in on the same browser, or admin "view as"), the previous account's
+ * notes must not leak into the new session. We remember which account owns the
+ * current cache and wipe it on a mismatch.
+ */
+const CACHE_OWNER_KEY = 'blinko_note_cache_account';
+
+export async function clearNoteCache(): Promise<void> {
+  try { await db.notes.clear(); } catch (e) { console.error('[cache] clear failed:', e); }
+}
+
+/**
+ * Ensure the local note cache belongs to `accountId`; if it was last written by
+ * a different account, drop it. Cheap (a localStorage compare) so it's safe to
+ * call on every query. An empty/unknown accountId is ignored (don't wipe during
+ * the brief window before the token resolves).
+ */
+export async function ensureCacheAccount(accountId: string | number | null | undefined): Promise<boolean> {
+  const id = accountId == null ? '' : String(accountId);
+  if (!id) return false;
+  let prev: string | null = null;
+  try { prev = localStorage.getItem(CACHE_OWNER_KEY); } catch { /* ignore */ }
+  if (prev !== id) {
+    await clearNoteCache();
+    try { localStorage.setItem(CACHE_OWNER_KEY, id); } catch { /* ignore */ }
+    // A null prev is the first run on a fresh browser, not an account switch.
+    return prev != null;
+  }
+  return false;
+}
+
 export async function upsertNotesToCache(notes: Note[]): Promise<void> {
   const valid = notes.filter((n): n is CachedNote => n.id != null);
   if (valid.length) await db.notes.bulkPut(valid);
@@ -143,8 +176,4 @@ export async function patchNoteInCache(id: number, patch: Partial<Note>): Promis
 
 export async function deleteNoteFromCache(id: number): Promise<void> {
   await db.notes.delete(id);
-}
-
-export async function clearNoteCache(): Promise<void> {
-  await db.notes.clear();
 }

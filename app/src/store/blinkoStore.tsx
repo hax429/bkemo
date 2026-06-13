@@ -11,12 +11,12 @@ import i18n from '@/lib/i18n';
 import { api } from '@/lib/trpc';
 import { Attachment, NoteType, type Note } from '@shared/lib/types';
 import { ARCHIVE_BLINKO_TASK_NAME, DBBAK_TASK_NAME } from '@shared/lib/sharedConstant';
-import { makeAutoObservable } from 'mobx';
+import { makeAutoObservable, runInAction } from 'mobx';
 import { UserStore } from './user';
 import { BaseStore } from './baseStore';
 import { StorageState } from './standard/StorageState';
 import { useSearchParams, useLocation } from 'react-router-dom';
-import { upsertNotesToCache, queryNotesFromCache, patchNoteInCache, deleteNoteFromCache } from '@/lib/noteCache';
+import { upsertNotesToCache, queryNotesFromCache, patchNoteInCache, deleteNoteFromCache, ensureCacheAccount } from '@/lib/noteCache';
 
 type filterType = {
   label: string;
@@ -77,6 +77,19 @@ type OfflinePendingOp =
   | { type: 'edit'; noteId: number; patch: Partial<UpsertNoteParams> }
   | { type: 'delete'; noteId: number };
 
+/** Resolve `p`, or reject after `ms` — bounds slow/hung network so the UI can
+ * fall back to the local cache instead of spinning forever (e.g. iOS WKWebView
+ * reporting `navigator.onLine === true` while in airplane mode). */
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error('net-timeout')), ms)),
+  ]);
+}
+
+/** Network note-list fetches fall back to cache past this many ms. */
+const NOTE_NET_TIMEOUT_MS = 3000;
+
 export class BlinkoStore implements Store {
   sid = 'BlinkoStore';
   noteContent = '';
@@ -123,6 +136,9 @@ export class BlinkoStore implements Store {
   noteTypeDefault: NoteType = NoteType.BLINKO
   currentCommonFilter: filterType | null = null
   updateTicker = 0
+  /** Guards the single in-flight background refresh + dedupes its ticker bump. */
+  private bgRefreshing = false;
+  private lastNetSig = '';
   fullNoteList: Note[] = []
 
   // For global search
@@ -167,6 +183,16 @@ export class BlinkoStore implements Store {
     const { page, size, filterConfig, offlineFilter = () => true } = params;
     let notes: Note[] = [];
 
+    // Isolate the cache per account: drop it if the signed-in account changed
+    // (different user logged in on this browser, or admin "view as"). Also drop
+    // the prior account's queued offline notes/ops so they can't leak into or be
+    // replayed under the new session.
+    const switchedAccount = await ensureCacheAccount(RootStore.Get(UserStore).id);
+    if (switchedAccount) {
+      this.offlineNoteStorage.clear();
+      this.offlinePendingOps.clear();
+    }
+
     const mergedFilter = {
       ...this.noteListFilterConfig,
       ...filterConfig,
@@ -176,11 +202,25 @@ export class BlinkoStore implements Store {
     };
 
     if (this.isOnline) {
-      notes = await api.notes.list.mutate(mergedFilter);
-      // fire-and-forget: populate cache for offline use
-      upsertNotesToCache(notes).catch(e => console.error('[cache] write failed:', e));
-      if (this.offlineNotes.length > 0) {
-        await this.syncOfflineNotes();
+      // Cache-first: serve the local cache immediately (instant paint, even on a
+      // cold/slow network) and refresh from the server in the background. Only a
+      // truly empty cache waits for the network — and that wait is bounded, so a
+      // hung connection (incl. WKWebView wrongly reporting online in airplane
+      // mode) can never leave the list stuck on "Loading…".
+      const cached = await queryNotesFromCache(mergedFilter);
+      if (cached.length > 0) {
+        notes = cached;
+        this.backgroundRefresh(mergedFilter);
+      } else {
+        try {
+          notes = await withTimeout(api.notes.list.mutate(mergedFilter), NOTE_NET_TIMEOUT_MS);
+          upsertNotesToCache(notes).catch(e => console.error('[cache] write failed:', e));
+          if (this.offlineNotes.length > 0) this.syncOfflineNotes().catch(() => {});
+        } catch (e) {
+          console.warn('[notes] network slow/unavailable, using cache:', e);
+          notes = cached;
+          this.backgroundRefresh(mergedFilter);
+        }
       }
     } else {
       notes = await queryNotesFromCache(mergedFilter);
@@ -189,6 +229,31 @@ export class BlinkoStore implements Store {
     const filteredOfflineNotes = this.offlineNotes.filter(offlineFilter);
     // Dexie already paginates when offline; online list is paginated by the server
     return [...filteredOfflineNotes, ...notes].map(i => ({ ...i, isExpand: false }));
+  }
+
+  /**
+   * Background server fetch behind the cache-first path: refresh the cache and,
+   * only if the result actually changed, bump `updateTicker` so the active view
+   * re-reads the (now-fresh) cache. The change check + single-flight guard keep
+   * this from looping when the ticker bump re-triggers a query.
+   */
+  private async backgroundRefresh(filter: any) {
+    if (this.bgRefreshing || !this.isOnline) return;
+    this.bgRefreshing = true;
+    try {
+      const fresh = await withTimeout(api.notes.list.mutate(filter), NOTE_NET_TIMEOUT_MS * 3);
+      await upsertNotesToCache(fresh);
+      if (this.offlineNotes.length > 0) await this.syncOfflineNotes();
+      const sig = `${fresh.length}|${fresh.map((n: Note) => `${n.id}:${+new Date(n.updatedAt as any)}`).join(',')}`;
+      if (sig !== this.lastNetSig) {
+        this.lastNetSig = sig;
+        runInAction(() => { this.updateTicker++; });
+      }
+    } catch {
+      // offline / slow — keep showing the cache; nothing to do
+    } finally {
+      this.bgRefreshing = false;
+    }
   }
 
   /**

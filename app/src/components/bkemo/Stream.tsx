@@ -12,7 +12,7 @@ import { getDisplayTime } from '@/lib/helper';
 import { getBkemoConfig } from '@/lib/bkemoConfig';
 import { TiptapEditor, type TiptapEditorHandle } from '@/components/TiptapEditor';
 import { MarkdownView } from './MarkdownView';
-import { ContextMenu, type MenuItem } from './ContextMenu';
+import { ContextMenu, MoreButton, type MenuItem } from './ContextMenu';
 import { CommentsSection, CardFeedback } from './CommentsSection';
 import { MultiSelectBar } from './MultiSelectBar';
 import { isTask, isDone } from '@/lib/taskFilters';
@@ -472,6 +472,7 @@ const MemoRow = observer(function MemoRow({ note, onOpen, selected, selectionAct
           <span className="bk-rel">{getDisplayTime(note.createdAt, note.updatedAt)}</span>
           <span className="bk-exact">BK-{note.id} · {dayjs(note.createdAt).format('YYYY-MM-DD HH:mm')}</span>
         </span>
+        <MoreButton size={26} onClick={(e) => onContext(e, note)} />
       </div>
       {/* body — markdown preview, consistent with the editor */}
       <div style={{ position: 'relative', maxHeight: collapsed ? 150 : undefined, overflow: collapsed ? 'hidden' : undefined }}>
@@ -500,11 +501,6 @@ const MemoRow = observer(function MemoRow({ note, onOpen, selected, selectionAct
         >{expanded ? 'Show less' : 'Show more'}</span>
       )}
       <AttachmentList attachments={(note as any).attachments} />
-      {/* footer: feedback & actions */}
-      <div className="h-stack" style={{ gap: 14, marginTop: 8, color: 'var(--fg-3)', fontSize: 12 }}>
-        <span className="spacer" />
-        <span onClick={(e) => { e.stopPropagation(); onContext(e, note); }} style={{ cursor: 'pointer' }} title="More">···</span>
-      </div>
       {!hideComments && (
         <CardFeedback note={note} />
       )}

@@ -15,6 +15,7 @@ datasource db {
 model accounts {
   id            Int             @id @default(autoincrement())
   name          String          @default("") @db.VarChar
+  email         String          @default("") @db.VarChar
   nickname      String          @default("") @db.VarChar
   password      String          @default("") @db.VarChar
   image         String          @default("") @db.VarChar

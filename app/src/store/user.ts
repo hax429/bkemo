@@ -27,6 +27,8 @@ export class UserStore implements Store {
     makeAutoObservable(this)
   }
   tokenData = new StorageState<TokenData | null>({ key: 'blinkoToken', value: null });
+  /** When an admin is viewing-as another user, the admin's own session is parked here. */
+  adminReturn = new StorageState<TokenData | null>({ key: 'blinkoAdminReturn', value: null });
   theme: any = 'light';
   isSetup: boolean = false;
   languageInitialized: boolean = false;
@@ -204,9 +206,41 @@ export class UserStore implements Store {
 
   clear() {
     this.tokenData.save(null);
+    this.adminReturn.save(null);
     this.isSetup = false;
     localStorage.removeItem('token');
     eventBus.emit('user:clear', this);
+  }
+
+  /** True while an admin is viewing the app as another user. */
+  get isImpersonating(): boolean {
+    return !!this.adminReturn.value;
+  }
+
+  /**
+   * Admin-only: swap the current session for a token minted for `id` and reload
+   * as that user. The admin's own session is parked in `adminReturn` so they
+   * can come back. Backed by the manage-users-gated `users.impersonate`.
+   */
+  async impersonate(id: number) {
+    const res = await api.users.impersonate.mutate({ id });
+    if (!this.adminReturn.value) {
+      this.adminReturn.save(this.tokenData.value);
+    }
+    this.tokenData.save({
+      user: { id: String(res.id), name: res.name, nickname: res.nickname, role: res.role },
+      expires: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      token: res.token,
+    });
+    window.location.href = '/';
+  }
+
+  /** Restore the parked admin session and reload. */
+  stopImpersonating() {
+    const back = this.adminReturn.value;
+    this.adminReturn.save(null);
+    if (back) this.tokenData.save(back);
+    window.location.href = '/';
   }
 
   updatePWAColor(theme: string) {

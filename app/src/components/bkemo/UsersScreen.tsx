@@ -54,6 +54,7 @@ const UserModal = observer(function UserModal({ row, onClose }: { row: any | nul
   const owner = isOwnerRole(row?.role);
   const editing = !!row?.id;
   const [name, setName] = useState(row?.name ?? '');
+  const [email, setEmail] = useState(row?.email ?? '');
   const [nickname, setNickname] = useState(row?.nickname ?? '');
   const [password, setPassword] = useState('');
   const [showPw, setShowPw] = useState(false);
@@ -69,6 +70,7 @@ const UserModal = observer(function UserModal({ row, onClose }: { row: any | nul
       await PromiseCall(api.users.upsertUserByAdmin.mutate({
         ...(editing ? { id: row.id } : {}),
         name: name.trim() || undefined,
+        email: email.trim(),
         nickname: nickname.trim() || undefined,
         password: password.trim() || undefined,
         // The owner's permissions are immutable; don't send them.
@@ -93,6 +95,9 @@ const UserModal = observer(function UserModal({ row, onClose }: { row: any | nul
 
         <label style={{ ...mono, display: 'block', marginBottom: 6 }}>Username</label>
         <input value={name} onChange={(e) => setName(e.target.value)} placeholder="username" disabled={isOauth} style={{ ...fieldStyle, marginBottom: 14, opacity: isOauth ? 0.6 : 1 }} />
+
+        <label style={{ ...mono, display: 'block', marginBottom: 6 }}>Email</label>
+        <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="email" type="email" disabled={isOauth} style={{ ...fieldStyle, marginBottom: 14, opacity: isOauth ? 0.6 : 1 }} />
 
         <label style={{ ...mono, display: 'block', marginBottom: 6 }}>Nickname</label>
         <input value={nickname} onChange={(e) => setNickname(e.target.value)} placeholder="nickname" style={{ ...fieldStyle, marginBottom: 14 }} />
@@ -166,7 +171,7 @@ export const UsersScreen = observer(function UsersScreen() {
             <span style={{ flex: 1 }}>Name</span>
             <span style={{ width: 110 }}>Role</span>
             <span style={{ flex: 1.4 }}>Permissions</span>
-            <span style={{ width: 80, textAlign: 'right' }}>Action</span>
+            <span style={{ width: 110, textAlign: 'right' }}>Action</span>
           </div>
 
           {rows.map((u: any) => {
@@ -191,7 +196,10 @@ export const UsersScreen = observer(function UsersScreen() {
                     </>
                   )}
                 </div>
-                <div className="h-stack" style={{ width: 80, justifyContent: 'flex-end', gap: 8 }}>
+                <div className="h-stack" style={{ width: 110, justifyContent: 'flex-end', gap: 10 }}>
+                  {!owner && u.id !== Number(user.id) && (
+                    <span onClick={() => user.impersonate(u.id)} title="View as this user" style={{ cursor: 'pointer', color: 'var(--fg-2)' }}>👁</span>
+                  )}
                   <span onClick={() => setModal({ row: u })} title="Edit" style={{ cursor: 'pointer', color: 'var(--fg-2)' }}>✎</span>
                   {!owner && u.id !== Number(user.id) && (
                     confirmDelete === u.id ? (
