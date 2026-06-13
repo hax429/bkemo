@@ -1,6 +1,6 @@
 {
-  "name": "Blinko",
-  "short_name": "Blinko",
+  "name": "bkemo",
+  "short_name": "bkemo",
   "icons": [
     {
       "src": "/icons/Square30x30Logo.png",
@@ -49,8 +49,8 @@
       "purpose": "any maskable"
     }
   ],
-  "theme_color": "#FFFFFF",
-  "background_color": "#FFFFFF",
+  "theme_color": "#14121a",
+  "background_color": "#14121a",
   "start_url": "/",
   "display": "standalone",
   "orientation": "portrait"

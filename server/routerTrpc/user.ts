@@ -237,18 +237,20 @@ export const userRouter = router({
     })
     .input(z.object({
       name: z.string(),
-      password: z.string()
+      password: z.string(),
+      email: z.string().optional()
     }))
     .output(z.union([z.boolean(), z.any()]))
     .mutation(async ({ input }) => {
       return prisma.$transaction(async () => {
-        const { name, password } = input
+        const { name, password, email } = input
         const passwordHash = await hashPassword(password)
         const count = await prisma.accounts.count()
         if (count == 0) {
           const res = await prisma.accounts.create({
             data: {
               name,
+              email: email ?? '',
               password: passwordHash,
               nickname: name,
               role: 'superadmin',
@@ -278,6 +280,14 @@ export const userRouter = router({
               message: 'not allow register',
             });
           } else {
+            // In-site registration requires an email.
+            const cleanEmail = (email ?? '').trim().toLowerCase()
+            if (!cleanEmail || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(cleanEmail)) {
+              throw new TRPCError({
+                code: 'BAD_REQUEST',
+                message: 'A valid email is required'
+              });
+            }
             const hasSameUser = await prisma.accounts.findFirst({ where: { name } })
             if (hasSameUser) {
               throw new TRPCError({
@@ -285,7 +295,16 @@ export const userRouter = router({
                 message: 'Username already exists'
               });
             }
-            const res = await prisma.accounts.create({ data: { name, password: passwordHash, nickname: name, role: 'user' } })
+            const hasSameEmail = await prisma.accounts.findFirst({ where: { email: cleanEmail } })
+            if (hasSameEmail) {
+              throw new TRPCError({
+                code: 'CONFLICT',
+                message: 'Email already in use'
+              });
+            }
+            // Standard user: can view/edit their own memos and share publicly,
+            // but no admin power (manageSiteSettings/manageUsers stay false).
+            const res = await prisma.accounts.create({ data: { name, email: cleanEmail, password: passwordHash, nickname: name, role: 'user' } })
             await prisma.accounts.update({ where: { id: res.id }, data: { apiToken: await generateApiToken({ id: res.id, name, role: 'user' }) } })
             return true
           }
@@ -398,6 +417,49 @@ export const userRouter = router({
 
       return results;
     }),
+  impersonate: authProcedure.use(requireManageUsers)
+    .meta({
+      openapi: {
+        method: 'POST', path: '/v1/user/impersonate', summary: 'View as another user',
+        description: 'Mint a session token to view a user as their identity, need manage-users permission', tags: ['User']
+      }
+    })
+    .input(z.object({ id: z.number() }))
+    .output(z.object({
+      token: z.string(),
+      id: z.number(),
+      name: z.string(),
+      nickname: z.string(),
+      role: z.string(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const callerId = Number(ctx.id);
+      const caller = await prisma.accounts.findUnique({ where: { id: callerId } });
+      const target = await prisma.accounts.findUnique({ where: { id: input.id } });
+      if (!target) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'User not found' });
+      }
+      if (target.id === callerId) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Cannot view as yourself' });
+      }
+      // Privilege-escalation guard: never let anyone "become" the owner, and only
+      // the owner may view-as another privileged (admin) account.
+      if (isOwner(target)) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Cannot view as the owner account' });
+      }
+      const targetPerms = resolvePermissions(target);
+      if (!isOwner(caller) && (targetPerms.manageUsers || targetPerms.manageSiteSettings)) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Cannot view as another administrator' });
+      }
+      const token = await generateApiToken({ id: target.id, name: target.name ?? '', role: target.role });
+      return {
+        token,
+        id: target.id,
+        name: target.name ?? '',
+        nickname: target.nickname ?? '',
+        role: target.role,
+      };
+    }),
   upsertUser: authProcedure.use(demoAuthMiddleware)
     .meta({
       openapi: {
@@ -504,6 +566,7 @@ export const userRouter = router({
     .input(z.object({
       id: z.number().optional(),
       name: z.string().optional(),
+      email: z.string().optional(),
       password: z.string().optional(),
       nickname: z.string().optional(),
       permissions: z.object({
@@ -516,7 +579,8 @@ export const userRouter = router({
     .output(z.union([z.boolean(), z.any()]))
     .mutation(async ({ input }) => {
       return prisma.$transaction(async () => {
-        const { id, nickname, name, password, permissions } = input
+        const { id, nickname, name, email, password, permissions } = input
+        const cleanEmail = email !== undefined ? email.trim().toLowerCase() : undefined
 
         const update: Prisma.accountsUpdateInput = {}
 
@@ -530,12 +594,21 @@ export const userRouter = router({
           }
         }
 
+        // Email must stay unique (ignoring blanks, which mean "no email set").
+        if (cleanEmail) {
+          const hasSameEmail = await prisma.accounts.findFirst({ where: { email: cleanEmail, NOT: id ? { id } : undefined } });
+          if (hasSameEmail) {
+            throw new TRPCError({ code: 'CONFLICT', message: 'Email already in use' });
+          }
+        }
+
         if (id) {
           const target = await prisma.accounts.findUnique({ where: { id } });
           if (!target) {
             throw new TRPCError({ code: 'NOT_FOUND', message: 'User not found' });
           }
           if (name) update.name = name
+          if (cleanEmail !== undefined) update.email = cleanEmail
           if (password) {
             const passwordHash = await hashPassword(password)
             update.password = passwordHash
@@ -555,6 +628,7 @@ export const userRouter = router({
           const res = await prisma.accounts.create({
             data: {
               name,
+              email: cleanEmail ?? '',
               password: passwordHash,
               nickname: name,
               role: 'user',

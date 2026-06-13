@@ -15,6 +15,7 @@ export default function Component() {
   const toggleConfirmVisibility = () => setIsConfirmVisible(!isConfirmVisible);
 
   const [user, setUser] = React.useState("");
+  const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [password2, setPassword2] = React.useState("");
   const { t } = useTranslation();
@@ -54,6 +55,17 @@ export default function Component() {
               variant="bordered"
               value={user}
               onChange={e => setUser(e.target.value)}
+            />
+            <Input
+              isRequired
+              label={t('email', 'Email')}
+              labelPlacement="outside"
+              name="email"
+              placeholder={t('enter-your-email', 'Enter your email')}
+              type="email"
+              variant="bordered"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
             />
             <Input
               isRequired
@@ -108,14 +120,17 @@ export default function Component() {
               onChange={e => setPassword2(e.target.value)}
             />
             <Button color="primary" type="submit" onPress={async e => {
-              if (!user || !password || !password2) {
+              if (!user || !email || !password || !password2) {
                 return RootStore.Get(ToastPlugin).error(t('required-items-cannot-be-empty'))
+              }
+              if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())) {
+                return RootStore.Get(ToastPlugin).error(t('invalid-email', 'Please enter a valid email'))
               }
               if (password != password2) {
                 return RootStore.Get(ToastPlugin).error(t('the-two-passwords-are-inconsistent'))
               }
               try {
-                await api.users.register.mutate({ name: user, password })
+                await api.users.register.mutate({ name: user, email: email.trim(), password })
                 RootStore.Get(ToastPlugin).success(t('create-successfully-is-about-to-jump-to-the-login'))
                 setTimeout(() => {
                   navigate('/signin')

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Button, Input, Checkbox, Image, Divider } from "@heroui/react";
+import { Button, Input, Checkbox, Divider } from "@heroui/react";
 import { Icon } from '@/components/Common/Iconify/icons';
 import { RootStore } from "@/store";
 import { ToastPlugin } from "@/store/module/Toast/Toast";
@@ -7,7 +7,6 @@ import { useTranslation } from "react-i18next";
 import { StorageState } from "@/store/standard/StorageState";
 import { UserStore } from "@/store/user";
 import { PromiseState } from "@/store/standard/PromiseState";
-import { useTheme } from "next-themes";
 import { api, reinitializeTrpcApi } from "@/lib/trpc";
 import { GradientBackground } from "@/components/Common/GradientBackground";
 import { signIn } from "@/components/Auth/auth-client";
@@ -33,7 +32,6 @@ export default function Component() {
   const [providers, setProviders] = useState<OAuthProvider[]>([]);
   const [loadingProvider, setLoadingProvider] = useState<string>('');
   const [isTauriEnv, setIsTauriEnv] = useState(false);
-  const { theme } = useTheme();
   const { t } = useTranslation();
   const navigate = useNavigate();
   const blinko = RootStore.Get(BlinkoStore);
@@ -136,8 +134,9 @@ export default function Component() {
     <GradientBackground>
       <div className="flex h-full w-screen items-center justify-center p-2 sm:p-4 lg:p-8">
         <div className="flex w-full max-w-sm flex-col gap-4 rounded-large glass-effect px-8 pb-10 pt-6 shadow-large">
-          <div className="pb-2 text-xl font-medium flex gap-2 items-center justify-center">
-            Login With <Image src={theme === 'light' ? '/logo-light-title.png' : '/logo-dark-title.png'} width={100} radius="none"></Image>
+          <div className="pb-2 text-2xl font-semibold flex gap-2 items-center justify-center tracking-tight">
+            <span className="text-primary">✦</span>
+            <span>bkemo</span>
           </div>
 
           {providers.length > 0 && (

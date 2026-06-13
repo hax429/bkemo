@@ -169,25 +169,40 @@ const BkemoPage = observer(function BkemoPage() {
 
   return (
     <BkemoLayout density={prefs.density} accent={prefs.accent} theme={prefs.theme} bgGradient={prefs.bgGradient}>
-      {isMobile ? (
-        <div className="v-stack" style={{ height: '100%', width: '100%' }}>
-          <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>{render()}</div>
-          {!cfg.hideMobileBar && (
-            <MobileTabBar
-              activeRoute={route}
-              onNav={setRoute}
-              onNew={newMemo}
-              onMore={() => setShowMore(true)}
-            />
+      <div className="v-stack" style={{ height: '100%', width: '100%' }}>
+        {user.isImpersonating && (
+          <div className="h-stack" style={{ flexShrink: 0, gap: 10, padding: '6px 14px', background: 'var(--accent)', color: '#fff', fontSize: 12.5, alignItems: 'center', justifyContent: 'center' }}>
+            <span>👁 Viewing as <b>{user.nickname || user.name}</b> — you are seeing this account's data as an admin.</span>
+            <button
+              onClick={() => user.stopImpersonating()}
+              style={{ background: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.4)', color: '#fff', padding: '3px 12px', borderRadius: 100, fontSize: 12, cursor: 'pointer', fontWeight: 500 }}
+            >
+              Return to admin
+            </button>
+          </div>
+        )}
+        <div style={{ flex: 1, minHeight: 0 }}>
+          {isMobile ? (
+            <div className="v-stack" style={{ height: '100%', width: '100%' }}>
+              <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>{render()}</div>
+              {!cfg.hideMobileBar && (
+                <MobileTabBar
+                  activeRoute={route}
+                  onNav={setRoute}
+                  onNew={newMemo}
+                  onMore={() => setShowMore(true)}
+                />
+              )}
+              {showMore && <MoreSheet onPick={setRoute} onClose={() => setShowMore(false)} />}
+            </div>
+          ) : (
+            <div className="h-stack" style={{ height: '100%', width: '100%' }}>
+              <Sidebar activeRoute={route} onNav={setRoute} onNewMemo={newMemo} />
+              {render()}
+            </div>
           )}
-          {showMore && <MoreSheet onPick={setRoute} onClose={() => setShowMore(false)} />}
         </div>
-      ) : (
-        <div className="h-stack" style={{ height: '100%', width: '100%' }}>
-          <Sidebar activeRoute={route} onNav={setRoute} onNewMemo={newMemo} />
-          {render()}
-        </div>
-      )}
+      </div>
       {editing && <NoteModal note={editing} onClose={() => setEditing(null)} />}
     </BkemoLayout>
   );

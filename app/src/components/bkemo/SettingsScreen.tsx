@@ -382,8 +382,8 @@ const Preferences = observer(function Preferences() {
           <h3 style={{ fontSize: 16, fontWeight: 600, color: 'var(--fg)', marginTop: 24, marginBottom: 8, borderBottom: '1px solid var(--border)', paddingBottom: 8 }}>System Settings (Admin Only)</h3>
           
           <Row
-            title="Allow Registration"
-            sub="Allow new users to sign up on the registration page."
+            title="Allow in-site registration"
+            sub="Let guests create their own standard account from the Sign up link on the login screen."
             control={
               <Toggle
                 on={user.canRegister.value ?? false}

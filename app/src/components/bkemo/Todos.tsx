@@ -8,7 +8,7 @@ import { NoteType, type Note } from '@shared/lib/types';
 import { isTask, isDone, bucketQuadrants, laneToDueRange, type TaskLane } from '@/lib/taskFilters';
 import { stripLoneCheckbox } from '@/lib/taskSyntax';
 import { MarkdownView } from './MarkdownView';
-import { ContextMenu, type MenuItem } from './ContextMenu';
+import { ContextMenu, MoreButton, type MenuItem } from './ContextMenu';
 import { CommentsSection, CardFeedback } from './CommentsSection';
 import { getBkemoConfig } from '@/lib/bkemoConfig';
 import { eventBus } from '@/lib/event';
@@ -65,6 +65,7 @@ const TaskRow = observer(function TaskRow({ note, onOpen, onContext, compact }: 
 
   return (
     <div
+      className="bk-more-host"
       onContextMenu={(e) => { if (onContext) { e.preventDefault(); onContext(e, note); } }}
       style={{ padding: compact ? '7px 12px' : 'var(--row-pad-y) var(--row-pad-x)', borderBottom: '1px solid var(--border)', background: 'var(--bg)' }}
       onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-2)')}
@@ -92,10 +93,10 @@ const TaskRow = observer(function TaskRow({ note, onOpen, onContext, compact }: 
       </div>
       {/* footer: more actions (hidden in the dense matrix layout) */}
       {!compact && (
-        <div className="h-stack" style={{ gap: 14, marginTop: 6, marginLeft: 26, color: 'var(--fg-3)', fontSize: 12 }}>
+        <div className="h-stack" style={{ gap: 10, marginTop: 6, marginLeft: 26, color: 'var(--fg-3)', fontSize: 12 }}>
           <span className="spacer" />
           {subtasks.length > 0 && <span style={{ fontFamily: 'var(--font-mono)' }}>{doneSubtasks}/{subtasks.length} subtasks</span>}
-          {onContext && <span onClick={(e) => onContext(e, note)} style={{ cursor: 'pointer' }} title="More">···</span>}
+          {onContext && <MoreButton size={24} onClick={(e) => onContext(e, note)} />}
         </div>
       )}
       {compact && subtasks.length > 0 && (

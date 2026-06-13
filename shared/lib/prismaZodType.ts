@@ -8,6 +8,7 @@ import { z } from "zod"
 export const accountsSchema = z.object({
   id: z.number().int(),
   name: z.string(),
+  email: z.string().optional(),
   nickname: z.string(),
   password: z.string(),
   image: z.string(),
