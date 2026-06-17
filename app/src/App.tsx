@@ -41,7 +41,7 @@ const ProtectedRoute = ({ children }) => {
     const checkAuth = async () => {
       const publicRoutes = ['/signin', '/signup', '/share', '/_offline', '/oauth-callback', '/ai-share', '/oauth-callback'];
       const isPublicRoute = publicRoutes.some(route =>
-        location.pathname === route || location.pathname.startsWith('/share/') || location.pathname.startsWith('/ai-share/')
+        location.pathname === route || location.pathname.startsWith('/share/') || location.pathname.startsWith('/ai-share/') || location.pathname.startsWith('/m/')
       );
       if (!userStore.isLogin && !isPublicRoute) {
         const tokenData = await getTokenData();
