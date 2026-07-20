@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "bun --env-file ../.env --watch index.ts",
+    "prisma:generate": "cd ../prisma && prisma generate",
     "build:web": "bun esbuild.config.ts",
     "start": "cross-env NODE_ENV=production bun --env-file ../.env ../dist/index.js"
   },

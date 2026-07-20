@@ -9,4 +9,12 @@ describe('Turbo production build inputs', () => {
 
     expect(turboConfig.tasks['build:web'].inputs).toContain('$TURBO_DEFAULT$');
   });
+
+  test('gives the backend package the Prisma generation task used by postinstall', () => {
+    const backendPackage = JSON.parse(
+      readFileSync(new URL('../../../../server/package.json', import.meta.url), 'utf8'),
+    );
+
+    expect(backendPackage.scripts['prisma:generate']).toBe('cd ../prisma && prisma generate');
+  });
 });
