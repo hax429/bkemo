@@ -21,4 +21,13 @@ describe('production static cache policy', () => {
     expect(staticCacheControl('/srv/bkemo/dist/public/icons/Square142x142Logo.png', publicPath))
       .toBe('public, max-age=3600, must-revalidate');
   });
+
+  test('handles file paths resolved through the production public symlink', () => {
+    const symlinkRoot = '/srv/bkemo/server/public';
+
+    expect(staticCacheControl('/srv/bkemo/dist/public/sw-bkemo-v2.js', symlinkRoot))
+      .toBe('no-cache, no-store, must-revalidate');
+    expect(staticCacheControl('/srv/bkemo/dist/public/assets/index-abc123.js', symlinkRoot))
+      .toBe('public, max-age=31536000, immutable');
+  });
 });
