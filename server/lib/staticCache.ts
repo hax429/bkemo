@@ -2,7 +2,6 @@ import path from 'node:path';
 
 const APP_SHELL_FILES = new Set([
   'index.html',
-  'sw.js',
   'registerSW.js',
   'manifest.json',
   'manifest.webmanifest',
@@ -15,7 +14,7 @@ export function staticCacheControl(filePath: string, publicPath: string): string
     return 'public, max-age=31536000, immutable';
   }
 
-  if (APP_SHELL_FILES.has(relativePath)) {
+  if (APP_SHELL_FILES.has(relativePath) || /^sw(?:-[A-Za-z0-9._-]+)?\.js$/.test(relativePath)) {
     return 'no-cache, no-store, must-revalidate';
   }
 

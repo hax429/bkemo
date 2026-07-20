@@ -9,7 +9,7 @@ describe('production static cache policy', () => {
       .toBe('public, max-age=31536000, immutable');
   });
 
-  test.each(['index.html', 'sw.js', 'registerSW.js', 'manifest.webmanifest'])(
+  test.each(['index.html', 'sw.js', 'sw-bkemo-v2.js', 'registerSW.js', 'manifest.webmanifest'])(
     'always revalidates the update-sensitive app shell file %s',
     (fileName) => {
       expect(staticCacheControl(`/srv/bkemo/dist/public/${fileName}`, publicPath))

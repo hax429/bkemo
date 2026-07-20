@@ -16,6 +16,11 @@ export default defineConfig({
     // PWA: Only enabled in production, disabled in development to avoid caching issues
     ...(!isDev && !process.env.DISABLE_PWA ? [
       VitePWA({
+        // Roll away from the legacy /sw.js URL, which some CDN/browser caches
+        // retained with an immutable header. Inline registration keeps the
+        // versioned worker URL in the freshly revalidated app shell.
+        filename: 'sw-bkemo-v2.js',
+        injectRegister: 'inline',
         // Disable in development mode
         devOptions: {
           enabled: false
