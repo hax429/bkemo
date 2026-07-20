@@ -17,6 +17,7 @@ import { AIScheduledTaskJob } from './jobs/aiScheduledTaskJob';
 import { registerBackgroundJobLifecycle } from './lib/jobLifecycle';
 import { resumeAttachmentMigrationJobs } from './lib/attachmentStorageMigration';
 import { isDatabaseWriteLocked, recoverInterruptedDatabaseMigrationJobs } from './lib/databaseMigration';
+import { staticCacheControl } from './lib/staticCache';
 
 // tRPC related imports
 import { createContext } from './context';
@@ -320,19 +321,15 @@ async function bootstrap() {
       app.set('trust proxy', 1);
     }
 
+    const publicPath = path.resolve(appRootProd, 'public');
     const staticOptions = {
-      maxAge: '7d',
-      immutable: true,
-      setHeaders: (res: express.Response, path: string) => {
-        const ext = path.split('.').pop()?.toLowerCase();
-        if (['png', 'webp', 'svg', 'json', 'ico', 'gif', 'mp4'].includes(ext || '')) {
-          res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
-          res.setHeader('Expires', new Date(Date.now() + 604800000).toUTCString());
-        }
+      maxAge: 0,
+      immutable: false,
+      setHeaders: (res: express.Response, filePath: string) => {
+        res.setHeader('Cache-Control', staticCacheControl(filePath, publicPath));
       }
     };
 
-    const publicPath = path.resolve(appRootProd, 'public');
     app.use(express.static(publicPath, staticOptions));
 
     // Add body parsers for JSON and form data

@@ -30,6 +30,7 @@
     },
     "build:web": {
       "inputs": [
+        "$TURBO_DEFAULT$",
         ".env"
       ],
       "dependsOn": [
