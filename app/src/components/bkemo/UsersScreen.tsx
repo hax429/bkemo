@@ -88,7 +88,7 @@ const UserModal = observer(function UserModal({ row, onClose }: { row: any | nul
       <div onClick={(e) => e.stopPropagation()} style={{ width: 460, maxWidth: '100%', maxHeight: '90vh', overflow: 'auto', background: 'var(--bg-2)', border: '1px solid var(--border-2)', borderRadius: 'var(--radius-lg)', padding: 22 }} className="bk-scroll">
         <div className="h-stack" style={{ marginBottom: 18 }}>
           <div style={{ fontSize: 18, fontWeight: 600, color: 'var(--fg)' }}>{editing ? 'Edit user' : 'Create user'}</div>
-          {owner && <span style={{ marginLeft: 8 }}><Chip label="Owner" tone="accent" /></span>}
+          {owner && <span style={{ marginLeft: 8 }}><Chip label="Superadmin" tone="accent" /></span>}
           <span className="spacer" />
           <span onClick={onClose} style={{ cursor: 'pointer', color: 'var(--fg-3)', fontSize: 18 }}>✕</span>
         </div>
@@ -118,7 +118,7 @@ const UserModal = observer(function UserModal({ row, onClose }: { row: any | nul
             <Toggle on={owner ? true : perms[f.key]} disabled={owner} onChange={(v) => setPerms((p) => ({ ...p, [f.key]: v }))} />
           </div>
         ))}
-        {owner && <div style={{ fontSize: 11.5, color: 'var(--fg-3)', marginTop: 8 }}>The owner account always has full permissions.</div>}
+        {owner && <div style={{ fontSize: 11.5, color: 'var(--fg-3)', marginTop: 8 }}>The superadmin account always has full permissions.</div>}
 
         <div className="h-stack" style={{ marginTop: 20, justifyContent: 'flex-end' }}>
           <button onClick={save} disabled={saving || (!editing && !password.trim())} style={{ background: 'var(--accent)', border: 'none', color: '#fff', padding: '8px 18px', borderRadius: 'var(--radius)', fontSize: 13, fontWeight: 500, opacity: saving || (!editing && !password.trim()) ? 0.6 : 1 }}>Save</button>
@@ -184,7 +184,7 @@ export const UsersScreen = observer(function UsersScreen() {
                   <div style={{ fontSize: 11.5, color: 'var(--fg-3)', fontFamily: 'var(--font-mono)' }}>{u.name} · {u.loginType === 'oauth' ? 'oauth' : 'password'}</div>
                 </div>
                 <div style={{ width: 110 }}>
-                  <Chip label={owner ? 'Owner' : 'User'} tone={owner ? 'accent' : 'muted'} />
+                  <Chip label={owner ? 'Superadmin' : 'User'} tone={owner ? 'accent' : 'muted'} />
                 </div>
                 <div className="h-stack" style={{ flex: 1.4, gap: 6, flexWrap: 'wrap' }}>
                   {owner ? <Chip label="all" tone="accent" /> : (

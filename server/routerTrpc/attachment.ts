@@ -1,9 +1,16 @@
-import { router, authProcedure } from '../middleware';
+import { router, authProcedure, demoAuthMiddleware, requireManageSite, superAdminAuthMiddleware } from '../middleware';
 import { z } from 'zod';
 import { prisma } from '../prisma';
 import { Prisma } from '@prisma/client';
 import path from 'path';
 import { FileService } from '../lib/files';
+import {
+  getAttachmentMigrationJob,
+  getAttachmentStorageStats,
+  retryAttachmentMigration,
+  startAttachmentMigration,
+  startAttachmentSourceCleanup,
+} from '../lib/attachmentStorageMigration';
 
 export interface AttachmentResult {
   id: number | null;
@@ -38,6 +45,36 @@ const mapAttachmentResult = (item: any): AttachmentResult => ({
 });
 
 export const attachmentsRouter = router({
+  storageStats: authProcedure
+    .use(demoAuthMiddleware)
+    .use(requireManageSite)
+    .input(z.void())
+    .query(async () => getAttachmentStorageStats()),
+
+  migrationStatus: authProcedure
+    .use(demoAuthMiddleware)
+    .use(requireManageSite)
+    .input(z.object({ jobId: z.string().uuid().optional() }).optional())
+    .query(async ({ input }) => getAttachmentMigrationJob(input?.jobId)),
+
+  startStorageMigration: authProcedure
+    .use(demoAuthMiddleware)
+    .use(requireManageSite)
+    .input(z.object({ direction: z.enum(['local-to-s3', 's3-to-local']) }))
+    .mutation(async ({ input, ctx }) => startAttachmentMigration(input.direction, Number(ctx.id))),
+
+  retryStorageMigration: authProcedure
+    .use(demoAuthMiddleware)
+    .use(requireManageSite)
+    .input(z.object({ jobId: z.string().uuid() }))
+    .mutation(async ({ input }) => retryAttachmentMigration(input.jobId)),
+
+  cleanupStorageMigrationSources: authProcedure
+    .use(demoAuthMiddleware)
+    .use(superAdminAuthMiddleware)
+    .input(z.object({ jobId: z.string().uuid(), confirmation: z.string() }))
+    .mutation(async ({ input }) => startAttachmentSourceCleanup(input.jobId, input.confirmation)),
+
   createFolder: authProcedure
     .meta({ openapi: { method: 'POST', path: '/v1/attachment/create-folder', summary: 'Create a folder', protect: true, tags: ['Attachment'] } })
     .output(z.object({ success: z.boolean(), folderName: z.string(), folderPath: z.string() }))

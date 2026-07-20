@@ -16,13 +16,14 @@ import { ApiDocsScreen } from './ApiDocsScreen';
 import { BasicSetting } from '@/components/BlinkoSettings/BasicSetting';
 import AiSetting from '@/components/BlinkoSettings/AiSetting/AiSetting';
 import { TaskSetting } from '@/components/BlinkoSettings/TaskSetting';
-import { StorageSetting } from '@/components/BlinkoSettings/StorageSetting';
-import { ImportSetting } from '@/components/BlinkoSettings/ImportSetting';
-import { ExportSetting } from '@/components/BlinkoSettings/ExportSetting';
 import { AboutSetting } from '@/components/BlinkoSettings/AboutSetting';
-import { ACCENT_SWATCHES, PRESET_THEMES, type BkemoPreset, type BkemoPrefs, type BkemoTheme, type BkemoDensity } from '@/lib/bkemoSettings';
+import { DataTransfer } from './DataTransfer';
+import { StorageScreen } from './StorageScreen';
+import { ACCENT_SWATCHES, MOBILE_TOOL_OPTIONS, PRESET_THEMES, type BkemoPreset, type BkemoPrefs, type BkemoTheme, type BkemoDensity } from '@/lib/bkemoSettings';
 import { isInTauri } from '@/lib/tauriHelper';
 import { ensureNotificationPermission, clearTaskNotifications } from '@/lib/taskNotifications';
+import type { BkemoRoute } from './Sidebar';
+import { useMediaQuery } from 'usehooks-ts';
 
 const mono: React.CSSProperties = { fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '.06em', color: 'var(--fg-3)', textTransform: 'uppercase' };
 
@@ -30,14 +31,14 @@ const mono: React.CSSProperties = { fontFamily: 'var(--font-mono)', fontSize: 10
 const GROUP_OF: Record<string, 'you' | 'system' | 'data'> = {
   prefs: 'you',
   appear: 'you',
+  tools: 'you',
   account: 'you',
   security: 'you',
   apidocs: 'you',
   ai: 'system',
   task: 'system',
   storage: 'system',
-  import: 'data',
-  export: 'data',
+  data: 'data',
   about: 'data',
 };
 const GROUPS: { id: 'you' | 'system' | 'data'; label: string }[] = [
@@ -56,12 +57,12 @@ function Segmented<T extends string>({ options, active, onChange }: { options: {
 
 function Row({ title, sub, control }: { title: string; sub?: string; control: React.ReactNode }) {
   return (
-    <div className="h-stack" style={{ padding: '16px 0', borderBottom: '1px solid var(--border)', gap: 24, alignItems: 'flex-start' }}>
-      <div style={{ flex: 1 }}>
+    <div className="h-stack" style={{ padding: '16px 0', borderBottom: '1px solid var(--border)', gap: 24, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+      <div style={{ flex: '1 1 180px', minWidth: 0 }}>
         <div style={{ fontSize: 14, color: 'var(--fg)', fontWeight: 500 }}>{title}</div>
         {sub && <div style={{ fontSize: 12, color: 'var(--fg-2)', marginTop: 4, lineHeight: 1.5 }}>{sub}</div>}
       </div>
-      <div style={{ flexShrink: 0 }}>{control}</div>
+      <div style={{ flexShrink: 0, maxWidth: '100%' }}>{control}</div>
     </div>
   );
 }
@@ -364,16 +365,8 @@ const Preferences = observer(function Preferences() {
         <NumberField value={pageSize} min={10} onCommit={(v) => { const n = Math.min(100, Math.max(10, v)); PageSize.save(n); setPageSizeState(n); }} />
       } />
 
-      <Row title="Close Daily review" sub="Hide the Daily review screen and its navigation entries." control={
-        <Toggle on={!!c.isCloseDailyReview} onChange={(v) => setConfig('isCloseDailyReview', v)} />
-      } />
-
       <Row title="Use modal editor on desktop" sub="Hide the inline composer; open the full-screen memo editor instead (the mobile-style editor)." control={
         <Toggle on={!!c.hidePcEditor} onChange={(v) => setConfig('hidePcEditor', v)} />
-      } />
-
-      <Row title="Hide mobile tab bar" sub="Hide the bottom navigation bar on phones." control={
-        <Toggle on={!!c.isHiddenMobileBar} onChange={(v) => setConfig('isHiddenMobileBar', v)} />
       } />
 
       {/* Administrative System Settings */}
@@ -441,17 +434,58 @@ const Account = observer(function Account() {
 const displayTitle = (s: { key: string; title: string }) => {
   if (s.key === 'prefs') return 'Preferences';
   if (s.key === 'appear') return 'Appearance';
+  if (s.key === 'tools') return 'Tools';
   if (s.key === 'account') return 'Account & Users';
   if (s.key === 'security') return 'Security & API';
   if (s.key === 'apidocs') return 'API Docs';
   return s.title;
 };
 
-export const SettingsScreen = observer(function SettingsScreen({ prefs, onChange }: { prefs: BkemoPrefs; onChange: (p: Partial<BkemoPrefs>) => void }) {
+function Tools({ onNavigate, onSearch }: { onNavigate: (route: BkemoRoute) => void; onSearch: () => void }) {
+  return (
+    <div className="v-stack" style={{ gap: 22 }}>
+      <div>
+        <h2 style={{ fontSize: 24, fontWeight: 600, color: 'var(--fg)', letterSpacing: '-0.02em', margin: 0 }}>Tools</h2>
+        <div style={{ color: 'var(--fg-2)', fontSize: 13, marginTop: 4 }}>Open any workspace tool, including destinations that are not pinned to the mobile toolbar.</div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
+        {MOBILE_TOOL_OPTIONS.map((item) => (
+          <button
+            key={item.id}
+            onClick={() => onNavigate(item.id)}
+            style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 54, padding: '12px 14px', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border)', background: 'var(--bg-2)', color: 'var(--fg)', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit' }}
+          >
+            <span style={{ width: 24, color: 'var(--accent)', fontSize: 18, textAlign: 'center' }}>{item.glyph}</span>
+            <span style={{ flex: 1, fontSize: 13, fontWeight: 500 }}>{item.label}</span>
+            {item.id === 'ai' ? <span style={{ color: 'var(--fg-3)', fontSize: 10, fontFamily: 'var(--font-mono)' }}>SOON</span> : null}
+          </button>
+        ))}
+      </div>
+      <div>
+        <div style={{ ...mono, marginBottom: 8 }}>Utilities</div>
+        <div className="h-stack" style={{ gap: 10, flexWrap: 'wrap' }}>
+          <button onClick={onSearch} style={{ padding: '9px 14px', borderRadius: 'var(--radius)', border: '1px solid var(--border)', background: 'var(--bg-2)', color: 'var(--fg)', cursor: 'pointer', fontFamily: 'inherit' }}>⌕ Search all memos</button>
+          <button onClick={() => onNavigate('trash')} style={{ padding: '9px 14px', borderRadius: 'var(--radius)', border: '1px solid var(--border)', background: 'var(--bg-2)', color: 'var(--fg)', cursor: 'pointer', fontFamily: 'inherit' }}>⌫ Trash</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export const SettingsScreen = observer(function SettingsScreen({ prefs, onChange, onNavigate, onSearch, section, onSectionChange }: {
+  prefs: BkemoPrefs;
+  onChange: (p: Partial<BkemoPrefs>) => void;
+  onNavigate: (route: BkemoRoute) => void;
+  onSearch: () => void;
+  section: string;
+  onSectionChange: (section: string) => void;
+}) {
   const { t } = useTranslation();
   const user = RootStore.Get(UserStore);
   const blinko = RootStore.Get(BlinkoStore);
-  const [section, setSection] = useState('prefs');
+  const isMobile = useMediaQuery('(max-width: 768px)');
+  const normalizedSection = section === 'import' || section === 'export' ? 'data' : section;
+  const transferTab = section === 'import' ? 'import' : 'export';
 
   const c = (blinko.config.value ?? {}) as Record<string, any>;
 
@@ -460,7 +494,7 @@ export const SettingsScreen = observer(function SettingsScreen({ prefs, onChange
     {
       key: 'appear',
       title: 'Appearance',
-      icon: 'tabler:palette',
+      icon: 'tabler:brush',
       requireAdmin: false,
       component: (
         <Appearance
@@ -471,20 +505,20 @@ export const SettingsScreen = observer(function SettingsScreen({ prefs, onChange
         />
       ),
     },
-    { key: 'account', title: 'Account', icon: 'tabler:user', requireAdmin: false, component: <Account /> },
+    { key: 'tools', title: 'Tools', icon: 'tabler:settings-2', requireAdmin: false, component: <Tools onNavigate={onNavigate} onSearch={onSearch} /> },
+    { key: 'account', title: 'Account', icon: 'tabler:user-cog', requireAdmin: false, component: <Account /> },
     { key: 'security', title: 'Security & API', icon: 'tabler:key', requireAdmin: false, component: <SecurityScreen /> },
     { key: 'apidocs', title: 'API Docs', icon: 'tabler:code', requireAdmin: false, component: <ApiDocsScreen /> },
     ...(user.canManageSite ? [
       { key: 'ai', title: 'AI', icon: 'hugeicons:ai-beautify', requireAdmin: true, component: <AiSetting /> },
       { key: 'task', title: 'Schedule Task', icon: 'tabler:list-check', requireAdmin: true, component: <TaskSetting /> },
-      { key: 'storage', title: 'Storage', icon: 'tabler:database', requireAdmin: true, component: <StorageSetting /> },
+      { key: 'storage', title: 'Storage', icon: 'tabler:database', requireAdmin: true, component: <StorageScreen /> },
     ] : []),
-    { key: 'import', title: 'Import', icon: 'tabler:file-import', requireAdmin: true, component: <ImportSetting /> },
-    { key: 'export', title: 'Export', icon: 'tabler:file-export', requireAdmin: false, component: <ExportSetting /> },
+    { key: 'data', title: 'Data Transfer', icon: 'tabler:file-export', requireAdmin: false, component: <DataTransfer tab={transferTab} onTab={(tab) => onSectionChange(tab)} /> },
     { key: 'about', title: 'About', icon: 'tabler:info-circle', requireAdmin: false, component: <AboutSetting /> },
   ];
 
-  const active = sections.find((s) => s.key === section) ?? sections[0];
+  const active = sections.find((s) => s.key === normalizedSection) ?? sections[0];
 
   return (
     <div className="v-stack" style={{ flex: 1, height: '100%', overflow: 'hidden' }}>
@@ -493,18 +527,31 @@ export const SettingsScreen = observer(function SettingsScreen({ prefs, onChange
         <span style={{ color: 'var(--fg-3)' }}>/</span>
         <span style={{ color: 'var(--fg-2)', fontSize: 13 }}>{displayTitle(active)}</span>
       </div>
-      <div className="h-stack" style={{ flex: 1, overflow: 'hidden', alignItems: 'stretch' }}>
+      <div className={isMobile ? 'v-stack' : 'h-stack'} style={{ flex: 1, overflow: 'hidden', alignItems: 'stretch' }}>
         {/* nav */}
-        <div className="v-stack bk-scroll" style={{ width: 230, borderRight: '1px solid var(--border)', padding: '16px 8px', gap: 1, overflow: 'auto', background: 'var(--bg)', flexShrink: 0 }}>
+        <div
+          className={`${isMobile ? 'h-stack' : 'v-stack'} bk-scroll`}
+          style={{
+            width: isMobile ? '100%' : 230,
+            borderRight: isMobile ? 'none' : '1px solid var(--border)',
+            borderBottom: isMobile ? '1px solid var(--border)' : 'none',
+            padding: isMobile ? '8px' : '16px 8px',
+            gap: isMobile ? 4 : 1,
+            overflowX: isMobile ? 'auto' : 'hidden',
+            overflowY: isMobile ? 'hidden' : 'auto',
+            background: 'var(--bg)',
+            flexShrink: 0,
+          }}
+        >
           {GROUPS.map((g) => {
             const items = sections.filter((s) => GROUP_OF[s.key] === g.id);
             if (items.length === 0) return null;
             return (
-              <div key={g.id}>
-                <div style={{ ...mono, padding: '10px 12px 6px' }}>{g.label}</div>
+              <div key={g.id} style={isMobile ? { display: 'contents' } : undefined}>
+                {isMobile ? null : <div style={{ ...mono, padding: '10px 12px 6px' }}>{g.label}</div>}
                 {items.map((s) => (
-                  <div key={s.key} onClick={() => setSection(s.key)} className="h-stack" style={{ gap: 8, padding: '6px 10px', borderRadius: 'var(--radius)', background: section === s.key ? 'var(--accent-soft)' : 'transparent', color: section === s.key ? 'var(--accent)' : 'var(--fg-2)', borderLeft: section === s.key ? '2px solid var(--accent)' : '2px solid transparent', fontSize: 13, cursor: 'pointer' }}>
-                    <Icon icon={s.icon} width={16} height={16} style={{ color: section === s.key ? 'var(--accent)' : 'var(--fg-3)', flexShrink: 0 }} />
+                  <div key={s.key} onClick={() => onSectionChange(s.key)} className="h-stack" style={{ gap: 8, padding: isMobile ? '7px 10px' : '6px 10px', borderRadius: 'var(--radius)', background: normalizedSection === s.key ? 'var(--accent-soft)' : 'transparent', color: normalizedSection === s.key ? 'var(--accent)' : 'var(--fg-2)', borderLeft: !isMobile && normalizedSection === s.key ? '2px solid var(--accent)' : '2px solid transparent', borderBottom: isMobile && normalizedSection === s.key ? '2px solid var(--accent)' : '2px solid transparent', fontSize: 13, cursor: 'pointer', flexShrink: 0 }}>
+                    <Icon icon={s.icon} width={16} height={16} style={{ color: normalizedSection === s.key ? 'var(--accent)' : 'var(--fg-3)', flexShrink: 0 }} />
                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayTitle(s)}</span>
                   </div>
                 ))}
@@ -513,7 +560,7 @@ export const SettingsScreen = observer(function SettingsScreen({ prefs, onChange
           })}
         </div>
         {/* body — bkemo-native views rendered bare with native styles. */}
-        <div className="bk-scroll" style={{ flex: 1, overflow: 'auto', padding: '24px 28px 48px' }}>
+        <div className="bk-scroll" style={{ flex: 1, overflow: 'auto', padding: isMobile ? '18px 16px 36px' : '24px 28px 48px' }}>
           <div
             key={active.key}
             style={{ maxWidth: 860 }}

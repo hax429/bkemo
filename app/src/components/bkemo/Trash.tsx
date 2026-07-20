@@ -14,7 +14,7 @@ export const Trash = observer(function Trash() {
 
   useEffect(() => {
     let cancelled = false;
-    blinko.queryNotes({ type: -1, isRecycle: true }, 1, 200)
+    blinko.queryNotes({ type: -1, isRecycle: true, parentNoteId: null }, 1, 200)
       .then((list) => { if (!cancelled) setNotes(list); })
       .catch((e) => console.error('[trash] load failed:', e));
     return () => { cancelled = true; };
@@ -41,16 +41,27 @@ export const Trash = observer(function Trash() {
               <span style={{ width: 100, textAlign: 'right' }}>Deleted</span>
               <span style={{ width: 110, textAlign: 'right' }}>Actions</span>
             </div>
-            {notes.map((n) => (
-              <div key={n.id} className="h-stack" style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)', fontSize: 13, gap: 12, color: 'var(--fg)' }}>
-                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--fg-2)', textDecoration: 'line-through' }}>{previewText(n.content ?? '') || '(empty)'}</span>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg-3)', width: 100, textAlign: 'right' }}>{n.updatedAt ? dayjs(n.updatedAt).fromNow() : ''}</span>
-                <div className="h-stack" style={{ width: 110, justifyContent: 'flex-end', gap: 10 }}>
-                  <span onClick={() => restore(n)} style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--accent)', cursor: 'pointer' }}>↺ restore</span>
-                  <span onClick={() => remove(n)} style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: '#E0696B', cursor: 'pointer' }}>⌫</span>
+            {notes.map((n) => {
+              const subtasks = (((n as any).subtasks ?? []) as Note[]);
+              return (
+                <div key={n.id} style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)', color: 'var(--fg)' }}>
+                  <div className="h-stack" style={{ fontSize: 13, gap: 12 }}>
+                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--fg-2)', textDecoration: 'line-through' }}>{previewText(n.content ?? '') || '(empty)'}</span>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg-3)', width: 100, textAlign: 'right' }}>{n.updatedAt ? dayjs(n.updatedAt).fromNow() : ''}</span>
+                    <div className="h-stack" style={{ width: 110, justifyContent: 'flex-end', gap: 10 }}>
+                      <span onClick={() => restore(n)} style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--accent)', cursor: 'pointer' }}>↺ restore</span>
+                      <span onClick={() => remove(n)} style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: '#E0696B', cursor: 'pointer' }}>⌫</span>
+                    </div>
+                  </div>
+                  {subtasks.length > 0 && (
+                    <div style={{ marginTop: 7, paddingLeft: 14, borderLeft: '1px solid var(--border-2)', color: 'var(--fg-3)', fontFamily: 'var(--font-mono)', fontSize: 10 }}>
+                      {subtasks.slice(0, 3).map((child) => <div key={child.id} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', padding: '2px 0' }}>↳ BK-{child.id} · {previewText(child.content ?? '') || '(empty)'}</div>)}
+                      {subtasks.length > 3 && <div style={{ paddingTop: 2, color: 'var(--accent)' }}>+ {subtasks.length - 3} more subtasks</div>}
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

@@ -112,7 +112,7 @@ function AppRoutes() {
           if (!targetWindow || targetWindow === windowType) {
             console.log(`🔄 [${windowType}] Received navigation command:`, route, 'replace:', replace);
 
-            if (replace) {
+            if (replace || windowType === 'main') {
               navigate(route, { replace: true });
             } else {
               navigate(route);
@@ -163,9 +163,6 @@ function AppRoutes() {
       return (
         <Suspense fallback={<LoadingPage />}>
           <Routes>
-            {/* bkemo is the app */}
-            <Route path="/" element={<ProtectedRoute><BkemoPage /></ProtectedRoute>} />
-            <Route path="/bkemo" element={<ProtectedRoute><BkemoPage /></ProtectedRoute>} />
             <Route path="/signin" element={<SignInPage />} />
             <Route path="/signup" element={<SignUpPage />} />
             <Route path="/oauth-callback" element={<OAuthCallbackPage />} />
@@ -173,7 +170,8 @@ function AppRoutes() {
             <Route path="/m/:id" element={<PublicMemoPage />} />
             {/* Tauri quick-capture window */}
             <Route path="/quicknote" element={<QuickNotePage />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
+            {/* bkemo is the app. Every private screen is a canonical root URL. */}
+            <Route path="/*" element={<ProtectedRoute><BkemoPage /></ProtectedRoute>} />
           </Routes>
         </Suspense>
       );

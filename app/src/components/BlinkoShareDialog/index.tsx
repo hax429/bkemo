@@ -174,7 +174,7 @@ export const BlinkoShareDialog = observer(({ defaultSettings }: ShareDialogProps
           expireAt: this.settings.expiryDate
         });
         const blinkoEndpoint = getBlinkoEndpoint() ?? window.location.origin;
-        this.setShareUrl(blinkoEndpoint + 'share/' + (res?.shareEncryptedUrl ?? '') + (this.isPublic ? '' : '?password=' + (this.settings.password ?? '')));
+        this.setShareUrl(blinkoEndpoint.replace(/\/$/, '') + '/m/' + (res?.shareEncryptedUrl ?? '') + (this.isPublic ? '' : '?password=' + (this.settings.password ?? '')));
         this.setIsShare(true);
       }   
       // Handle internal sharing

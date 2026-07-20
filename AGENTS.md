@@ -8,7 +8,7 @@ Blinko is an open-source, self-hosted note-taking application with AI-powered fe
 
 ## bkemo — Direction D rewrite (current app)
 
-This fork was rebuilt around one idea: **every memo is also a todo**. The new "Direction D" UI is now **the app** — `/` and `/bkemo` render `app/src/pages/bkemo` (a fixed full-screen `.bkemo` surface). The legacy Blinko web UI (`CommonLayout` chrome + the `pages/index|hub|ai|resources|review|settings|plugin|analytics|all|detail` routes) was **removed from routing** in `app/src/App.tsx`; those page files and many legacy components still exist on disk and are not deleted because the Tauri **quick-capture windows** (`/quicknote|quickai|quicktool`) and a few shared pieces still import them (and still use the legacy **Vditor** editor). Global toasts/dialogs come from `<AppProvider/>` (not the removed chrome).
+This fork was rebuilt around one idea: **every memo is also a todo**. The new "Direction D" UI is now **the app** — `/` renders `app/src/pages/bkemo` (a fixed full-screen `.bkemo` surface), while the retired `/bkemo` prefix is normalized to `/` with replacement navigation. The legacy Blinko web UI (`CommonLayout` chrome + the `pages/index|hub|ai|resources|review|settings|plugin|analytics|all|detail` routes) was **removed from routing** in `app/src/App.tsx`; those page files and many legacy components still exist on disk and are not deleted because the Tauri **quick-capture windows** (`/quicknote|quickai|quicktool`) and a few shared pieces still import them (and still use the legacy **Vditor** editor). Global toasts/dialogs come from `<AppProvider/>` (not the removed chrome).
 
 Key bits of the new architecture:
 - **Data model**: `notes` reuses `type` (`NoteType.TODO`) plus task columns `dueDate`/`isImportant`/`isUrgent`/`completedAt` (`prisma/schema.prisma`). A memo is a task if typed TODO or any task field is set; done = `completedAt != null`. A `reaction` table powers public reactions.
@@ -59,6 +59,14 @@ bun run dev:backend        # Run backend server only
 bun run dev:frontend       # Run frontend only
 bun run prisma:studio      # Open Prisma Studio for database management
 ```
+
+#### Persistent local server launches from Codex
+
+- Use `./run-dev.sh` for the full local stack on `http://localhost:1111`; the script itself is a foreground launcher and is not defective when its parent terminal exits.
+- A process started directly in a temporary Codex command session may be cleaned up when the turn ends. If the user needs the server to remain available, launch it in a detached session: `screen -dmS bkemo-dev ./run-dev.sh`.
+- Check for an existing session with `screen -ls` before starting another one. Verify readiness independently with `curl -sS -o /dev/null -w 'HTTP %{http_code}\n' http://localhost:1111/`; do not rely only on startup output.
+- PostgreSQL uses shared memory. If startup fails with `shmat(...): Operation not permitted` inside the sandbox, rerun the launcher with the required host permission rather than changing `run-dev.sh` or `debug.sh`.
+- Inspect the detached server with `screen -r bkemo-dev` and detach without stopping it using `Ctrl-A`, then `D`.
 
 ### Building
 ```bash

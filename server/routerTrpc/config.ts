@@ -1,4 +1,5 @@
-import { router, authProcedure, publicProcedure } from '../middleware';
+import { router, authProcedure, publicProcedure, demoAuthMiddleware, requireManageSite } from '../middleware';
+import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { prisma } from '../prisma';
 import { GlobalConfig, ZConfigKey, ZConfigSchema, ZUserPerferConfigKey } from '../../shared/lib/types';
@@ -6,6 +7,63 @@ import { configSchema } from '@shared/lib/prismaZodType';
 import { Context } from '../context';
 import { reinitializeOAuthStrategies } from '../routerExpress/auth/config';
 import { resolvePermissions } from '../lib/permissions';
+import { normalizeStorageSettings, testStorageConnection, type StorageSettings } from '../lib/storageConnection';
+
+const storageSettingsSchema = z.discriminatedUnion('provider', [
+  z.object({
+    provider: z.literal('local'),
+    localCustomPath: z.string().max(512).optional(),
+  }),
+  z.object({
+    provider: z.literal('s3'),
+    endpoint: z.string().max(2048).optional(),
+    region: z.string().max(128),
+    bucket: z.string().max(255),
+    accessKeyId: z.string().max(1024).optional(),
+    secretAccessKey: z.string().max(4096).optional(),
+    prefix: z.string().max(512).optional(),
+    forcePathStyle: z.boolean().optional(),
+  }),
+]);
+
+function storageConfigEntries(settings: StorageSettings): Array<[string, unknown]> {
+  if (settings.provider === 'local') {
+    return [
+      ['objectStorage', 'local'],
+      ['localCustomPath', settings.localCustomPath ?? ''],
+    ];
+  }
+  return [
+    ['objectStorage', 's3'],
+    ['s3Endpoint', settings.endpoint ?? ''],
+    ['s3Region', settings.region],
+    ['s3Bucket', settings.bucket],
+    ['s3AccessKeyId', settings.accessKeyId ?? ''],
+    ['s3AccessKeySecret', settings.secretAccessKey ?? ''],
+    ['s3CustomPath', settings.prefix ?? ''],
+    ['s3ForcePathStyle', settings.forcePathStyle !== false],
+  ];
+}
+
+async function withStoredStorageCredentials(settings: StorageSettings): Promise<StorageSettings> {
+  if (settings.provider !== 's3') return settings;
+
+  const accessKeyId = settings.accessKeyId?.trim() ?? '';
+  const secretAccessKey = settings.secretAccessKey?.trim() ?? '';
+  if (accessKeyId || secretAccessKey) return settings;
+
+  const stored = await getGlobalConfig({ useAdmin: true });
+  return {
+    ...settings,
+    accessKeyId: stored.s3AccessKeyId || undefined,
+    secretAccessKey: stored.s3AccessKeySecret || undefined,
+  };
+}
+
+function storageConnectionError(error: unknown): TRPCError {
+  const message = error instanceof Error ? error.message : 'Storage connection failed';
+  return new TRPCError({ code: 'BAD_REQUEST', message });
+}
 
 export const getGlobalConfig = async ({ ctx, useAdmin = false }: { ctx?: Context, useAdmin?: boolean }) => {
   const userId = Number(ctx?.id ?? 0);
@@ -51,6 +109,14 @@ export const getGlobalConfig = async ({ ctx, useAdmin = false }: { ctx?: Context
     }
     return acc;
   }, {} as Record<string, any>);
+
+  if (!useAdmin) {
+    const hasAccessKey = Boolean(globalConfig.s3AccessKeyId);
+    const hasSecretKey = Boolean(globalConfig.s3AccessKeySecret);
+    delete globalConfig.s3AccessKeyId;
+    delete globalConfig.s3AccessKeySecret;
+    globalConfig.s3CredentialsConfigured = hasAccessKey && hasSecretKey;
+  }
 
   return globalConfig as GlobalConfig;
 };
@@ -175,6 +241,39 @@ export const configRouter = router({
       }
 
       return updateResult;
+    }),
+
+  testStorage: authProcedure
+    .use(demoAuthMiddleware)
+    .use(requireManageSite)
+    .input(storageSettingsSchema)
+    .mutation(async ({ input }) => {
+      try {
+        return await testStorageConnection(await withStoredStorageCredentials(input));
+      } catch (error) {
+        throw storageConnectionError(error);
+      }
+    }),
+
+  saveStorage: authProcedure
+    .use(demoAuthMiddleware)
+    .use(requireManageSite)
+    .input(storageSettingsSchema)
+    .mutation(async ({ input }) => {
+      try {
+        const normalized = normalizeStorageSettings(await withStoredStorageCredentials(input));
+        const connection = await testStorageConnection(normalized);
+        const entries = storageConfigEntries(normalized);
+        await prisma.$transaction(async (tx) => {
+          for (const [key, value] of entries) {
+            await tx.config.deleteMany({ where: { key } });
+            await tx.config.create({ data: { key, config: { type: typeof value, value } } });
+          }
+        });
+        return { ...connection, active: normalized.provider };
+      } catch (error) {
+        throw storageConnectionError(error);
+      }
     }),
 
   setPluginConfig: authProcedure

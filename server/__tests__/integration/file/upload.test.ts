@@ -42,7 +42,7 @@ mock.module('@shared/lib/cache', () => ({
   }
 }));
 
-import { FileService, sanitizeUploadFileName } from '../../../lib/files';
+import { attachmentStorageProvider, buildStoredFileName, FileService, sanitizeUploadFileName } from '../../../lib/files';
 
 function createReadableStream(content: string | Buffer): ReadableStream {
   const buf = typeof content === 'string' ? Buffer.from(content) : content;
@@ -282,5 +282,20 @@ describe('Filename Decode Chain — busboy to FileService', () => {
     expect(sanitized).not.toMatch(/[<>:"/\\|?*\x00-\x1f\x7f]/);
     // Must preserve Chinese content
     expect(sanitized).toContain('挽救计划');
+  });
+});
+
+describe('Attachment storage identity', () => {
+  test('adds a unique identifier without losing the extension', () => {
+    const first = buildStoredFileName('report.pdf');
+    const second = buildStoredFileName('report.pdf');
+    expect(first).not.toBe(second);
+    expect(first).toStartWith('report-');
+    expect(first).toEndWith('.pdf');
+  });
+
+  test('selects the read provider from the stored path', () => {
+    expect(attachmentStorageProvider('/api/file/report.pdf')).toBe('local');
+    expect(attachmentStorageProvider('/api/s3file/files/report.pdf')).toBe('s3');
   });
 });

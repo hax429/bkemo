@@ -239,13 +239,17 @@ function detectFontCategory(fontName: string): string {
   return "sans-serif";
 }
 
-main()
-  .then(e => {
-    console.log("✨ Seed done! ✨")
-  })
-  .catch((e) => {
-    console.error(e);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+// This module also exports password helpers used by the running server. Do not
+// execute the database seeder merely because those helpers were imported.
+if (import.meta.main) {
+  main()
+    .then(() => {
+      console.log("✨ Seed done! ✨")
+    })
+    .catch((e) => {
+      console.error(e);
+    })
+    .finally(async () => {
+      await prisma.$disconnect();
+    });
+}

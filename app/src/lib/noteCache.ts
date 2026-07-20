@@ -1,34 +1,10 @@
 import Dexie, { type Table } from 'dexie';
 import type { Note } from '@shared/lib/types';
+import { filterCachedNotes, type CacheFilter } from './noteCacheFilters';
+export type { Quadrant } from './noteCacheFilters';
 
 type CachedNote = Note & { id: number };
 
-export type Quadrant = 'do' | 'schedule' | 'delegate' | 'eliminate';
-
-type CacheFilter = {
-  type?: number | null;
-  isArchived?: boolean | null;
-  isRecycle?: boolean | null;
-  tagId?: number | null;
-  withoutTag?: boolean;
-  withFile?: boolean;
-  withLink?: boolean;
-  searchText?: string;
-  startDate?: Date | null;
-  endDate?: Date | null;
-  hasTodo?: boolean;
-  // Task filters. Lane date-ranges resolve to dueStart/dueEnd on the caller side.
-  dueStart?: Date | null;
-  dueEnd?: Date | null;
-  hasDueDate?: boolean | null;
-  isImportant?: boolean | null;
-  isUrgent?: boolean | null;
-  isCompleted?: boolean | null;
-  quadrant?: Quadrant | null;
-  parentNoteId?: number | null;
-  page: number;
-  size: number;
-};
 
 class NoteCacheDB extends Dexie {
   notes!: Table<CachedNote, number>;
@@ -45,13 +21,6 @@ class NoteCacheDB extends Dexie {
     });
   }
 }
-
-const QUADRANT_MAP: Record<Quadrant, { isImportant: boolean; isUrgent: boolean }> = {
-  do: { isImportant: true, isUrgent: true },
-  schedule: { isImportant: true, isUrgent: false },
-  delegate: { isImportant: false, isUrgent: true },
-  eliminate: { isImportant: false, isUrgent: false },
-};
 
 const db = new NoteCacheDB();
 
@@ -93,85 +62,57 @@ export async function upsertNotesToCache(notes: Note[]): Promise<void> {
   if (valid.length) await db.notes.bulkPut(valid);
 }
 
-export async function queryNotesFromCache(filter: CacheFilter): Promise<Note[]> {
-  let notes = await db.notes.toArray();
-
-  // type: 0 is a valid value (BLINKO), so check explicitly
-  if (filter.type != null) {
-    notes = notes.filter(n => n.type === filter.type);
-  }
-  if (filter.isArchived != null) {
-    notes = notes.filter(n => !!n.isArchived === !!filter.isArchived);
-  }
-  if (filter.isRecycle != null) {
-    notes = notes.filter(n => !!n.isRecycle === !!filter.isRecycle);
-  }
-  if (filter.tagId) {
-    notes = notes.filter(n => n.tags?.some(t => t.id === filter.tagId));
-  }
-  if (filter.withoutTag) {
-    notes = notes.filter(n => !n.tags?.length);
-  }
-  if (filter.withFile) {
-    notes = notes.filter(n => n.attachments?.some(a => !a.type?.startsWith('image/')));
-  }
-  if (filter.withLink) {
-    notes = notes.filter(n => /https?:\/\//.test(n.content ?? ''));
-  }
-  if (filter.searchText) {
-    const q = filter.searchText.toLowerCase();
-    notes = notes.filter(n => n.content?.toLowerCase().includes(q));
-  }
-  if (filter.startDate) {
-    notes = notes.filter(n => n.createdAt && new Date(n.createdAt) >= filter.startDate!);
-  }
-  if (filter.endDate) {
-    notes = notes.filter(n => n.createdAt && new Date(n.createdAt) <= filter.endDate!);
-  }
-  if (filter.hasTodo) {
-    notes = notes.filter(n => /- \[[ x]\]/i.test(n.content ?? ''));
-  }
-  // ── Task filters ──
-  if (filter.isImportant != null) {
-    notes = notes.filter(n => !!n.isImportant === !!filter.isImportant);
-  }
-  if (filter.isUrgent != null) {
-    notes = notes.filter(n => !!n.isUrgent === !!filter.isUrgent);
-  }
-  if (filter.isCompleted != null) {
-    notes = notes.filter(n => (n.completedAt != null) === !!filter.isCompleted);
-  }
-  if (filter.quadrant) {
-    const q = QUADRANT_MAP[filter.quadrant];
-    notes = notes.filter(n => !!n.isImportant === q.isImportant && !!n.isUrgent === q.isUrgent);
-  }
-  if (filter.parentNoteId !== undefined) {
-    notes = notes.filter(n => (n.parentNoteId ?? null) === filter.parentNoteId);
-  }
-  if (filter.hasDueDate != null) {
-    notes = notes.filter(n => (n.dueDate != null) === !!filter.hasDueDate);
-  }
-  if (filter.dueStart) {
-    notes = notes.filter(n => n.dueDate && new Date(n.dueDate) >= filter.dueStart!);
-  }
-  if (filter.dueEnd) {
-    notes = notes.filter(n => n.dueDate && new Date(n.dueDate) <= filter.dueEnd!);
-  }
-
-  // pinned first, then newest first
-  notes.sort((a, b) => {
-    if (a.isTop && !b.isTop) return -1;
-    if (!a.isTop && b.isTop) return 1;
-    return new Date(b.updatedAt ?? 0).getTime() - new Date(a.updatedAt ?? 0).getTime();
+/** Replace a fully fetched query scope, removing cached rows that no longer match server state. */
+export async function replaceNotesInCache(filter: CacheFilter, notes: Note[]): Promise<void> {
+  const rows = await db.notes.toArray();
+  const cachedInScope = filterCachedNotes(rows, { ...filter, page: 1, size: Number.MAX_SAFE_INTEGER });
+  const freshIds = new Set(notes.flatMap((note) => note.id == null ? [] : [note.id]));
+  const staleIds = cachedInScope.flatMap((note) => note.id != null && !freshIds.has(note.id) ? [note.id] : []);
+  await db.transaction('rw', db.notes, async () => {
+    if (staleIds.length > 0) await db.notes.bulkDelete(staleIds);
+    const valid = notes.filter((note): note is CachedNote => note.id != null);
+    if (valid.length > 0) await db.notes.bulkPut(valid);
   });
+}
 
-  const start = (filter.page - 1) * filter.size;
-  return notes.slice(start, start + filter.size);
+export async function queryNotesFromCache(filter: CacheFilter): Promise<Note[]> {
+  return filterCachedNotes(await db.notes.toArray(), filter);
 }
 
 export async function patchNoteInCache(id: number, patch: Partial<Note>): Promise<void> {
   const existing = await db.notes.get(id);
   if (existing) await db.notes.put({ ...existing, ...patch, id });
+}
+
+export async function patchNoteTreeInCache(rootIds: number[], patch: Partial<Note>): Promise<void> {
+  const rows = await db.notes.toArray();
+  const treeIds = new Set(rootIds);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const row of rows) {
+      if (row.parentNoteId != null && treeIds.has(row.parentNoteId) && !treeIds.has(row.id)) {
+        treeIds.add(row.id);
+        changed = true;
+      }
+      if (treeIds.has(row.id)) {
+        for (const child of (((row as any).subtasks ?? []) as Note[])) {
+          if (child.id != null && !treeIds.has(child.id)) {
+            treeIds.add(child.id);
+            changed = true;
+          }
+        }
+      }
+    }
+  }
+
+  await db.notes.bulkPut(rows.map((row) => ({
+    ...row,
+    ...(treeIds.has(row.id) ? patch : {}),
+    ...((row as any).subtasks ? {
+      subtasks: ((row as any).subtasks as Note[]).map((child) => child.id != null && treeIds.has(child.id) ? { ...child, ...patch } : child),
+    } : {}),
+  })));
 }
 
 export async function deleteNoteFromCache(id: number): Promise<void> {

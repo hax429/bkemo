@@ -6,24 +6,20 @@ import { RootStore } from '@/store';
 import { BlinkoStore } from '@/store/blinkoStore';
 import { BaseStore } from '@/store/baseStore';
 import { UserStore } from '@/store/user';
-import { getBkemoConfig } from '@/lib/bkemoConfig';
 import { getBlinkoEndpoint } from '@/lib/blinkoEndpoint';
 
 export type BkemoRoute =
   | 'home' | 'daily' | 'random' | 'trash'
   | 'inbox' | 'today' | 'tomorrow' | 'week' | 'matrix'
-  | 'stats' | 'calendar' | 'graph' | 'files' | 'settings'
+  | 'analytics' | 'stats' | 'calendar' | 'graph' | 'files' | 'ai' | 'settings'
   | string; // tag:<id>
 
 const NOTES_NAV: { id: BkemoRoute; icon: string; title: string }[] = [
   { id: 'home', icon: '✦', title: 'Home' },
-  { id: 'daily', icon: '☉', title: 'Daily review' },
-  { id: 'random', icon: '↻', title: 'Random' },
+  { id: 'today', icon: '●', title: 'Today' },
   { id: 'trash', icon: '⌫', title: 'Trash' },
 ];
 const TODOS_NAV: { id: BkemoRoute; icon: string; title: string }[] = [
-  { id: 'today', icon: '●', title: 'Today' },
-  { id: 'tomorrow', icon: '○', title: 'Tomorrow' },
   { id: 'week', icon: '▦', title: 'This week' },
   { id: 'matrix', icon: '⊞', title: 'Matrix' },
 ];
@@ -113,11 +109,8 @@ export const Sidebar = observer(function Sidebar({ activeRoute, onNav, onNewMemo
   const tree = blinko.tagList.value?.listTags ?? [];
   const initials = (user?.nickname || user?.name || 'BK').slice(0, 2).toUpperCase();
   const pending = blinko.offlinePendingOps.list?.length ?? 0;
-  const { closeDailyReview } = getBkemoConfig();
-  const notesNav = closeDailyReview ? NOTES_NAV.filter((n) => n.id !== 'daily') : NOTES_NAV;
-
   // Collapsible logic to make sidebar breathe
-  const notesToShow = showMore ? notesNav : notesNav.filter((n) => n.id === 'home');
+  const notesToShow = showMore ? NOTES_NAV : NOTES_NAV.filter((n) => n.id === 'home');
   const todosToShow = showMore ? TODOS_NAV : TODOS_NAV.filter((t) => t.id === 'today');
   const tagsToShow = showMore ? tree : tree.slice(0, 3);
 
@@ -197,6 +190,8 @@ export const Sidebar = observer(function Sidebar({ activeRoute, onNav, onNewMemo
                 { id: 'graph' as BkemoRoute, icon: '⊚', label: 'Graph' },
                 { id: 'calendar' as BkemoRoute, icon: '▦', label: 'Calendar' },
                 { id: 'files' as BkemoRoute, icon: '◳', label: 'Files' },
+                { id: 'analytics' as BkemoRoute, icon: '▥', label: 'Analytics' },
+                { id: 'ai' as BkemoRoute, icon: '✧', label: 'AI · Coming soon' },
                 { id: 'settings' as BkemoRoute, icon: '⚙', label: 'Settings' },
               ].map((item) => (
                 <div
@@ -289,7 +284,7 @@ export const Sidebar = observer(function Sidebar({ activeRoute, onNav, onNewMemo
         {tagsToShow.map((t: any) => <TagNavNode key={t.metadata?.path || t.name} node={t} depth={0} activeRoute={activeRoute} onNav={onNav} />)}
 
         {/* Collapsible trigger */}
-        {(notesNav.length > notesToShow.length || TODOS_NAV.length > todosToShow.length || tree.length > tagsToShow.length) && (
+        {(NOTES_NAV.length > notesToShow.length || TODOS_NAV.length > todosToShow.length || tree.length > tagsToShow.length) && (
           <div
             onClick={() => setShowMore(!showMore)}
             className="h-stack"

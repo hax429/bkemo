@@ -12,6 +12,16 @@ import fs from 'fs';
 import { MarkdownImporter } from '../jobs/markdownJob';
 import { getPgBoss } from '../lib/pgBoss';
 import { prisma } from '../prisma';
+import { TRPCError } from '@trpc/server';
+import {
+  exportBk,
+  exportReadable,
+  exportRecoveryKey,
+  importRecoveryKey,
+  importTransfer,
+  isFirstSuperadminAccount,
+  previewImport,
+} from '../lib/bkemoTransfer';
 
 // Schema for task info compatible with frontend
 const taskInfoSchema = z.object({
@@ -25,7 +35,106 @@ const taskInfoSchema = z.object({
 // Cache keys for task outputs
 const BACKUP_PROGRESS_CACHE_KEY = "backup-database-progress";
 
+async function assertOwnedTransferFile(filePath: string, accountId: number): Promise<void> {
+  const storedPath = await FileService.resolveStoredPath(filePath);
+  const attachment = await prisma.attachments.findFirst({ where: { path: storedPath, accountId }, select: { id: true } });
+  if (!attachment) throw new TRPCError({ code: 'FORBIDDEN', message: 'The uploaded transfer file does not belong to this account' });
+}
+
 export const taskRouter = router({
+  exportPortable: authProcedure.use(demoAuthMiddleware)
+    .input(z.object({
+      format: z.enum(['markdown', 'json', 'bk']),
+      passphrase: z.string().optional(),
+      scope: z.enum(['all', 'active', 'archived', 'trash']).default('active'),
+      startDate: z.date().optional(),
+      endDate: z.date().optional(),
+    }))
+    .output(z.object({
+      success: z.boolean(),
+      downloadUrl: z.string(),
+      filename: z.string(),
+      fileCount: z.number().optional(),
+      scope: z.enum(['account', 'site']).optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      if (input.format === 'bk') {
+        if (!input.passphrase) throw new TRPCError({ code: 'BAD_REQUEST', message: 'A passphrase is required for .bk exports' });
+        const result = await exportBk(ctx, input.passphrase);
+        return { success: true, downloadUrl: result.downloadUrl, filename: result.filename, scope: result.scope };
+      }
+      const result = await exportReadable(ctx, input.format, input);
+      return { success: true, downloadUrl: result.downloadUrl, filename: result.filename, fileCount: result.fileCount };
+    }),
+
+  previewPortableImport: authProcedure.use(demoAuthMiddleware)
+    .input(z.object({ filePath: z.string(), passphrase: z.string().optional() }))
+    .output(z.object({
+      format: z.enum(['bk', 'json', 'markdown']),
+      scope: z.enum(['account', 'site']),
+      notes: z.number(),
+      attachments: z.number(),
+      accounts: z.number(),
+      canRestoreSharing: z.boolean(),
+      canRestoreSiteSettings: z.boolean(),
+      plainMarkdown: z.number(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      await assertOwnedTransferFile(input.filePath, Number(ctx.id));
+      const file = await FileService.getFile(input.filePath);
+      try { return await previewImport(file.path, input.passphrase, ctx); }
+      finally { if (file.isTemporary) await file.cleanup?.(); }
+    }),
+
+  importPortable: authProcedure.use(demoAuthMiddleware)
+    .input(z.object({
+      filePath: z.string(),
+      passphrase: z.string().optional(),
+      mode: z.enum(['merge', 'replace']).default('merge'),
+      preserveSharing: z.boolean().default(false),
+      restoreSiteSettings: z.boolean().default(false),
+    }))
+    .output(z.object({
+      created: z.number(),
+      updated: z.number(),
+      conflicts: z.number(),
+      skipped: z.number(),
+      warnings: z.array(z.string()),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      await assertOwnedTransferFile(input.filePath, Number(ctx.id));
+      const file = await FileService.getFile(input.filePath);
+      try {
+        return await importTransfer(file.path, input.passphrase, ctx, input);
+      } finally {
+        if (file.isTemporary) await file.cleanup?.();
+        await FileService.deleteFile(input.filePath).catch(() => undefined);
+      }
+    }),
+
+  exportRecoveryKey: authProcedure.use(demoAuthMiddleware).use(requireManageSite)
+    .input(z.object({ passphrase: z.string() }))
+    .output(z.object({ success: z.boolean(), downloadUrl: z.string(), filename: z.string() }))
+    .mutation(async ({ input, ctx }) => {
+      if (ctx.role !== 'superadmin') throw new TRPCError({ code: 'FORBIDDEN', message: 'Only the first superadmin can export the recovery key' });
+      const result = await exportRecoveryKey(Number(ctx.id), input.passphrase);
+      return { success: true, downloadUrl: result.downloadUrl, filename: result.filename };
+    }),
+
+  importRecoveryKey: authProcedure.use(demoAuthMiddleware).use(requireManageSite)
+    .input(z.object({ filePath: z.string(), passphrase: z.string() }))
+    .output(z.object({ success: z.boolean(), siteId: z.string() }))
+    .mutation(async ({ input, ctx }) => {
+      if (ctx.role !== 'superadmin') throw new TRPCError({ code: 'FORBIDDEN', message: 'Only the first superadmin can import the recovery key' });
+      await assertOwnedTransferFile(input.filePath, Number(ctx.id));
+      const file = await FileService.getFile(input.filePath);
+      try { return { success: true, siteId: await importRecoveryKey(Number(ctx.id), file.path, input.passphrase) }; }
+      finally {
+        if (file.isTemporary) await file.cleanup?.();
+        await FileService.deleteFile(input.filePath).catch(() => undefined);
+      }
+    }),
+
   list: authProcedure.use(requireManageSite)
     .meta({ openapi: { method: 'GET', path: '/v1/tasks/list', summary: 'Query user task list', protect: true, tags: ['Task'] } })
     .input(z.void())
@@ -119,6 +228,9 @@ export const taskRouter = router({
       filePath: z.string()
     }))
     .mutation(async function* ({ input, ctx }) {
+      if (!(await isFirstSuperadminAccount(Number(ctx.id)))) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Only the first superadmin can restore a full database backup' });
+      }
       const { filePath } = input
       try {
         const fileResult = await FileService.getFile(filePath)

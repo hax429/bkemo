@@ -12,9 +12,10 @@ interface BkemoSelectProps {
   options: BkemoSelectOption[];
   onChange: (v: string) => void;
   style?: React.CSSProperties;
+  placement?: 'top' | 'bottom';
 }
 
-export function BkemoSelect({ value, options, onChange, style }: BkemoSelectProps) {
+export function BkemoSelect({ value, options, onChange, style, placement = 'bottom' }: BkemoSelectProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -78,7 +79,8 @@ export function BkemoSelect({ value, options, onChange, style }: BkemoSelectProp
         <div
           style={{
             position: 'absolute',
-            top: 'calc(100% + 4px)',
+            top: placement === 'bottom' ? 'calc(100% + 4px)' : undefined,
+            bottom: placement === 'top' ? 'calc(100% + 4px)' : undefined,
             right: 0,
             background: 'var(--bg-2)',
             border: '1px solid var(--border-2)',

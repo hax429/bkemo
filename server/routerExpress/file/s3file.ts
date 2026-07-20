@@ -6,6 +6,7 @@ import sharp from "sharp";
 import mime from "mime-types";
 import { getTokenFromRequest } from "../../lib/helper";
 import { prisma } from "../../prisma";
+import { stableAttachmentPath } from '../../lib/attachmentPaths';
 
 const router = express.Router();
 
@@ -147,11 +148,12 @@ router.get(/.*/, async (req: Request, res: Response) => {
           if (myFile.note?.isShare) {
             // Public shared file, allow access
           } else {
+            const stablePath = stableAttachmentPath(myFile.portableId);
             const isAvatar = await prisma.accounts.findFirst({
-              where: { image: '/api/s3file/' + fullPath }
+              where: { image: { in: ['/api/s3file/' + fullPath, stablePath] } }
             });
             const isGuestAvatar = !isAvatar && await prisma.comments.findFirst({
-              where: { guestAvatar: '/api/s3file/' + fullPath }
+              where: { guestAvatar: { in: ['/api/s3file/' + fullPath, stablePath] } }
             });
             if (!isAvatar && !isGuestAvatar) {
               return res.status(401).json({ error: "Unauthorized" });
@@ -164,11 +166,12 @@ router.get(/.*/, async (req: Request, res: Response) => {
                           token.role === 'superadmin';
           
           if (!myFile.note?.isShare && !isOwner) {
+            const stablePath = stableAttachmentPath(myFile.portableId);
             const isAvatar = await prisma.accounts.findFirst({
-              where: { image: '/api/s3file/' + fullPath }
+              where: { image: { in: ['/api/s3file/' + fullPath, stablePath] } }
             });
             const isGuestAvatar = !isAvatar && await prisma.comments.findFirst({
-              where: { guestAvatar: '/api/s3file/' + fullPath }
+              where: { guestAvatar: { in: ['/api/s3file/' + fullPath, stablePath] } }
             });
             if (!isAvatar && !isGuestAvatar) {
               return res.status(401).json({ error: "Unauthorized" });
@@ -207,18 +210,13 @@ router.get(/.*/, async (req: Request, res: Response) => {
           ResponseCacheControl: `public, max-age=${CACHE_DURATION}, immutable`,
         });
 
-        console.log('Bucket:', config.s3Bucket);
-        console.log('Key:', decodeURIComponent(fullPath));
         const signedUrl = await getSignedUrl(s3ClientInstance as any, command as any, {
           expiresIn: MAX_PRESIGNED_URL_EXPIRY,
         });
 
-        console.log('Signed URL:', signedUrl);
-
         return res.redirect(signedUrl);
       }
     }
-    console.log('fullPath!!', decodeURIComponent(fullPath));
     //@important if @aws-sdk/client-s3 is not 3.693.0, has 403 error
     const command = new GetObjectCommand({
       Bucket: config.s3Bucket,
@@ -246,4 +244,3 @@ router.get(/.*/, async (req: Request, res: Response) => {
 });
 
 export default router;
-

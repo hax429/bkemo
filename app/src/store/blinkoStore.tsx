@@ -16,7 +16,7 @@ import { UserStore } from './user';
 import { BaseStore } from './baseStore';
 import { StorageState } from './standard/StorageState';
 import { useSearchParams, useLocation } from 'react-router-dom';
-import { upsertNotesToCache, queryNotesFromCache, patchNoteInCache, deleteNoteFromCache, ensureCacheAccount } from '@/lib/noteCache';
+import { upsertNotesToCache, replaceNotesInCache, queryNotesFromCache, patchNoteInCache, patchNoteTreeInCache, deleteNoteFromCache, ensureCacheAccount } from '@/lib/noteCache';
 
 type filterType = {
   label: string;
@@ -137,8 +137,8 @@ export class BlinkoStore implements Store {
   currentCommonFilter: filterType | null = null
   updateTicker = 0
   /** Guards the single in-flight background refresh + dedupes its ticker bump. */
-  private bgRefreshing = false;
-  private lastNetSig = '';
+  private bgRefreshing = new Set<string>();
+  private lastNetSig = new Map<string, string>();
   fullNoteList: Note[] = []
 
   // For global search
@@ -196,7 +196,7 @@ export class BlinkoStore implements Store {
     const mergedFilter = {
       ...this.noteListFilterConfig,
       ...filterConfig,
-      searchText: this.searchText,
+      searchText: filterConfig.searchText ?? this.searchText,
       page,
       size,
     };
@@ -238,21 +238,27 @@ export class BlinkoStore implements Store {
    * this from looping when the ticker bump re-triggers a query.
    */
   private async backgroundRefresh(filter: any) {
-    if (this.bgRefreshing || !this.isOnline) return;
-    this.bgRefreshing = true;
+    if (!this.isOnline) return;
+    const refreshKey = JSON.stringify(filter);
+    if (this.bgRefreshing.has(refreshKey)) return;
+    this.bgRefreshing.add(refreshKey);
     try {
       const fresh = await withTimeout(api.notes.list.mutate(filter), NOTE_NET_TIMEOUT_MS * 3);
-      await upsertNotesToCache(fresh);
+      if (filter.page === 1 && fresh.length < filter.size) {
+        await replaceNotesInCache(filter, fresh);
+      } else {
+        await upsertNotesToCache(fresh);
+      }
       if (this.offlineNotes.length > 0) await this.syncOfflineNotes();
       const sig = `${fresh.length}|${fresh.map((n: Note) => `${n.id}:${+new Date(n.updatedAt as any)}`).join(',')}`;
-      if (sig !== this.lastNetSig) {
-        this.lastNetSig = sig;
+      if (sig !== this.lastNetSig.get(refreshKey)) {
+        this.lastNetSig.set(refreshKey, sig);
         runInAction(() => { this.updateTicker++; });
       }
     } catch {
       // offline / slow — keep showing the cache; nothing to do
     } finally {
-      this.bgRefreshing = false;
+      this.bgRefreshing.delete(refreshKey);
     }
   }
 
@@ -278,6 +284,8 @@ export class BlinkoStore implements Store {
         if (fc.isImportant != null && !!n.isImportant !== !!fc.isImportant) return false;
         if (fc.isUrgent != null && !!n.isUrgent !== !!fc.isUrgent) return false;
         if (fc.parentNoteId !== undefined && (n.parentNoteId ?? null) !== fc.parentNoteId) return false;
+        if (fc.hasParent != null && (n.parentNoteId != null) !== !!fc.hasParent) return false;
+        if (fc.isTop != null && !!n.isTop !== !!fc.isTop) return false;
         return true;
       },
     });
@@ -344,7 +352,9 @@ export class BlinkoStore implements Store {
           return offlineNote;
         } else {
           this.offlinePendingOps.push({ type: 'edit', noteId: id, patch: params });
-          patchNoteInCache(id, params as Partial<Note>).catch(e => console.error('[cache] patch failed:', e));
+          const changesTreeState = isArchived !== undefined || isRecycle !== undefined;
+          (changesTreeState ? patchNoteTreeInCache([id], params as Partial<Note>) : patchNoteInCache(id, params as Partial<Note>))
+            .catch(e => console.error('[cache] patch failed:', e));
           showToast && RootStore.Get(ToastPlugin).warning(i18n.t("offline-status"));
           refresh && this.updateTicker++;
           return;
@@ -420,7 +430,7 @@ export class BlinkoStore implements Store {
       if (!this.isOnline) {
         for (const id of ids) {
           this.offlinePendingOps.push({ type: 'edit', noteId: id, patch: { isRecycle: true } });
-          patchNoteInCache(id, { isRecycle: true }).catch(e => console.error('[cache] trash patch failed:', e));
+          patchNoteTreeInCache([id], { isRecycle: true }).catch(e => console.error('[cache] trash patch failed:', e));
         }
         RootStore.Get(ToastPlugin).warning(i18n.t("offline-status"));
         this.updateTicker++;

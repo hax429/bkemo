@@ -3,7 +3,7 @@
  * standard markdown link to another memo/todo, using a relative href so it round-
  * trips cleanly through tiptap-markdown (markdown-it) and the Link mark:
  *
- *     [Some memo title](/bkemo/n/123)
+ *     [Some memo title](/n/123)
  *
  * The link target is the note id. On save, every composer extracts these ids from
  * the markdown and passes them as `references` (the noteReference table) so the
@@ -13,16 +13,16 @@
 
 /** Build the relative href that encodes a memo link to note `id`. */
 export function noteLinkHref(id: number): string {
-  return `/bkemo/n/${id}`;
+  return `/n/${id}`;
 }
 
-/** Matches a memo-link href and captures the note id. */
-export const NOTE_LINK_HREF_RE = /^\/bkemo\/n\/(\d+)$/;
+/** Matches current links plus legacy links embedded before `/bkemo` was removed. */
+export const NOTE_LINK_HREF_RE = /^\/(?:bkemo\/)?n\/(\d+)$/;
 
 /** All memo-link target ids referenced in a markdown string (deduped, in order). */
 export function extractNoteLinkIds(markdown: string): number[] {
   const ids = new Set<number>();
-  const re = /\]\(\/bkemo\/n\/(\d+)\)/g;
+  const re = /\]\(\/(?:bkemo\/)?n\/(\d+)\)/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(markdown)) !== null) {
     ids.add(Number(m[1]));

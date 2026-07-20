@@ -22,6 +22,7 @@ import { eventBus } from '@/lib/event';
 import { toUpsertAttachment } from '@/lib/attachments';
 import { useAttachments, PendingAttachments } from './useAttachments';
 import { AttachmentList } from './AttachmentList';
+import { noteMatchesProject } from '@/lib/noteCacheFilters';
 
 function dayLabel(d: Dayjs): string {
   const today = dayjs().startOf('day');
@@ -389,6 +390,47 @@ const PriorityDots = ({ important, urgent }: { important?: boolean; urgent?: boo
   );
 };
 
+const NestedSubtasks = observer(function NestedSubtasks({ subtasks, onOpen }: { subtasks: Note[]; onOpen?: (note: Note) => void }) {
+  const [showAll, setShowAll] = useState(false);
+  if (subtasks.length === 0) return null;
+  const visible = showAll ? subtasks : subtasks.slice(0, 3);
+  return (
+    <div onClick={(event) => event.stopPropagation()} style={{ marginTop: 14, borderTop: '1px dashed var(--border)', paddingTop: 9 }}>
+      <div style={{ marginBottom: 5, color: 'var(--fg-3)', fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '.06em', textTransform: 'uppercase' }}>
+        Subtasks · {subtasks.length}
+      </div>
+      {visible.map((child) => {
+        const task = isTask(child);
+        const done = isDone(child);
+        return (
+          <div
+            key={child.id}
+            onClick={() => onOpen?.(child)}
+            className="h-stack"
+            style={{ minHeight: 28, gap: 8, padding: '3px 2px', borderRadius: 6, color: done ? 'var(--fg-3)' : 'var(--fg-2)', cursor: 'pointer' }}
+          >
+            {task ? <TaskCheck note={child} /> : <span style={{ width: 14, color: 'var(--fg-3)', textAlign: 'center' }}>↳</span>}
+            <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12, textDecoration: done ? 'line-through' : undefined }}>
+              {plainTitle(child.content)}
+            </span>
+            {child.isTop && <span title="Also shown as a pinned card" style={{ color: 'var(--accent)', fontFamily: 'var(--font-mono)', fontSize: 9 }}>PINNED</span>}
+            <span style={{ color: 'var(--fg-3)', fontFamily: 'var(--font-mono)', fontSize: 9 }}>BK-{child.id}</span>
+          </div>
+        );
+      })}
+      {subtasks.length > 3 && (
+        <button
+          type="button"
+          onClick={() => setShowAll((value) => !value)}
+          style={{ border: 0, background: 'transparent', color: 'var(--accent)', padding: '4px 2px 0', fontFamily: 'var(--font-mono)', fontSize: 10, cursor: 'pointer' }}
+        >
+          {showAll ? 'Show fewer' : `Show ${subtasks.length - 3} more`}
+        </button>
+      )}
+    </div>
+  );
+});
+
 const MemoRow = observer(function MemoRow({ note, onOpen, selected, selectionActive, onToggleSelect, onContext, hideComments, textFoldLength }: {
   note: Note;
   onOpen?: (n: Note) => void;
@@ -402,8 +444,9 @@ const MemoRow = observer(function MemoRow({ note, onOpen, selected, selectionAct
   const task = isTask(note);
   const done = isDone(note);
   const [expanded, setExpanded] = useState(false);
-  const subtasks = (((note as any).subtasks ?? []) as Note[]).filter(isTask);
-  const doneSubtasks = subtasks.filter(isDone).length;
+  const subtasks = (((note as any).subtasks ?? []) as Note[]);
+  const taskSubtasks = subtasks.filter(isTask);
+  const doneSubtasks = taskSubtasks.filter(isDone).length;
   const parent = (note as any).parentNote as { id?: number; content?: string } | null | undefined;
 
   // Fold long memos behind a "Show more" (textFoldLength = 0 disables folding).
@@ -424,6 +467,8 @@ const MemoRow = observer(function MemoRow({ note, onOpen, selected, selectionAct
             : '1px solid var(--border)',
         borderRadius: 'var(--radius-lg, 14px)',
         padding: '18px 20px',
+        minWidth: 0,
+        overflow: 'hidden',
         cursor: 'pointer',
         transition: 'all 0.15s ease-in-out',
         boxShadow: note.isTop && !selected
@@ -432,7 +477,7 @@ const MemoRow = observer(function MemoRow({ note, onOpen, selected, selectionAct
       }}
     >
       {/* meta row */}
-      <div className="h-stack bk-memo-meta-row" style={{ gap: 8, fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg-3)', marginBottom: 6 }}>
+      <div className="h-stack bk-memo-meta-row" style={{ gap: 8, minWidth: 0, fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg-3)', marginBottom: 6 }}>
         {selectionActive && (
           <span onClick={(e) => { e.stopPropagation(); onToggleSelect(note.id!); }}><SelectBox on={selected} /></span>
         )}
@@ -450,15 +495,15 @@ const MemoRow = observer(function MemoRow({ note, onOpen, selected, selectionAct
             </span>
           );
         })()}
-        {subtasks.length > 0 && (
+        {taskSubtasks.length > 0 && (
           <span
             title="Subtasks"
             style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--accent)' }}
           >
             <span style={{ display: 'inline-block', width: 22, height: 3, borderRadius: 2, background: 'var(--border-2)', position: 'relative', overflow: 'hidden' }}>
-              <span style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${(doneSubtasks / subtasks.length) * 100}%`, background: 'var(--accent)' }} />
+              <span style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${(doneSubtasks / taskSubtasks.length) * 100}%`, background: 'var(--accent)' }} />
             </span>
-            <span>{doneSubtasks}/{subtasks.length}</span>
+            <span>{doneSubtasks}/{taskSubtasks.length}</span>
           </span>
         )}
         {!!(note as any).shareEncryptedUrl && (
@@ -477,13 +522,17 @@ const MemoRow = observer(function MemoRow({ note, onOpen, selected, selectionAct
       {/* body — markdown preview, consistent with the editor */}
       <div style={{ position: 'relative', maxHeight: collapsed ? 150 : undefined, overflow: collapsed ? 'hidden' : undefined }}>
         {parent?.id && (
-          <div
-            onClick={(e) => { e.stopPropagation(); eventBus.emit('bkemo:open-note', { id: parent.id! }); }}
-            title={`Subtask of BK-${parent.id} · ${plainTitle(parent.content).slice(0, 72)}`}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginBottom: 8, padding: '2px 9px 2px 7px', borderRadius: 100, border: '1px solid var(--border-2)', background: 'var(--hover)', color: 'var(--fg-2)', fontSize: 11, fontFamily: 'var(--font-mono)', cursor: 'pointer' }}
-          >
-            <span style={{ color: 'var(--accent)' }}>↳</span>
-            <span>BK-{parent.id}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 9 }}>
+            <span style={{ padding: '2px 7px', borderRadius: 100, background: 'var(--accent-soft)', color: 'var(--accent)', fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600 }}>PINNED SUBTASK</span>
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); eventBus.emit('bkemo:open-note', { id: parent.id! }); }}
+              title={`Open parent BK-${parent.id}`}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '2px 9px 2px 7px', borderRadius: 100, border: '1px solid var(--border-2)', background: 'var(--hover)', color: 'var(--fg-2)', fontSize: 11, fontFamily: 'var(--font-mono)', cursor: 'pointer', maxWidth: '100%', minWidth: 0, boxSizing: 'border-box' }}
+            >
+              <span style={{ color: 'var(--accent)' }}>↳</span>
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Parent BK-{parent.id} · {plainTitle(parent.content).slice(0, 48)}</span>
+            </button>
           </div>
         )}
         <div style={{ color: done ? 'var(--fg-3)' : 'var(--fg)', textDecoration: done ? 'line-through' : 'none' }}>
@@ -501,6 +550,7 @@ const MemoRow = observer(function MemoRow({ note, onOpen, selected, selectionAct
         >{expanded ? 'Show less' : 'Show more'}</span>
       )}
       <AttachmentList attachments={(note as any).attachments} />
+      {!parent?.id && <NestedSubtasks subtasks={subtasks} onOpen={onOpen} />}
       {!hideComments && (
         <CardFeedback note={note} />
       )}
@@ -512,11 +562,16 @@ export const Stream = observer(function Stream({ onOpen, onNew, onExpand, tag }:
   const blinko = RootStore.Get(BlinkoStore);
   const cfg = getBkemoConfig();
   const [allNotes, setAllNotes] = useState<Note[]>([]);
+  const [pinnedSubtasks, setPinnedSubtasks] = useState<Note[]>([]);
+  const [total, setTotal] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [menu, setMenu] = useState<{ x: number; y: number; note: Note } | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const loadMoreRef = useRef<HTMLDivElement>(null);
 
   // Responsive card columns (device-card-columns setting).
   const isMobile = useMediaQuery('(max-width: 767px)');
@@ -525,32 +580,73 @@ export const Stream = observer(function Stream({ onOpen, onNew, onExpand, tag }:
   const maxW = cfg.maxHomePageWidth > 0 ? cfg.maxHomePageWidth : (cols > 1 ? Math.min(1200, 520 * cols) : 760);
   const showComposer = !(cfg.hidePcEditor && !isMobile);
 
-  // Page size drives the load batch (page-size setting) for the home stream.
-  // Project (tag) views filter client-side, so they load a large set up-front.
-  const size = tag ? 200 : (PageSize.value || 30);
+  // Home and project streams paginate the same top-level unit. Pinned children
+  // are a deliberate exception: they also get one independent, labelled card.
+  const size = PageSize.value || 30;
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    blinko.queryNotes({ type: -1, isRecycle: false, isArchived: false }, 1, size)
-      .then((list) => { if (!cancelled) { setAllNotes(list); setPage(1); setHasMore(list.length >= size); } })
+    setTotal(null);
+    const projectFilter = tag ? { projectTag: tag } : {};
+    Promise.all([
+      blinko.queryNotes({ type: -1, isRecycle: false, isArchived: false, parentNoteId: null, ...projectFilter }, 1, size),
+      blinko.queryNotes({ type: -1, isRecycle: false, isArchived: false, hasParent: true, isTop: true, ...projectFilter }, 1, 200),
+    ])
+      .then(([list, pinned]) => {
+        if (!cancelled) {
+          setAllNotes(list);
+          setPinnedSubtasks(pinned);
+          setPage(1);
+          setHasMore(list.length >= size);
+        }
+      })
       .catch((e) => console.error('[stream] load failed:', e))
       .finally(() => { if (!cancelled) setLoading(false); });
+    if (blinko.isOnline) {
+      api.notes.streamCount.query(projectFilter)
+        .then((count) => {
+          if (!cancelled) {
+            setTotal(count);
+            setHasMore(count > size);
+          }
+        })
+        .catch((e) => console.warn('[stream] count unavailable:', e));
+    }
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [blinko.updateTicker, size]);
+  }, [blinko.updateTicker, size, tag, blinko.isOnline]);
 
   const loadMore = async () => {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
     const next = page + 1;
     try {
-      const list = await blinko.queryNotes({ type: -1, isRecycle: false, isArchived: false }, next, size);
+      const list = await blinko.queryNotes({ type: -1, isRecycle: false, isArchived: false, parentNoteId: null, ...(tag ? { projectTag: tag } : {}) }, next, size);
       setAllNotes((prev) => {
         const seen = new Set(prev.map((n) => n.id));
-        return [...prev, ...list.filter((n) => !seen.has(n.id))];
+        const merged = [...prev, ...list.filter((n) => !seen.has(n.id))];
+        setHasMore(total != null ? merged.length < total : list.length >= size);
+        return merged;
       });
       setPage(next);
-      setHasMore(list.length >= size);
-    } catch (e) { console.error('[stream] load more failed:', e); }
+    } catch (e) {
+      console.error('[stream] load more failed:', e);
+    } finally {
+      setLoadingMore(false);
+    }
   };
+
+  useEffect(() => {
+    const target = loadMoreRef.current;
+    const root = scrollRef.current;
+    if (!target || !root || !hasMore) return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) loadMore();
+    }, { root, rootMargin: '240px 0px' });
+    observer.observe(target);
+    return () => observer.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasMore, page, loadingMore, tag, total]);
 
   const toggleSelect = (id: number) => setSelected((prev) => {
     const next = new Set(prev);
@@ -563,7 +659,16 @@ export const Stream = observer(function Stream({ onOpen, onNew, onExpand, tag }:
   // ── single-note actions (context menu) ──
   const pin = (n: Note) => blinko.upsertNote.call({ id: n.id, isTop: !n.isTop, showToast: false });
   const setType = (n: Note, type: NoteType) => blinko.upsertNote.call({ id: n.id, type, showToast: false });
-  const archive = async (ids: number[]) => { try { await api.notes.updateMany.mutate({ ids, isArchived: true }); removeLocal(ids); } catch (e) { console.error(e); } };
+  const archive = async (ids: number[]) => {
+    try {
+      if (blinko.isOnline) {
+        await api.notes.updateMany.mutate({ ids, isArchived: true });
+      } else {
+        await Promise.all(ids.map((id) => blinko.upsertNote.call({ id, isArchived: true, showToast: false })));
+      }
+      removeLocal(ids);
+    } catch (e) { console.error(e); }
+  };
   const trash = async (ids: number[]) => { await blinko.trashNote.call({ ids }); removeLocal(ids); };
 
   const share = async (n: Note) => {
@@ -624,10 +729,11 @@ export const Stream = observer(function Stream({ onOpen, onNew, onExpand, tag }:
     ];
   };
 
-  // When viewing a project (tag), filter by the hashtag in content (offline-safe).
-  const notes = tag
-    ? allNotes.filter((n) => new RegExp(`#${tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\b|/)`, 'i').test(n.content ?? ''))
-    : allNotes;
+  // Re-check tags exactly on the client because the SQL contains query is a
+  // candidate filter. A parent remains visible when one of its children matches.
+  const topNotes = tag ? allNotes.filter((note) => noteMatchesProject(note, tag)) : allNotes;
+  const visiblePinnedSubtasks = tag ? pinnedSubtasks.filter((note) => noteMatchesProject(note, tag)) : pinnedSubtasks;
+  const notes = [...visiblePinnedSubtasks, ...topNotes];
 
   // Sort + group by the configured field (create vs update time), newest first.
   const sortField = (n: Note) => (cfg.orderByCreate ? n.createdAt : n.updatedAt) ?? n.createdAt;
@@ -650,10 +756,13 @@ export const Stream = observer(function Stream({ onOpen, onNew, onExpand, tag }:
         <span style={{ color: 'var(--fg-3)' }}>/</span>
         <span style={{ color: 'var(--fg-2)', fontSize: 13 }}>{tag ? 'Project' : 'Stream'}</span>
         <span className="spacer" />
-        <span style={{ color: 'var(--fg-3)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>{notes.length} memos</span>
+        <span style={{ color: 'var(--fg-3)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>
+          {blinko.isOnline && total != null ? `${topNotes.length} of ${total} memos` : `${topNotes.length} cached memos`}
+          {visiblePinnedSubtasks.length > 0 ? ` · ${visiblePinnedSubtasks.length} pinned subtask${visiblePinnedSubtasks.length === 1 ? '' : 's'}` : ''}
+        </span>
       </div>
 
-      <div className="bk-scroll" style={{ flex: 1, overflow: 'auto' }}>
+      <div ref={scrollRef} className="bk-scroll" style={{ flex: 1, overflow: 'auto' }}>
         <div style={{ maxWidth: maxW, margin: '0 auto', padding: '20px 20px 48px' }}>
           {showComposer ? (
             <Composer onExpand={onExpand} />
@@ -686,7 +795,7 @@ export const Stream = observer(function Stream({ onOpen, onNew, onExpand, tag }:
                 return (
                   <div style={{ display: 'flex', gap: 'var(--gap, 16px)', alignItems: 'start', marginTop: 18 }}>
                     {columnItems.map((colItems, colIndex) => (
-                      <div key={colIndex} style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 'var(--gap, 16px)' }}>
+                      <div key={colIndex} style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 'var(--gap, 16px)' }}>
                         {colItems.map((n) => (
                           <MemoRow
                             key={n.id}
@@ -705,12 +814,12 @@ export const Stream = observer(function Stream({ onOpen, onNew, onExpand, tag }:
                   </div>
                 );
               })()}
-              {hasMore && !tag && (
-                <div style={{ textAlign: 'center', marginTop: 24 }}>
+              {hasMore && (
+                <div ref={loadMoreRef} style={{ textAlign: 'center', marginTop: 24, minHeight: 32 }}>
                   <span
                     onClick={loadMore}
                     style={{ display: 'inline-block', padding: '6px 16px', border: '1px solid var(--border-2)', borderRadius: 'var(--radius)', color: 'var(--fg-2)', fontSize: 12, fontFamily: 'var(--font-mono)', cursor: 'pointer' }}
-                  >Load more</span>
+                  >{loadingMore ? 'Loading…' : 'Load more'}</span>
                 </div>
               )}
             </>

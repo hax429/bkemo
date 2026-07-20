@@ -15,10 +15,6 @@ export type BkemoConfig = {
   hideComments: boolean;
   /** Sort + group the stream by creation time instead of update time. */
   orderByCreate: boolean;
-  /** Hide the Daily review screen + its nav entries. */
-  closeDailyReview: boolean;
-  /** Hide the mobile bottom tab bar. */
-  hideMobileBar: boolean;
   /** Hide the inline desktop composer; use the New-memo modal instead. */
   hidePcEditor: boolean;
   /** Collapse stream memos longer than this many characters (0 = never). */
@@ -45,8 +41,6 @@ export function getBkemoConfig(): BkemoConfig {
   return {
     hideComments: !!c.isHideCommentInCard,
     orderByCreate: !!c.isOrderByCreateTime,
-    closeDailyReview: !!c.isCloseDailyReview,
-    hideMobileBar: !!c.isHiddenMobileBar,
     hidePcEditor: !!c.hidePcEditor,
     textFoldLength: num(c.textFoldLength, 500),
     maxHomePageWidth: Math.max(0, Number(c.maxHomePageWidth) || 0),

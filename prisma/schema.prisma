@@ -13,32 +13,33 @@ datasource db {
 }
 
 model accounts {
-  id            Int             @id @default(autoincrement())
-  name          String          @default("") @db.VarChar
-  email         String          @default("") @db.VarChar
-  nickname      String          @default("") @db.VarChar
-  password      String          @default("") @db.VarChar
-  image         String          @default("") @db.VarChar
-  apiToken      String          @default("") @db.VarChar
-  description   String          @default("") @db.Text
-  note          Int             @default(0)
-  role          String          @default("") @db.VarChar
-  loginType     String          @default("") @db.VarChar
-  permissions   Json?           @db.Json
-  linkAccountId Int?
-  createdAt     DateTime        @default(now()) @db.Timestamptz(6)
-  updatedAt     DateTime        @updatedAt @db.Timestamptz(6)
-  notes         notes[]
-  configs       config[]
-  tags          tag[]
-  comments      comments[]
-  attachments   attachments[]
-  follows       follows[]
-  notifications notifications[]
-  conversations conversation[]
-  sharedNotes   noteInternalShare[]
+  id               Int                 @id @default(autoincrement())
+  portableId       String              @unique @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name             String              @default("") @db.VarChar
+  email            String              @default("") @db.VarChar
+  nickname         String              @default("") @db.VarChar
+  password         String              @default("") @db.VarChar
+  image            String              @default("") @db.VarChar
+  apiToken         String              @default("") @db.VarChar
+  description      String              @default("") @db.Text
+  note             Int                 @default(0)
+  role             String              @default("") @db.VarChar
+  loginType        String              @default("") @db.VarChar
+  permissions      Json?               @db.Json
+  linkAccountId    Int?
+  createdAt        DateTime            @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime            @updatedAt @db.Timestamptz(6)
+  notes            notes[]
+  configs          config[]
+  tags             tag[]
+  comments         comments[]
+  attachments      attachments[]
+  follows          follows[]
+  notifications    notifications[]
+  conversations    conversation[]
+  sharedNotes      noteInternalShare[]
   aiScheduledTasks aiScheduledTask[]
-  accessTokens  accessToken[]
+  accessTokens     accessToken[]
 }
 
 // Named, scope-limited API access tokens (GitHub-PAT style). The actual bearer
@@ -55,13 +56,14 @@ model accessToken {
   expiresAt  DateTime? @db.Timestamptz(6)
   createdAt  DateTime  @default(now()) @db.Timestamptz(6)
 
-  account    accounts  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  account accounts @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   @@index([accountId])
 }
 
 model attachments {
   id            Int      @id @default(autoincrement())
+  portableId    String   @unique @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   isShare       Boolean  @default(false)
   sharePassword String   @default("") @db.VarChar
   name          String   @default("") @db.VarChar
@@ -75,10 +77,81 @@ model attachments {
   updatedAt     DateTime @updatedAt @db.Timestamptz(6)
   perfixPath    String?  @default("") @db.VarChar // folder1,folder2,folder3
   depth         Int?
-  metadata      Json?           @db.Json
+  metadata      Json?    @db.Json
 
   note    notes?    @relation(fields: [noteId], references: [id])
   account accounts? @relation(fields: [accountId], references: [id])
+}
+
+// Persisted, resumable binary-storage moves. The source path remains recorded
+// after cutover so a superadmin can remove verified originals separately.
+model storageMigrationJob {
+  id                  String                 @id @db.Uuid
+  direction           String                 @db.VarChar
+  status              String                 @db.VarChar
+  sourceProvider      String                 @db.VarChar
+  destinationProvider String                 @db.VarChar
+  totalCount          Int                    @default(0)
+  totalBytes          Decimal                @default(0) @db.Decimal
+  processed           Int                    @default(0)
+  migrated            Int                    @default(0)
+  migratedBytes       Decimal                @default(0) @db.Decimal
+  failed              Int                    @default(0)
+  cleanupStatus       String                 @default("idle") @db.VarChar
+  cleanupDeleted      Int                    @default(0)
+  cleanupFailed       Int                    @default(0)
+  requestedById       Int?
+  errorMessage        String?                @db.Text
+  createdAt           DateTime               @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime               @updatedAt @db.Timestamptz(6)
+  completedAt         DateTime?              @db.Timestamptz(6)
+  items               storageMigrationItem[]
+
+  @@index([status])
+}
+
+model storageMigrationItem {
+  id                   Int                 @id @default(autoincrement())
+  jobId                String              @db.Uuid
+  attachmentId         Int
+  attachmentPortableId String              @db.Uuid
+  sourcePath           String              @db.Text
+  destinationPath      String?             @db.Text
+  name                 String              @db.VarChar
+  size                 Decimal             @default(0) @db.Decimal
+  status               String              @default("pending") @db.VarChar
+  attempts             Int                 @default(0)
+  errorMessage         String?             @db.Text
+  sourceDeletedAt      DateTime?           @db.Timestamptz(6)
+  createdAt            DateTime            @default(now()) @db.Timestamptz(6)
+  updatedAt            DateTime            @updatedAt @db.Timestamptz(6)
+  job                  storageMigrationJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([jobId, attachmentId])
+  @@index([jobId, status])
+}
+
+// Audit and maintenance state for a one-time PostgreSQL cutover. Credentials
+// are deliberately absent: target URLs only live in memory while a job runs.
+model databaseMigrationJob {
+  id                 String    @id @db.Uuid
+  status             String    @db.VarChar
+  targetHost         String    @db.VarChar
+  targetDatabase     String    @db.VarChar
+  sourceDatabase     String    @db.VarChar
+  sourceBytes        BigInt    @default(0)
+  estimatedBytes     BigInt    @default(0)
+  sourceTableCount   Int       @default(0)
+  verifiedTableCount Int       @default(0)
+  maintenanceMode    Boolean   @default(false)
+  requestedById      Int?
+  message            String?   @db.Text
+  createdAt          DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime  @updatedAt @db.Timestamptz(6)
+  completedAt        DateTime? @db.Timestamptz(6)
+
+  @@index([status])
+  @@index([maintenanceMode])
 }
 
 model config {
@@ -90,38 +163,39 @@ model config {
 }
 
 model notes {
-  id                Int             @id @default(autoincrement())
-  type              Int             @default(0)
-  content           String          @default("") @db.VarChar
-  isArchived        Boolean         @default(false)
-  isRecycle         Boolean         @default(false)
-  isShare           Boolean         @default(false)
-  isTop             Boolean         @default(false)
-  isReviewed        Boolean         @default(false)
+  id                Int                 @id @default(autoincrement())
+  portableId        String              @unique @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  type              Int                 @default(0)
+  content           String              @default("") @db.VarChar
+  isArchived        Boolean             @default(false)
+  isRecycle         Boolean             @default(false)
+  isShare           Boolean             @default(false)
+  isTop             Boolean             @default(false)
+  isReviewed        Boolean             @default(false)
   // Task attributes — a memo is also a todo. done = completedAt != null.
-  dueDate           DateTime?       @db.Timestamptz(6)
-  isImportant       Boolean         @default(false)
-  isUrgent          Boolean         @default(false)
-  completedAt       DateTime?       @db.Timestamptz(6)
-  sharePassword     String          @default("") @db.VarChar
-  shareEncryptedUrl String?         @db.VarChar
-  shareExpiryDate   DateTime?       @db.Timestamptz(6)
-  shareMaxView      Int?            @default(0)
-  shareViewCount    Int?            @default(0)
-  metadata          Json?           @db.Json
+  dueDate           DateTime?           @db.Timestamptz(6)
+  isImportant       Boolean             @default(false)
+  isUrgent          Boolean             @default(false)
+  completedAt       DateTime?           @db.Timestamptz(6)
+  sharePassword     String              @default("") @db.VarChar
+  shareEncryptedUrl String?             @db.VarChar
+  shareExpiryDate   DateTime?           @db.Timestamptz(6)
+  shareMaxView      Int?                @default(0)
+  shareViewCount    Int?                @default(0)
+  metadata          Json?               @db.Json
   accountId         Int?
   parentNoteId      Int?
-  sortOrder         Int             @default(0)
-  createdAt         DateTime        @default(now()) @db.Timestamptz(6)
-  updatedAt         DateTime        @updatedAt @db.Timestamptz(6)
+  sortOrder         Int                 @default(0)
+  createdAt         DateTime            @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime            @updatedAt @db.Timestamptz(6)
   attachments       attachments[]
   tags              tagsToNote[]
-  account           accounts?       @relation(fields: [accountId], references: [id])
-  parentNote        notes?          @relation("Subtasks", fields: [parentNoteId], references: [id], onDelete: Cascade)
-  subtasks          notes[]         @relation("Subtasks")
-  referencedBy      noteReference[] @relation("ReferencedNote")
-  references        noteReference[] @relation("ReferencingNote")
-  comments          comments[]      @relation("NoteComments")
+  account           accounts?           @relation(fields: [accountId], references: [id])
+  parentNote        notes?              @relation("Subtasks", fields: [parentNoteId], references: [id], onDelete: Cascade)
+  subtasks          notes[]             @relation("Subtasks")
+  referencedBy      noteReference[]     @relation("ReferencedNote")
+  references        noteReference[]     @relation("ReferencingNote")
+  comments          comments[]          @relation("NoteComments")
   histories         noteHistory[]
   internalShares    noteInternalShare[]
   reactions         reaction[]
@@ -145,17 +219,18 @@ model reaction {
 }
 
 model comments {
-  id        Int      @id @default(autoincrement())
-  content   String   @db.Text
-  accountId Int?
-  guestName String?  @db.VarChar
-  guestIP   String?  @db.VarChar
-  guestUA   String?  @db.VarChar
-  guestAvatar String? @db.VarChar
-  noteId    Int
-  parentId  Int?
-  createdAt DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+  id          Int      @id @default(autoincrement())
+  portableId  String   @unique @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  content     String   @db.Text
+  accountId   Int?
+  guestName   String?  @db.VarChar
+  guestIP     String?  @db.VarChar
+  guestUA     String?  @db.VarChar
+  guestAvatar String?  @db.VarChar
+  noteId      Int
+  parentId    Int?
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
 
   note    notes      @relation("NoteComments", fields: [noteId], references: [id])
   account accounts?  @relation(fields: [accountId], references: [id])
@@ -165,6 +240,7 @@ model comments {
 
 model tag {
   id         Int          @id @default(autoincrement())
+  portableId String       @unique @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   name       String       @default("") @db.VarChar
   icon       String       @default("") @db.VarChar
   parent     Int          @default(0)
@@ -201,6 +277,7 @@ model noteReference {
 
 model follows {
   id          Int     @id @default(autoincrement())
+  portableId  String  @unique @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   siteName    String? @db.VarChar
   siteUrl     String  @db.VarChar
   siteAvatar  String? @db.VarChar
@@ -215,15 +292,16 @@ model follows {
 }
 
 model notifications {
-  id        Int      @id @default(autoincrement())
-  type      String   @db.VarChar // follow, comment, mention 等
-  title     String   @db.VarChar
-  content   String   @db.Text
-  metadata  Json?    @db.Json
-  isRead    Boolean  @default(false)
-  accountId Int
-  createdAt DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+  id         Int      @id @default(autoincrement())
+  portableId String   @unique @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  type       String   @db.VarChar // follow, comment, mention 等
+  title      String   @db.VarChar
+  content    String   @db.Text
+  metadata   Json?    @db.Json
+  isRead     Boolean  @default(false)
+  accountId  Int
+  createdAt  DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt  DateTime @updatedAt @db.Timestamptz(6)
 
   account accounts @relation(fields: [accountId], references: [id])
 }
@@ -247,13 +325,14 @@ model plugin {
 }
 
 model conversation {
-  id        Int       @id @default(autoincrement())
-  title     String    @default("") @db.VarChar(255)
-  isShare   Boolean   @default(false)
-  accountId Int
-  createdAt DateTime  @default(now()) @db.Timestamptz(6)
-  updatedAt DateTime  @updatedAt @db.Timestamptz(6)
-  messages  message[]
+  id         Int       @id @default(autoincrement())
+  portableId String    @unique @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title      String    @default("") @db.VarChar(255)
+  isShare    Boolean   @default(false)
+  accountId  Int
+  createdAt  DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt  DateTime  @updatedAt @db.Timestamptz(6)
+  messages   message[]
 
   account accounts @relation(fields: [accountId], references: [id])
 
@@ -262,6 +341,7 @@ model conversation {
 
 model message {
   id             Int      @id @default(autoincrement())
+  portableId     String   @unique @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   content        String   @db.Text
   role           String   @db.VarChar(50) // user or assistant
   conversationId Int
@@ -275,13 +355,14 @@ model message {
 }
 
 model noteHistory {
-  id        Int      @id @default(autoincrement())
-  noteId    Int
-  content   String   @db.Text
-  metadata  Json?    @db.Json
-  version   Int
-  accountId Int?
-  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  id         Int      @id @default(autoincrement())
+  portableId String   @unique @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  noteId     Int
+  content    String   @db.Text
+  metadata   Json?    @db.Json
+  version    Int
+  accountId  Int?
+  createdAt  DateTime @default(now()) @db.Timestamptz(6)
 
   note notes @relation(fields: [noteId], references: [id], onDelete: Cascade)
 
@@ -327,38 +408,39 @@ model aiProviders {
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
-  models    aiModels[]
+  models aiModels[]
 }
 
 model aiModels {
-  id            Int      @id @default(autoincrement())
-  providerId    Int
-  title         String   @db.VarChar(255)
-  modelKey      String   @db.VarChar(255)
-  capabilities  Json     @db.Json
-  config        Json?    @db.Json
-  sortOrder     Int      @default(0)
-  createdAt     DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt     DateTime @updatedAt @db.Timestamptz(6)
+  id           Int      @id @default(autoincrement())
+  providerId   Int
+  title        String   @db.VarChar(255)
+  modelKey     String   @db.VarChar(255)
+  capabilities Json     @db.Json
+  config       Json?    @db.Json
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(6)
 
-  provider      aiProviders @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  provider aiProviders @relation(fields: [providerId], references: [id], onDelete: Cascade)
 
   @@index([providerId])
 }
 
 model aiScheduledTask {
-  id          Int      @id @default(autoincrement())
-  name        String   @db.VarChar(255)
-  prompt      String   @db.Text
-  schedule    String   @db.VarChar(100)
-  isEnabled   Boolean  @default(true)
-  lastRun     DateTime? @db.Timestamptz(6)
-  lastResult  Json?    @db.Json
-  accountId   Int
-  createdAt   DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+  id         Int       @id @default(autoincrement())
+  portableId String    @unique @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name       String    @db.VarChar(255)
+  prompt     String    @db.Text
+  schedule   String    @db.VarChar(100)
+  isEnabled  Boolean   @default(true)
+  lastRun    DateTime? @db.Timestamptz(6)
+  lastResult Json?     @db.Json
+  accountId  Int
+  createdAt  DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt  DateTime  @updatedAt @db.Timestamptz(6)
 
-  account     accounts @relation(fields: [accountId], references: [id])
+  account accounts @relation(fields: [accountId], references: [id])
 
   @@index([accountId])
 }
@@ -367,12 +449,12 @@ model mcpServers {
   id          Int      @id @default(autoincrement())
   name        String   @db.VarChar(255)
   description String?  @db.Text
-  type        String   @db.VarChar(50)  // "stdio" | "sse" | "streamable-http"
-  command     String?  @db.Text         // for stdio: "npx" or full command
-  args        Json?    @db.Json         // for stdio: command arguments array
+  type        String   @db.VarChar(50) // "stdio" | "sse" | "streamable-http"
+  command     String?  @db.Text // for stdio: "npx" or full command
+  args        Json?    @db.Json // for stdio: command arguments array
   url         String?  @db.VarChar(500) // for sse/streamable-http
-  env         Json?    @db.Json         // environment variables
-  headers     Json?    @db.Json         // HTTP headers for sse/http
+  env         Json?    @db.Json // environment variables
+  headers     Json?    @db.Json // HTTP headers for sse/http
   isEnabled   Boolean  @default(true)
   createdAt   DateTime @default(now()) @db.Timestamptz(6)
   updatedAt   DateTime @updatedAt @db.Timestamptz(6)
@@ -380,13 +462,13 @@ model mcpServers {
 
 model fonts {
   id          Int      @id @default(autoincrement())
-  name        String   @db.VarChar(255)           // Font family name (e.g., "Roboto")
-  displayName String   @db.VarChar(255)           // Display name in UI
-  url         String?  @db.Text                   // CDN URL for the font CSS (Google Fonts style)
-  fileData    Bytes?   @db.ByteA                  // Font 
-  isLocal     Boolean  @default(false)            // True if font is loaded from local files
+  name        String   @db.VarChar(255) // Font family name (e.g., "Roboto")
+  displayName String   @db.VarChar(255) // Display name in UI
+  url         String?  @db.Text // CDN URL for the font CSS (Google Fonts style)
+  fileData    Bytes?   @db.ByteA // Font
+  isLocal     Boolean  @default(false) // True if font is loaded from local files
   isSystem    Boolean  @default(false)
-  weights     Json     @db.Json                   // Available weights: [400, 500, 700]
+  weights     Json     @db.Json // Available weights: [400, 500, 700]
   category    String   @default("sans-serif") @db.VarChar(50) // serif, sans-serif, monospace, display, handwriting
   sortOrder   Int      @default(0)
   createdAt   DateTime @default(now()) @db.Timestamptz(6)

@@ -182,7 +182,7 @@ fi
 
 c_green "──────────────────────────────────────────────"
 c_green " bkemo is starting on  http://localhost:1111"
-c_green " New UI:               http://localhost:1111/bkemo"
+c_green " App:                  http://localhost:1111/"
 c_green " Login:                admin / 123456"
 c_green " Stop DB later with:   ./debug.sh --stop"
 c_green "──────────────────────────────────────────────"

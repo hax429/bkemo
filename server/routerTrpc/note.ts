@@ -14,12 +14,31 @@ import { Context } from '../context';
 import { cache } from '@shared/lib/cache';
 import { AiModelFactory } from '@server/aiServer/aiModelFactory';
 import { authProcedure, demoAuthMiddleware, publicProcedure, router, requireShare } from '@server/middleware';
+import { getBkemoSiteId } from '@server/lib/bkemoTransfer';
+import { randomBytes } from 'crypto';
 
 const extractHashtags = (input: string): string[] => {
   const withoutCodeBlocks = input.replace(/```[\s\S]*?```/g, '');
   const hashtagRegex = /(?<!:\/\/)(?<=\s|^)#[^\s#]+(?=\s|$)/g;
   const matches = withoutCodeBlocks.match(hashtagRegex);
   return matches ? matches : [];
+};
+
+const queryNoteTypeSchema = z.union([z.nativeEnum(NoteType), z.literal(-1)]);
+const persistedNoteTypeSchema = z.nativeEnum(NoteType);
+
+const collectNoteTreeIds = async (accountId: number, rootIds: number[]) => {
+  const allIds = new Set(rootIds);
+  let frontier = rootIds;
+  while (frontier.length > 0) {
+    const children = await prisma.notes.findMany({
+      where: { accountId, parentNoteId: { in: frontier } },
+      select: { id: true },
+    });
+    frontier = children.map(({ id }) => id).filter((id) => !allIds.has(id));
+    frontier.forEach((id) => allIds.add(id));
+  }
+  return [...allIds];
 };
 
 export const noteRouter = router({
@@ -31,7 +50,7 @@ export const noteRouter = router({
         page: z.number().default(1),
         size: z.number().default(30),
         orderBy: z.enum(['asc', 'desc']).default('desc'),
-        type: z.union([z.nativeEnum(NoteType), z.literal(-1)]).default(-1),
+        type: queryNoteTypeSchema.default(-1),
         isArchived: z.union([z.boolean(), z.null()]).default(false).optional(),
         isShare: z.union([z.boolean(), z.null()]).default(null).optional(),
         isRecycle: z.boolean().default(false).optional(),
@@ -53,6 +72,9 @@ export const noteRouter = router({
         isCompleted: z.union([z.boolean(), z.null()]).default(null).optional(),
         quadrant: z.enum(['do', 'schedule', 'delegate', 'eliminate']).nullish(),
         parentNoteId: z.union([z.number(), z.null()]).optional(),
+        hasParent: z.union([z.boolean(), z.null()]).default(null).optional(),
+        isTop: z.union([z.boolean(), z.null()]).default(null).optional(),
+        projectTag: z.string().trim().min(1).max(200).optional(),
       }),
     )
     .output(
@@ -124,7 +146,7 @@ export const noteRouter = router({
       ),
     )
     .mutation(async function ({ input, ctx }) {
-      const { tagId, type, isArchived, isRecycle, searchText, page, size, orderBy, withFile, withoutTag, withLink, isUseAiQuery, startDate, endDate, isShare, hasTodo, dueStart, dueEnd, hasDueDate, isImportant, isUrgent, isCompleted, quadrant, parentNoteId } = input;
+      const { tagId, type, isArchived, isRecycle, searchText, page, size, orderBy, withFile, withoutTag, withLink, isUseAiQuery, startDate, endDate, isShare, hasTodo, dueStart, dueEnd, hasDueDate, isImportant, isUrgent, isCompleted, quadrant, parentNoteId, hasParent, isTop, projectTag } = input;
       if (isUseAiQuery && searchText?.trim() != '') {
         const cleanedQuery = searchText?.replace(/@/g, '').trim();
         if (cleanedQuery && cleanedQuery.length > 0) {
@@ -192,6 +214,20 @@ export const noteRouter = router({
       }
       if (parentNoteId !== undefined) {
         where.parentNoteId = parentNoteId;
+      } else if (hasParent != null) {
+        where.parentNoteId = hasParent ? { not: null } : null;
+      }
+      if (isTop != null) where.isTop = isTop;
+      if (projectTag) {
+        const tagNeedle = `#${projectTag}`;
+        const projectFilter: Prisma.notesWhereInput = {
+          OR: [
+            { content: { contains: tagNeedle, mode: 'insensitive' } },
+            { subtasks: { some: { isArchived: false, isRecycle: false, content: { contains: tagNeedle, mode: 'insensitive' } } } },
+            { parentNote: { is: { content: { contains: tagNeedle, mode: 'insensitive' } } } },
+          ],
+        };
+        where.AND = [...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []), projectFilter];
       }
       if (withFile) {
         where.attachments = { some: {} };
@@ -294,7 +330,8 @@ export const noteRouter = router({
           },
           subtasks: {
             where: {
-              isRecycle: false,
+              isRecycle,
+              ...(!isRecycle && isArchived != null ? { isArchived } : {}),
             },
             orderBy: [{ completedAt: 'asc' }, { dueDate: 'asc' }, { updatedAt: 'desc' }],
             include: {
@@ -332,6 +369,28 @@ export const noteRouter = router({
         ...note,
         isInternalShared: note.internalShares.length > 0,
       }));
+    }),
+  streamCount: authProcedure
+    .input(z.object({ projectTag: z.string().trim().min(1).max(200).optional() }))
+    .output(z.number())
+    .query(async ({ input, ctx }) => {
+      const projectFilter: Prisma.notesWhereInput | undefined = input.projectTag
+        ? {
+            OR: [
+              { content: { contains: `#${input.projectTag}`, mode: 'insensitive' } },
+              { subtasks: { some: { isArchived: false, isRecycle: false, content: { contains: `#${input.projectTag}`, mode: 'insensitive' } } } },
+            ],
+          }
+        : undefined;
+      return prisma.notes.count({
+        where: {
+          OR: [{ accountId: Number(ctx.id) }, { internalShares: { some: { accountId: Number(ctx.id) } } }],
+          isArchived: false,
+          isRecycle: false,
+          parentNoteId: null,
+          ...(projectFilter ? { AND: [projectFilter] } : {}),
+        },
+      });
     }),
   publicList: publicProcedure
     .meta({
@@ -955,7 +1014,7 @@ export const noteRouter = router({
     .input(
       z.object({
         content: z.union([z.string(), z.null()]).default(null),
-        type: z.union([z.nativeEnum(NoteType), z.literal(-1)]).default(-1),
+        type: persistedNoteTypeSchema.optional(),
         attachments: z
           .array(
             z.object({
@@ -1027,12 +1086,13 @@ export const noteRouter = router({
       const config = await getGlobalConfig({ ctx });
 
       const markdownImages =
-        content?.match(/!\[.*?\]\((\/api\/(?:s3)?file\/[^)]+)\)/g)?.map((match) => {
-          const matches = /!\[.*?\]\((\/api\/(?:s3)?file\/[^)]+)\)/.exec(match);
+        content?.match(/!\[.*?\]\((\/api\/(?:(?:s3)?file\/[^)]+|attachment\/[0-9a-f-]{36}\/file))\)/gi)?.map((match) => {
+          const matches = /!\[.*?\]\((\/api\/(?:(?:s3)?file\/[^)]+|attachment\/[0-9a-f-]{36}\/file))\)/i.exec(match);
           return matches?.[1] || '';
         }) || [];
       if (markdownImages.length > 0) {
-        const images = await prisma.attachments.findMany({ where: { path: { in: markdownImages } } });
+        const storedMarkdownImages = await Promise.all(markdownImages.map((item) => FileService.resolveStoredPath(item)));
+        const images = await prisma.attachments.findMany({ where: { path: { in: storedMarkdownImages } } });
         attachments = [...attachments, ...images.map((i) => ({ path: i.path, name: i.name, size: Number(i.size), type: i.type }))];
       }
 
@@ -1054,7 +1114,7 @@ export const noteRouter = router({
       };
 
       const update: Prisma.notesUpdateInput = {
-        ...(type !== -1 && { type }),
+        ...(type !== undefined && { type }),
         ...(isArchived !== null && { isArchived }),
         ...(isTop !== null && { isTop }),
         ...(isShare !== null && { isShare }),
@@ -1128,6 +1188,19 @@ export const noteRouter = router({
           : { id, accountId: Number(ctx.id) }; // Filter by ID and accountId for owners
 
         const note = await prisma.notes.update({ where: whereClause, data: update });
+        if (!isSharedEditor && (isArchived !== null || isRecycle !== null)) {
+          const treeIds = await collectNoteTreeIds(Number(ctx.id), [note.id]);
+          const descendantIds = treeIds.filter((treeId) => treeId !== note.id);
+          if (descendantIds.length > 0) {
+            await prisma.notes.updateMany({
+              where: { id: { in: descendantIds }, accountId: Number(ctx.id) },
+              data: {
+                ...(isArchived !== null && { isArchived }),
+                ...(isRecycle !== null && { isRecycle }),
+              },
+            });
+          }
+        }
         if (content == null) {
           SendWebhook({ ...note, attachments }, isRecycle ? 'delete' : 'update', ctx);
           return note;
@@ -1215,8 +1288,9 @@ export const noteRouter = router({
         try {
           if (attachments?.length != 0) {
             const oldAttachments = await prisma.attachments.findMany({ where: { noteId: note.id } });
+            const requestedStoredPaths = await Promise.all(attachments.map((item) => FileService.resolveStoredPath(item.path)));
             const needTobeAddedAttachmentsPath = _.difference(
-              attachments?.map((i) => i.path),
+              requestedStoredPaths,
               oldAttachments.map((i) => i.path),
             );
             if (needTobeAddedAttachmentsPath.length != 0) {
@@ -1246,7 +1320,7 @@ export const noteRouter = router({
           const note = await prisma.notes.create({
             data: {
               content: content ?? '',
-              type,
+              type: type ?? NoteType.BLINKO,
               accountId: Number(ctx.id),
               isShare: isShare ? true : false,
               isTop: isTop ? true : false,
@@ -1263,7 +1337,8 @@ export const noteRouter = router({
             },
           });
           await handleAddTags(tagTree, undefined, note.id);
-          const attachmentsIds = await prisma.attachments.findMany({ where: { path: { in: attachments.map((i) => i.path) } } });
+          const requestedStoredPaths = await Promise.all(attachments.map((item) => FileService.resolveStoredPath(item.path)));
+          const attachmentsIds = await prisma.attachments.findMany({ where: { path: { in: requestedStoredPaths } } });
           await prisma.attachments.updateMany({ where: { id: { in: attachmentsIds.map((i) => i.id) } }, data: { noteId: note.id } });
           //add references
           if (references && references.length > 0) {
@@ -1367,13 +1442,8 @@ export const noteRouter = router({
     .mutation(async function ({ input, ctx }) {
       const { id, isCancel, password, expireAt } = input;
 
-      const generateShareId = () => {
-        const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-        let result = '';
-        for (let i = 0; i < 8; i++) {
-          result += chars.charAt(Math.floor(Math.random() * chars.length));
-        }
-        return result;
+      const generateShareId = async () => {
+        return `${await getBkemoSiteId()}-${randomBytes(8).toString('base64url')}`;
       };
 
       const note = await prisma.notes.findFirst({
@@ -1398,7 +1468,10 @@ export const noteRouter = router({
           },
         });
       } else {
-        const shareId = note.shareEncryptedUrl || generateShareId();
+        let shareId = note.shareEncryptedUrl || await generateShareId();
+        while (await prisma.notes.findFirst({ where: { shareEncryptedUrl: shareId, id: { not: id } }, select: { id: true } })) {
+          shareId = await generateShareId();
+        }
         return await prisma.notes.update({
           where: { id },
           data: {
@@ -1414,7 +1487,7 @@ export const noteRouter = router({
     .meta({ openapi: { method: 'POST', path: '/v1/note/batch-update', summary: 'Batch update note', protect: true, tags: ['Note'] } })
     .input(
       z.object({
-        type: z.union([z.nativeEnum(NoteType), z.literal(-1)]).default(-1),
+        type: persistedNoteTypeSchema.optional(),
         isArchived: z.union([z.boolean(), z.null()]).default(null),
         isRecycle: z.union([z.boolean(), z.null()]).default(null),
         ids: z.array(z.number()),
@@ -1424,11 +1497,12 @@ export const noteRouter = router({
     .mutation(async function ({ input, ctx }) {
       const { type, isArchived, isRecycle, ids } = input;
       const update: Prisma.notesUpdateInput = {
-        ...(type !== -1 && { type }),
+        ...(type !== undefined && { type }),
         ...(isArchived !== null && { isArchived }),
         ...(isRecycle !== null && { isRecycle }),
       };
-      return await prisma.notes.updateMany({ where: { id: { in: ids }, accountId: Number(ctx.id) }, data: update });
+      const targetIds = isArchived !== null || isRecycle !== null ? await collectNoteTreeIds(Number(ctx.id), ids) : ids;
+      return await prisma.notes.updateMany({ where: { id: { in: targetIds }, accountId: Number(ctx.id) }, data: update });
     }),
   trashMany: authProcedure
     .meta({ openapi: { method: 'POST', path: '/v1/note/batch-trash', summary: 'Batch trash note', protect: true, tags: ['Note'] } })
@@ -1436,8 +1510,9 @@ export const noteRouter = router({
     .output(z.any())
     .mutation(async function ({ input, ctx }) {
       const { ids } = input;
-      SendWebhook({ ids }, 'delete', ctx);
-      return await prisma.notes.updateMany({ where: { id: { in: ids }, accountId: Number(ctx.id) }, data: { isRecycle: true } });
+      const targetIds = await collectNoteTreeIds(Number(ctx.id), ids);
+      SendWebhook({ ids: targetIds }, 'delete', ctx);
+      return await prisma.notes.updateMany({ where: { id: { in: targetIds }, accountId: Number(ctx.id) }, data: { isRecycle: true } });
     }),
   deleteMany: authProcedure
     .use(demoAuthMiddleware)

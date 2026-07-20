@@ -8,6 +8,16 @@ import { api } from '@/lib/trpc';
 export type BkemoTheme = 'dark' | 'light';
 export type BkemoDensity = 'compact' | 'regular' | 'comfy';
 
+export const MOBILE_TOOL_OPTIONS: { id: 'graph' | 'calendar' | 'files' | 'matrix' | 'week' | 'analytics' | 'ai'; label: string; glyph: string }[] = [
+  { id: 'graph', label: 'Graph', glyph: '⊚' },
+  { id: 'calendar', label: 'Calendar', glyph: '▦' },
+  { id: 'files', label: 'Files', glyph: '◳' },
+  { id: 'matrix', label: 'Matrix', glyph: '⊞' },
+  { id: 'week', label: 'This week', glyph: '▦' },
+  { id: 'analytics', label: 'Analytics', glyph: '▥' },
+  { id: 'ai', label: 'AI', glyph: '✧' },
+];
+
 export type BkemoPrefs = {
   theme: BkemoTheme;
   accent: string;

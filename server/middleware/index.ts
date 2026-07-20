@@ -14,6 +14,7 @@ import superjson from 'superjson'
 import { OpenApiMeta } from 'trpc-to-openapi';
 import { prisma } from '../prisma';
 import { resolvePermissions, type PermissionFlag } from '../lib/permissions';
+import { isDatabaseWriteLocked } from '../lib/databaseMigration';
 
 export const t = initTRPC.context<Context>().meta<OpenApiMeta>().create({
   transformer: superjson,
@@ -23,8 +24,18 @@ export const t = initTRPC.context<Context>().meta<OpenApiMeta>().create({
 });
 
 export const router = t.router;
-export const publicProcedure = t.procedure;
-export const authProcedure = t.procedure.use(async ({ ctx, next, path }) => {
+const maintenanceMiddleware = t.middleware(async ({ next, path, type }) => {
+  if (type === 'mutation' && !path.startsWith('databaseMigration.') && await isDatabaseWriteLocked()) {
+    throw new TRPCError({
+      code: 'PRECONDITION_FAILED',
+      message: 'The site is read-only while the PostgreSQL migration is being verified',
+    });
+  }
+  return next();
+});
+
+export const publicProcedure = t.procedure.use(maintenanceMiddleware);
+export const authProcedure = publicProcedure.use(async ({ ctx, next, path }) => {
   //@ts-ignore
   if (!ctx?.name || ctx?.requiresTwoFactor) {
     throw new TRPCError({

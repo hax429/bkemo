@@ -3,17 +3,17 @@ import { useEffect, useMemo, useState } from 'react';
 import dayjs from '@/lib/dayjs';
 import { RootStore } from '@/store';
 import { BlinkoStore } from '@/store/blinkoStore';
-import { api } from '@/lib/trpc';
 import { NoteType, type Note } from '@shared/lib/types';
 import { isTask, isDone, bucketQuadrants, laneToDueRange, type TaskLane } from '@/lib/taskFilters';
 import { stripLoneCheckbox } from '@/lib/taskSyntax';
 import { MarkdownView } from './MarkdownView';
 import { ContextMenu, MoreButton, type MenuItem } from './ContextMenu';
-import { CommentsSection, CardFeedback } from './CommentsSection';
+import { CardFeedback } from './CommentsSection';
 import { getBkemoConfig } from '@/lib/bkemoConfig';
 import { eventBus } from '@/lib/event';
+import { OnThisDay } from './DailyReview';
 
-export type TodoView = TaskLane | 'matrix';
+export type TodoView = Exclude<TaskLane, 'tomorrow'> | 'matrix';
 
 const mono: React.CSSProperties = { fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '.10em', color: 'var(--fg-3)', textTransform: 'uppercase' };
 const monoCap: React.CSSProperties = { fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg-3)' };
@@ -110,7 +110,6 @@ const TaskRow = observer(function TaskRow({ note, onOpen, onContext, compact }: 
 const TABS: { id: TodoView; label: string }[] = [
   { id: 'inbox', label: 'Inbox' },
   { id: 'today', label: 'Today' },
-  { id: 'tomorrow', label: 'Tomorrow' },
   { id: 'week', label: 'This week' },
   { id: 'matrix', label: 'Matrix' },
 ];
@@ -182,7 +181,7 @@ export const Todos = observer(function Todos({ view, onView, onOpen }: { view: T
     { label: 'Make memo', icon: '✦', onClick: () => blinko.upsertNote.call({ id: n.id, type: NoteType.BLINKO, showToast: false }) },
     { label: 'Copy text', icon: '⧉', onClick: () => navigator.clipboard?.writeText(n.content ?? '') },
     { type: 'divider' },
-    { label: 'Archive', icon: '▦', onClick: async () => { try { await api.notes.updateMany.mutate({ ids: [n.id!], isArchived: true }); removeLocal(n.id!); } catch (e) { console.error(e); } } },
+    { label: 'Archive', icon: '▦', onClick: async () => { try { await blinko.upsertNote.call({ id: n.id!, isArchived: true, showToast: false }); removeLocal(n.id!); } catch (e) { console.error(e); } } },
     { label: 'Trash', icon: '⌫', danger: true, onClick: async () => { await blinko.trashNote.call({ ids: [n.id!] }); removeLocal(n.id!); } },
   ];
   const openMenu = (e: React.MouseEvent, note: Note) => setMenu({ x: e.clientX, y: e.clientY, note });
@@ -261,6 +260,8 @@ export const Todos = observer(function Todos({ view, onView, onOpen }: { view: T
                 </div>
               </div>
             )}
+
+            {view === 'today' ? <OnThisDay onOpen={onOpen} /> : null}
           </div>
         </div>
       )}

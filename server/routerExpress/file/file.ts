@@ -9,6 +9,7 @@ import sharp from 'sharp';
 import { prisma } from '../../prisma';
 import { getTokenFromRequest } from '../../lib/helper';
 import { FileService } from '../../lib/files';
+import { stableAttachmentPath } from '../../lib/attachmentPaths';
 
 const router = express.Router();
 const STREAM_THRESHOLD = 5 * 1024 * 1024;
@@ -141,11 +142,12 @@ router.get(/.*/, async (req, res) => {
       if (!token) {
         if (myFile?.note?.isShare) {
         } else {
+          const stablePath = myFile ? stableAttachmentPath(myFile.portableId) : '';
           const isAvatar = await prisma.accounts.findFirst({
-            where: { image: '/api/file/' + fullPath }
+            where: { image: { in: ['/api/file/' + fullPath, stablePath].filter(Boolean) } }
           });
           const isGuestAvatar = !isAvatar && await prisma.comments.findFirst({
-            where: { guestAvatar: '/api/file/' + fullPath }
+            where: { guestAvatar: { in: ['/api/file/' + fullPath, stablePath].filter(Boolean) } }
           });
           if (!isAvatar && !isGuestAvatar) {
             return res.status(401).json({ error: "Unauthorized" });
@@ -154,11 +156,12 @@ router.get(/.*/, async (req, res) => {
       }
 
       if (myFile && (!myFile?.note?.isShare && Number(token?.id) != myFile?.note?.accountId && !myFile?.accountId)) {
+        const stablePath = stableAttachmentPath(myFile.portableId);
         const isAvatar = await prisma.accounts.findFirst({
-          where: { image: '/api/file/' + fullPath }
+          where: { image: { in: ['/api/file/' + fullPath, stablePath] } }
         });
         const isGuestAvatar = !isAvatar && await prisma.comments.findFirst({
-          where: { guestAvatar: '/api/file/' + fullPath }
+          where: { guestAvatar: { in: ['/api/file/' + fullPath, stablePath] } }
         });
         if (!isAvatar && !isGuestAvatar) {
           return res.status(401).json({ error: "Unauthorized" });
@@ -369,4 +372,4 @@ function isImage(filename: string): boolean {
   return imageExtensions.some(ext => filename.toLowerCase().endsWith(ext));
 }
 
-export default router; 
+export default router;

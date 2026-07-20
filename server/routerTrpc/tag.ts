@@ -75,7 +75,7 @@ export const tagRouter = router({
       const notes = await prisma.notes.findMany({ where: { id: { in: ids } } })
       for (const note of notes) {
         const newContent = note.content += ' #' + tag
-        await userCaller(ctx).notes.upsert({ content: newContent, id: note.id, type: -1 })
+        await userCaller(ctx).notes.upsert({ content: newContent, id: note.id })
       }
       return true
     }),

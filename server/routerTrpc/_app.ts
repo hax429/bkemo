@@ -25,6 +25,7 @@ import { mcpServersRouter } from './mcpServers';
 import { fontRouter } from './font';
 import { reactionRouter } from './reaction';
 import { accessTokenRouter } from './accessToken';
+import { databaseMigrationRouter } from './databaseMigration';
 export const appRouter = router({
   ai: aiRouter,
   notes: noteRouter,
@@ -46,6 +47,7 @@ export const appRouter = router({
   fonts: fontRouter,
   reaction: reactionRouter,
   accessTokens: accessTokenRouter,
+  databaseMigration: databaseMigrationRouter,
 });
 
 export const createCaller = t.createCallerFactory(appRouter);

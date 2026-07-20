@@ -7,6 +7,7 @@ import { z } from "zod"
 
 export const accountsSchema = z.object({
   id: z.number().int(),
+  portableId: z.string().uuid().optional(),
   name: z.string(),
   email: z.string().optional(),
   nickname: z.string(),
@@ -31,6 +32,7 @@ export type accounts = z.infer<typeof accountsSchema>
 
 export const attachmentsSchema = z.object({
   id: z.number().int(),
+  portableId: z.string().uuid().optional(),
   isShare: z.boolean(),
   sharePassword: z.string(),
   name: z.string(),
@@ -67,6 +69,7 @@ export type config = z.infer<typeof configSchema>
 
 export const notesSchema = z.object({
   id: z.number().int(),
+  portableId: z.string().uuid().optional(),
   type: z.number().int(),
   content: z.string(),
   isArchived: z.boolean(),
@@ -99,6 +102,7 @@ export type notes = z.infer<typeof notesSchema>
 
 export const tagSchema = z.object({
   id: z.number().int(),
+  portableId: z.string().uuid().optional(),
   name: z.string(),
   icon: z.string(),
   parent: z.number().int(),
@@ -209,6 +213,7 @@ export const noteReferenceSchema = z.object({
 
 export const commentsSchema = z.object({
   id: z.number().int(),
+  portableId: z.string().uuid().optional(),
   content: z.string(),
   accountId: z.number().int().nullable(),
   guestName: z.string().nullable(),

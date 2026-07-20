@@ -7,12 +7,16 @@ import authRoutes from './routerExpress/auth';
 import { configureSession } from './routerExpress/auth/config';
 
 // pg-boss job scheduling
-import { getPgBoss, stopPgBoss } from './lib/pgBoss';
+import { stopPgBoss } from './lib/pgBoss';
+import { getPgBoss } from './lib/pgBoss';
 import { ArchiveJob } from './jobs/archivejob';
 import { DBJob } from './jobs/dbjob';
 import { RebuildEmbeddingJob } from './jobs/rebuildEmbeddingJob';
 import { RecommandJob } from './jobs/recommandJob';
 import { AIScheduledTaskJob } from './jobs/aiScheduledTaskJob';
+import { registerBackgroundJobLifecycle } from './lib/jobLifecycle';
+import { resumeAttachmentMigrationJobs } from './lib/attachmentStorageMigration';
+import { isDatabaseWriteLocked, recoverInterruptedDatabaseMigrationJobs } from './lib/databaseMigration';
 
 // tRPC related imports
 import { createContext } from './context';
@@ -29,6 +33,7 @@ import fileRouter from './routerExpress/file/file';
 import uploadRouter from './routerExpress/file/upload';
 import deleteRouter from './routerExpress/file/delete';
 import s3fileRouter from './routerExpress/file/s3file';
+import attachmentRouter from './routerExpress/file/attachment';
 import pluginRouter from './routerExpress/file/plugin';
 import rssRouter from './routerExpress/rss';
 import openaiRouter from './routerExpress/openai';
@@ -70,16 +75,13 @@ async function initializeJobs() {
   try {
     console.log('Initializing pg-boss scheduled jobs...');
     
-    // Start pg-boss
     await getPgBoss();
-    
-    // Initialize all jobs
-    // These will restore their schedules from the database if they were running
     await ArchiveJob.initialize();
     await DBJob.initialize();
     await RebuildEmbeddingJob.initialize();
     await RecommandJob.initialize();
     await AIScheduledTaskJob.initialize();
+    await resumeAttachmentMigrationJobs();
     
     console.log('All scheduled jobs initialized successfully');
   } catch (error) {
@@ -87,6 +89,8 @@ async function initializeJobs() {
     // Don't throw - allow server to start even if jobs fail to initialize
   }
 }
+
+registerBackgroundJobLifecycle({ start: initializeJobs, pause: stopPgBoss });
 
 // Server configuration
 const app = express();
@@ -150,6 +154,7 @@ async function setupApiRoutes(app: express.Application) {
   app.use('/api/file/upload', uploadRouter);
   app.use('/api/file/delete', deleteRouter);
   app.use('/api/s3file', s3fileRouter);
+  app.use('/api/attachment', attachmentRouter);
   
   // Helper function to serve vditor dependencies with gzip compression
   const serveVditorFile = (routePath: string, filePath: string) => {
@@ -334,6 +339,16 @@ async function bootstrap() {
     app.use(express.json({ limit: '50mb' }));
     app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
+    // tRPC knows whether a request is a read or write and applies its own gate.
+    // Other HTTP mutation endpoints are blocked here during the final snapshot.
+    app.use(async (req, res, next) => {
+      if (['GET', 'HEAD', 'OPTIONS'].includes(req.method) || req.path.startsWith('/api/trpc')) return next();
+      if (await isDatabaseWriteLocked()) {
+        return res.status(503).json({ error: 'Site is read-only while the PostgreSQL migration is being verified' });
+      }
+      return next();
+    });
+
     await configureSession(app);
 
     // Setup API routes
@@ -343,8 +358,11 @@ async function bootstrap() {
       errorHandler(err, req, res, next);
     });
 
-    // Initialize scheduled jobs
-    await initializeJobs();
+    // Interrupted one-time copies cannot resume because credentials are never
+    // persisted. Recover them before deciding whether background writes may run.
+    await recoverInterruptedDatabaseMigrationJobs();
+    if (!await isDatabaseWriteLocked()) await initializeJobs();
+    else console.log('Database cutover ready: background jobs remain paused until restart on the target');
 
     // Start or update server
     if (!server) {

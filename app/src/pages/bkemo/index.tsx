@@ -1,5 +1,6 @@
 import { observer } from 'mobx-react-lite';
 import { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useMediaQuery } from 'usehooks-ts';
 import { RootStore } from '@/store';
 import { BlinkoStore } from '@/store/blinkoStore';
@@ -20,14 +21,14 @@ import { Stream } from '@/components/bkemo/Stream';
 import { Todos, type TodoView } from '@/components/bkemo/Todos';
 import { Trash } from '@/components/bkemo/Trash';
 import { Random } from '@/components/bkemo/Random';
-import { DailyReview } from '@/components/bkemo/DailyReview';
 import { Calendar } from '@/components/bkemo/Calendar';
 import { Graph } from '@/components/bkemo/Graph';
 import { FilesScreen } from '@/components/bkemo/FilesScreen';
-import { Stats } from '@/components/bkemo/Stats';
+import { Analytics } from '@/components/bkemo/Analytics';
 import { NoteModal } from '@/components/bkemo/NoteModal';
+import { SearchOverlay } from '@/components/bkemo/SearchOverlay';
 import { UserStore } from '@/store/user';
-import { signOut, navigate } from '@/components/Auth/auth-client';
+import { pathForRoute, pathForSettingsSection, routeFromPath, settingsSectionFromPath } from '@/lib/bkemoRoutes';
 
 function ComingSoon({ title }: { title: string }) {
   return (
@@ -42,43 +43,46 @@ function ComingSoon({ title }: { title: string }) {
   );
 }
 
-const MORE_ITEMS: { id: BkemoRoute; label: string }[] = [
-  { id: 'tomorrow', label: 'Tomorrow' }, { id: 'week', label: 'This week' }, { id: 'matrix', label: 'Matrix' }, { id: 'random', label: 'Random' },
-  { id: 'calendar', label: 'Calendar' }, { id: 'graph', label: 'Graph' }, { id: 'files', label: 'Files' }, { id: 'stats', label: 'Stats' },
-  { id: 'trash', label: 'Trash' }, { id: 'settings', label: 'Settings' },
-];
-
-function MoreSheet({ onPick, onClose }: { onPick: (r: BkemoRoute) => void; onClose: () => void }) {
-  return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 55, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-end' }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', background: 'var(--bg)', borderTop: '1px solid var(--border-2)', borderRadius: '16px 16px 0 0', padding: '12px 12px max(16px, env(safe-area-inset-bottom))' }}>
-        <div style={{ width: 36, height: 4, borderRadius: 2, background: 'var(--border-2)', margin: '4px auto 12px' }} />
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-          {MORE_ITEMS.map((m) => (
-            <div key={m.id} onClick={() => { onPick(m.id); onClose(); }} style={{ padding: '12px 14px', borderRadius: 'var(--radius-lg)', background: 'var(--bg-2)', border: '1px solid var(--border)', color: 'var(--fg)', fontSize: 14, cursor: 'pointer' }}>{m.label}</div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-const TODO_VIEWS: TodoView[] = ['inbox', 'today', 'tomorrow', 'week', 'matrix'];
+const TODO_VIEWS: TodoView[] = ['inbox', 'today', 'week', 'matrix'];
 
 const BkemoPage = observer(function BkemoPage() {
-  const [route, setRoute] = useState<BkemoRoute>('home');
   const [prefs, setPrefs] = useState<BkemoPrefs>(() => loadPrefs());
   const [editing, setEditing] = useState<Note | null>(null);
-  const [showMore, setShowMore] = useState(false);
-  const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
   const isMobile = useMediaQuery('(max-width: 768px)');
   const user = RootStore.Get(UserStore);
+  const location = useLocation();
+  const navigate = useNavigate();
+  const parsedLocation = routeFromPath(location.pathname);
+  const route = parsedLocation.route;
+  const settingsSection = settingsSectionFromPath(location.pathname);
 
   const updatePrefs = (p: Partial<BkemoPrefs>) => {
     setPrefs((prev) => { const next = { ...prev, ...p }; savePrefs(next); return next; });
   };
+  // The URL is canonical, but navigation intentionally replaces the current
+  // entry so browser Back does not walk through bkemo screens.
+  const navigateTo = (next: BkemoRoute) => navigate(pathForRoute(next), { replace: true });
+  const navigateSettings = (section: string) => navigate(pathForSettingsSection(section), { replace: true });
 
   const cfg = getBkemoConfig();
+
+  useEffect(() => {
+    if (!parsedLocation.known) navigate('/', { replace: true });
+  }, [navigate, parsedLocation.known]);
+
+  useEffect(() => {
+    const noteMatch = location.pathname.match(/^\/n\/(\d+)$/);
+    if (!noteMatch) return;
+    let cancelled = false;
+    api.notes.detail.mutate({ id: Number(noteMatch[1]) })
+      .then((note) => { if (!cancelled && note) setEditing(note as Note); })
+      .catch((error) => {
+        console.error('[bkemo] direct note load failed:', error);
+        if (!cancelled) navigate('/', { replace: true });
+      });
+    return () => { cancelled = true; };
+  }, [location.pathname, navigate]);
 
   // Ensure tags are loaded for #-autocomplete (sidebar isn't mounted on mobile).
   useEffect(() => {
@@ -102,7 +106,10 @@ const BkemoPage = observer(function BkemoPage() {
       if (!opts.id) return;
       try {
         const note = await api.notes.detail.mutate({ id: opts.id });
-        if (note) setEditing(note as Note);
+        if (note) {
+          setEditing(note as Note);
+          navigate(`/n/${opts.id}`, { replace: true });
+        }
       } catch (e) {
         console.error('[bkemo] open linked note failed:', e);
       }
@@ -112,7 +119,7 @@ const BkemoPage = observer(function BkemoPage() {
       eventBus.off('bkemo:quick-capture', onQuickCapture);
       eventBus.off('bkemo:open-note', onOpenNote);
     };
-  }, []);
+  }, [navigate]);
 
   // Apply the custom font-style (registers the @font-face + sets --font-family,
   // which .bkemo reads). Re-runs when the setting changes.
@@ -121,11 +128,6 @@ const BkemoPage = observer(function BkemoPage() {
       FontManager.applyFont(cfg.fontStyle).catch(() => { /* ignore */ });
     }
   }, [cfg.fontStyle]);
-
-  // Daily review can be turned off in Settings — bounce back to Home if so.
-  useEffect(() => {
-    if (cfg.closeDailyReview && route === 'daily') setRoute('home');
-  }, [cfg.closeDailyReview, route]);
 
   // Native task reminders: in the desktop/mobile app, schedule OS notifications
   // for open tasks at their due time. Reconciles on note changes + reconnect.
@@ -148,18 +150,29 @@ const BkemoPage = observer(function BkemoPage() {
 
   const newMemo = () => setEditing({ content: '', type: 2 } as Note);
 
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        setShowSearch(true);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
   const render = () => {
     if (route === 'home') return <Stream onOpen={setEditing} onNew={newMemo} onExpand={setEditing} />;
-    if (route === 'daily') return <DailyReview onOpen={setEditing} />;
     if (route === 'random') return <Random onOpen={setEditing} />;
     if (route === 'trash') return <Trash />;
     if (route === 'calendar') return <Calendar onOpen={setEditing} />;
     if (route === 'graph') return <Graph onOpen={setEditing} showAll={prefs.graphShowAll} />;
     if (route === 'files') return <FilesScreen />;
-    if (route === 'stats') return <Stats />;
-    if (route === 'settings') return <SettingsScreen prefs={prefs} onChange={updatePrefs} />;
+    if (route === 'analytics' || route === 'stats') return <Analytics />;
+    if (route === 'ai') return <ComingSoon title="AI" />;
+    if (route === 'settings') return <SettingsScreen prefs={prefs} onChange={updatePrefs} onNavigate={navigateTo} onSearch={() => setShowSearch(true)} section={settingsSection} onSectionChange={navigateSettings} />;
     if (TODO_VIEWS.includes(route as TodoView)) {
-      return <Todos view={route as TodoView} onView={(v) => setRoute(v)} onOpen={setEditing} />;
+      return <Todos view={route as TodoView} onView={navigateTo} onOpen={setEditing} />;
     }
     if (typeof route === 'string' && route.startsWith('tag:')) {
       return <Stream onOpen={setEditing} onNew={newMemo} onExpand={setEditing} tag={route.slice(4)} />;
@@ -185,25 +198,22 @@ const BkemoPage = observer(function BkemoPage() {
           {isMobile ? (
             <div className="v-stack" style={{ height: '100%', width: '100%' }}>
               <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>{render()}</div>
-              {!cfg.hideMobileBar && (
-                <MobileTabBar
-                  activeRoute={route}
-                  onNav={setRoute}
-                  onNew={newMemo}
-                  onMore={() => setShowMore(true)}
-                />
-              )}
-              {showMore && <MoreSheet onPick={setRoute} onClose={() => setShowMore(false)} />}
+              <MobileTabBar
+                activeRoute={route}
+                onNav={navigateTo}
+                onNew={newMemo}
+              />
             </div>
           ) : (
             <div className="h-stack" style={{ height: '100%', width: '100%' }}>
-              <Sidebar activeRoute={route} onNav={setRoute} onNewMemo={newMemo} />
+              <Sidebar activeRoute={route} onNav={navigateTo} onNewMemo={newMemo} onSearch={() => setShowSearch(true)} />
               {render()}
             </div>
           )}
         </div>
       </div>
-      {editing && <NoteModal note={editing} onClose={() => setEditing(null)} />}
+      {editing && <NoteModal note={editing} onClose={() => { setEditing(null); if (/^\/n\/\d+$/.test(location.pathname)) navigate('/', { replace: true }); }} />}
+      {showSearch && <SearchOverlay onOpen={setEditing} onClose={() => setShowSearch(false)} />}
     </BkemoLayout>
   );
 });

@@ -2,6 +2,7 @@ import express from 'express';
 import { FileService } from '../../lib/files';
 import { getTokenFromRequest } from '../../lib/helper';
 import { prisma } from '../../prisma';
+import { attachmentPortableIdFromPath } from '../../lib/attachmentPaths';
 
 const router = express.Router();
 
@@ -54,8 +55,10 @@ router.post('/', async (req, res) => {
     }
 
     // Security fix: Check user permissions before deleting file
+    const portableId = attachmentPortableIdFromPath(attachment_path);
+    const storedPath = await FileService.resolveStoredPath(attachment_path);
     const attachment = await prisma.attachments.findFirst({
-      where: { path: attachment_path },
+      where: portableId ? { portableId } : { path: storedPath },
       include: {
         note: {
           select: {
