@@ -131,9 +131,9 @@ async function publicTables(client: PrismaClient) {
 
 type DatabaseObject = { schema_name: string; object_name: string; object_type: string };
 
-async function databaseObjects(client: PrismaClient): Promise<DatabaseObject[]> {
+export async function databaseObjects(client: PrismaClient): Promise<DatabaseObject[]> {
   return client.$queryRawUnsafe<DatabaseObject[]>(`
-    SELECT n.nspname AS schema_name, c.relname AS object_name, 'relation:' || c.relkind AS object_type
+    SELECT n.nspname AS schema_name, c.relname AS object_name, 'relation:'::text || c.relkind::text AS object_type
     FROM pg_class c
     JOIN pg_namespace n ON n.oid = c.relnamespace
     WHERE c.relkind IN ('r', 'p', 'v', 'm', 'S', 'f')
@@ -145,7 +145,7 @@ async function databaseObjects(client: PrismaClient): Promise<DatabaseObject[]> 
         WHERE d.classid = 'pg_class'::regclass AND d.objid = c.oid AND d.deptype = 'e'
       )
     UNION ALL
-    SELECT n.nspname, p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')', 'routine:' || p.prokind
+    SELECT n.nspname, p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')', 'routine:'::text || p.prokind::text
     FROM pg_proc p
     JOIN pg_namespace n ON n.oid = p.pronamespace
     WHERE n.nspname <> 'information_schema'
