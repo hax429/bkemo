@@ -6,7 +6,7 @@ import http from 'http';
 import os from 'os';
 import path from 'path';
 import { PrismaClient } from '@prisma/client';
-import { prepareNeonDestinationForCutover } from '../server/lib/databaseCutoverProtocol';
+import { prepareNeonDestinationForCutover, prismaMigrateInvocation } from '../server/lib/databaseCutoverProtocol';
 
 const socketPath = process.env.BKEMO_CUTOVER_SOCKET || '/run/bkemo-cutover.sock';
 const projectDirectory = process.env.BKEMO_PROJECT_DIR || process.cwd();
@@ -88,9 +88,10 @@ async function performCutover(payload: any) {
   if (direct.hostname.toLowerCase() !== expectedHost) throw new Error('Direct URL does not match the verified Neon host');
 
   const bun = process.execPath;
+  const migration = prismaMigrateInvocation(projectDirectory, bun);
   await prepareNeonDestinationForCutover({
     jobId,
-    migrate: () => run(bun, ['run', 'prisma:migrate:deploy'], { ...process.env, DATABASE_URL: direct.toString() }, 30 * 60_000),
+    migrate: () => run(migration.command, migration.args, { ...process.env, DATABASE_URL: direct.toString() }, 30 * 60_000),
     createClient: () => new PrismaClient({ datasources: { db: { url: direct.toString() } } }),
   });
 
