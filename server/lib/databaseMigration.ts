@@ -140,6 +140,7 @@ export async function databaseObjects(client: PrismaClient): Promise<DatabaseObj
       AND n.nspname <> 'information_schema'
       AND n.nspname !~ '^pg_'
       AND n.nspname <> 'neon_auth'
+      AND pg_get_userbyid(c.relowner) <> 'neon_service'
       AND NOT EXISTS (
         SELECT 1 FROM pg_depend d
         WHERE d.classid = 'pg_class'::regclass AND d.objid = c.oid AND d.deptype = 'e'
@@ -151,6 +152,7 @@ export async function databaseObjects(client: PrismaClient): Promise<DatabaseObj
     WHERE n.nspname <> 'information_schema'
       AND n.nspname !~ '^pg_'
       AND n.nspname <> 'neon_auth'
+      AND pg_get_userbyid(p.proowner) <> 'neon_service'
       AND NOT EXISTS (
         SELECT 1 FROM pg_depend d
         WHERE d.classid = 'pg_proc'::regclass AND d.objid = p.oid AND d.deptype = 'e'
@@ -160,6 +162,7 @@ export async function databaseObjects(client: PrismaClient): Promise<DatabaseObj
     FROM pg_namespace n
     WHERE n.nspname NOT IN ('public', 'information_schema', 'neon_auth')
       AND n.nspname !~ '^pg_'
+      AND pg_get_userbyid(n.nspowner) <> 'neon_service'
       AND NOT EXISTS (
         SELECT 1 FROM pg_depend d
         WHERE d.classid = 'pg_namespace'::regclass AND d.objid = n.oid AND d.deptype = 'e'
