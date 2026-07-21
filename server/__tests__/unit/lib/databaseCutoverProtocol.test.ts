@@ -43,4 +43,36 @@ describe('guarded Neon cutover protocol', () => {
 
     expect(calls).toEqual(['migrate', 'findUnique', 'update', 'disconnect']);
   });
+
+  test('locks and accepts a legacy verified destination row that predates maintenance mode', async () => {
+    const updates: unknown[] = [];
+    const client = {
+      databaseMigrationJob: {
+        async findUnique() {
+          return { status: 'ready', maintenanceMode: false };
+        },
+        async update(args: unknown) {
+          updates.push(args);
+          return {};
+        },
+      },
+      async $disconnect() {},
+    };
+
+    await prepareNeonDestinationForCutover({
+      jobId: '649e621c-2966-4801-aded-3f0f258c7b25',
+      async migrate() {},
+      createClient: () => client,
+    });
+
+    expect(updates).toEqual([{
+      where: { id: '649e621c-2966-4801-aded-3f0f258c7b25' },
+      data: {
+        status: 'cutover_pending',
+        maintenanceMode: true,
+        message: 'Guarded cutover requested; both databases remain read-only',
+        completedAt: null,
+      },
+    }]);
+  });
 });

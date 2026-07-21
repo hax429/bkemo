@@ -43,7 +43,9 @@ export async function prepareNeonDestinationForCutover(input: {
   const client = input.createClient();
   try {
     const targetJob = await client.databaseMigrationJob.findUnique({ where: { id: input.jobId } });
-    if (!targetJob || !['ready', 'cutover_pending', 'verification_failed'].includes(targetJob.status) || !targetJob.maintenanceMode) {
+    const acceptsLegacyReadyRow = targetJob?.status === 'ready';
+    if (!targetJob || !['ready', 'cutover_pending', 'verification_failed'].includes(targetJob.status)
+      || (!targetJob.maintenanceMode && !acceptsLegacyReadyRow)) {
       throw new Error('The verified migration record is missing from the Neon destination');
     }
     await client.databaseMigrationJob.update({
