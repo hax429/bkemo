@@ -232,9 +232,10 @@ export const StorageScreen = observer(function StorageScreen() {
     return () => window.clearInterval(timer);
   }, [migration?.id, migration?.status, migration?.cleanupStatus]);
 
+  const activeDatabaseTransfer = activity?.records.find((record) => record.category === 'database-transfer' && !['completed', 'cancelled', 'failed'].includes(record.status));
+
   useEffect(() => {
     if (!activity) return;
-    const activeDatabaseTransfer = activity.records.find((record) => record.category === 'database-transfer' && !['completed', 'cancelled', 'failed'].includes(record.status));
     if (activeDatabaseTransfer) {
       setSelectedDatabase(activeDatabaseTransfer.destination === 'neon' ? 'neon' : 'local');
     } else {
@@ -375,6 +376,9 @@ export const StorageScreen = observer(function StorageScreen() {
 
   const databaseProvider = activity?.database.provider ?? 'local';
   const chosenDatabase = selectedDatabase ?? databaseProvider;
+  const databasePanelTarget = activeDatabaseTransfer
+    ? activeDatabaseTransfer.destination === 'neon' ? 'neon' : 'local'
+    : chosenDatabase;
   const showTransferPanel = transferPanelRequested || !!switchOffer || migrationRunning || (!!migration && migration.failed > 0);
   const providerSelectionPending = form.provider !== activeProvider;
   const lastSelectedProviderCheck = activity?.records.find((record) => record.category === 'attachment-provider' && record.destination === form.provider && record.status === 'completed');
@@ -437,7 +441,7 @@ export const StorageScreen = observer(function StorageScreen() {
         </div>
       </div> : null}
 
-      {user.isSuperAdmin && chosenDatabase !== databaseProvider ? <DatabaseMigrationPanel target={chosenDatabase} onActivityChange={loadActivity} /> : null}
+      {user.isSuperAdmin && (chosenDatabase !== databaseProvider || activeDatabaseTransfer) ? <DatabaseMigrationPanel target={databasePanelTarget} onActivityChange={loadActivity} /> : null}
 
       <div>
         <div style={{ color: 'var(--fg-3)', fontSize: 10.5, fontFamily: 'var(--font-mono)', letterSpacing: '.08em', textTransform: 'uppercase', marginBottom: 8 }}>Attachment storage plan</div>
