@@ -396,7 +396,7 @@ export const StorageScreen = observer(function StorageScreen() {
           <h2 style={{ fontSize: 24, fontWeight: 600, color: 'var(--fg)', letterSpacing: '-0.02em', margin: 0 }}>Storage</h2>
           <div style={{ color: 'var(--fg-2)', fontSize: 13, marginTop: 4, lineHeight: 1.55 }}>PostgreSQL stores site state and text. Attachment binaries are stored separately on the selected file provider.</div>
         </div>
-        {user.isSuperAdmin ? <button type="button" onClick={verifySetup} disabled={setupVerificationBusy} style={{ minHeight: 38, padding: '8px 14px', borderRadius: 'var(--radius)', border: '1px solid var(--border-2)', background: 'var(--bg-2)', color: 'var(--fg)', opacity: setupVerificationBusy ? .6 : 1, fontFamily: 'inherit', fontSize: 12.5, cursor: setupVerificationBusy ? 'wait' : 'pointer' }}><span className="h-stack" style={{ gap: 7 }}><Icon icon="tabler:shield-check" width={16} height={16} />{setupVerificationBusy ? 'Verifying…' : 'Verify active setup'}</span></button> : null}
+        {user.isSuperAdmin ? <button type="button" onClick={verifySetup} disabled={setupVerificationBusy} style={{ minHeight: 38, padding: '8px 14px', borderRadius: 'var(--radius)', border: '1px solid var(--border-2)', background: 'var(--bg-2)', color: 'var(--fg)', opacity: setupVerificationBusy ? .6 : 1, fontFamily: 'inherit', fontSize: 12.5, cursor: setupVerificationBusy ? 'wait' : 'pointer' }}><span className="h-stack" style={{ gap: 7 }}><Icon icon="solar:shield-check-bold" width={16} height={16} />{setupVerificationBusy ? 'Verifying…' : 'Verify active setup'}</span></button> : null}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 10 }}>
