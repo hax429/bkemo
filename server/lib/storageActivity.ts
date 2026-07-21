@@ -3,7 +3,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../prisma';
 
 export type StorageActivityInput = {
-  category: 'attachment-provider' | 'attachment-transfer' | 'database-transfer';
+  category: 'attachment-provider' | 'attachment-transfer' | 'database-transfer' | 'active-setup';
   action: string;
   status: string;
   source?: string;

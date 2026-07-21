@@ -39,6 +39,7 @@ type StorageStats = {
 
 type MigrationJob = Awaited<ReturnType<typeof api.attachments.migrationStatus.query>>;
 type StorageActivity = Awaited<ReturnType<typeof api.attachments.storageActivity.query>>;
+type ActiveSetupVerification = Awaited<ReturnType<typeof api.config.verifyActiveSetup.mutate>>;
 type ProviderPayload = { provider: 'local'; localCustomPath?: string } | {
   provider: 's3'; endpoint?: string; region: string; bucket: string; accessKeyId?: string;
   secretAccessKey?: string; prefix?: string; forcePathStyle?: boolean;
@@ -163,6 +164,8 @@ export const StorageScreen = observer(function StorageScreen() {
   const [cleanupConfirmation, setCleanupConfirmation] = useState('');
   const [credentialConfirmation, setCredentialConfirmation] = useState('');
   const [migrationBusy, setMigrationBusy] = useState<'start' | 'retry' | 'cleanup' | 'cancel-switch' | null>(null);
+  const [setupVerification, setSetupVerification] = useState<ActiveSetupVerification | null>(null);
+  const [setupVerificationBusy, setSetupVerificationBusy] = useState(false);
 
   const loadStats = async () => {
     setStatsLoading(true);
@@ -178,6 +181,19 @@ export const StorageScreen = observer(function StorageScreen() {
   const loadActivity = async () => {
     try { setActivity(await api.attachments.storageActivity.query()); }
     catch { setActivity(null); }
+  };
+
+  const verifySetup = async () => {
+    if (setupVerificationBusy) return;
+    setSetupVerificationBusy(true);
+    try {
+      setSetupVerification(await api.config.verifyActiveSetup.mutate());
+      await loadActivity();
+    } catch (error: any) {
+      setConnection({ kind: 'error', message: error?.message || 'Could not verify the active setup' });
+    } finally {
+      setSetupVerificationBusy(false);
+    }
   };
 
   useEffect(() => {
@@ -375,9 +391,12 @@ export const StorageScreen = observer(function StorageScreen() {
 
   return (
     <div className="v-stack" style={{ gap: 22 }}>
-      <div>
-        <h2 style={{ fontSize: 24, fontWeight: 600, color: 'var(--fg)', letterSpacing: '-0.02em', margin: 0 }}>Storage</h2>
-        <div style={{ color: 'var(--fg-2)', fontSize: 13, marginTop: 4, lineHeight: 1.55 }}>PostgreSQL stores site state and text. Attachment binaries are stored separately on the selected file provider.</div>
+      <div className="h-stack" style={{ justifyContent: 'space-between', gap: 14, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+        <div>
+          <h2 style={{ fontSize: 24, fontWeight: 600, color: 'var(--fg)', letterSpacing: '-0.02em', margin: 0 }}>Storage</h2>
+          <div style={{ color: 'var(--fg-2)', fontSize: 13, marginTop: 4, lineHeight: 1.55 }}>PostgreSQL stores site state and text. Attachment binaries are stored separately on the selected file provider.</div>
+        </div>
+        {user.isSuperAdmin ? <button type="button" onClick={verifySetup} disabled={setupVerificationBusy} style={{ minHeight: 38, padding: '8px 14px', borderRadius: 'var(--radius)', border: '1px solid var(--border-2)', background: 'var(--bg-2)', color: 'var(--fg)', opacity: setupVerificationBusy ? .6 : 1, fontFamily: 'inherit', fontSize: 12.5, cursor: setupVerificationBusy ? 'wait' : 'pointer' }}><span className="h-stack" style={{ gap: 7 }}><Icon icon="tabler:shield-check" width={16} height={16} />{setupVerificationBusy ? 'Verifying…' : 'Verify active setup'}</span></button> : null}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 10 }}>
@@ -398,6 +417,17 @@ export const StorageScreen = observer(function StorageScreen() {
           <div style={{ color: 'var(--fg-3)', fontFamily: 'var(--font-mono)', fontSize: 10.5, marginTop: 9 }}>{statsLoading ? 'Measuring…' : stats ? `${stats.totalCount} files · ${formatBytes(stats.totalBytes) || '0 B'}` : 'Attachment totals unavailable'}</div>
         </div>
       </div>
+
+      {setupVerification ? <div style={{ border: `1px solid ${setupVerification.ok ? 'color-mix(in srgb, var(--accent) 55%, var(--border))' : '#E0A25F'}`, background: setupVerification.ok ? 'var(--accent-soft)' : 'rgba(224,162,95,.08)', borderRadius: 'var(--radius-lg)', padding: 15 }}>
+        <div className="h-stack" style={{ justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}><div style={{ color: 'var(--fg)', fontSize: 13, fontWeight: 650 }}>{setupVerification.ok ? 'Active setup is healthy' : 'Active setup needs attention'}</div><div style={{ color: 'var(--fg-3)', fontFamily: 'var(--font-mono)', fontSize: 9.5 }}>{new Date(setupVerification.verifiedAt).toLocaleString()}</div></div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 9, marginTop: 10 }}>
+          {[{ label: 'Database', result: setupVerification.database }, { label: 'Attachments', result: setupVerification.attachments }].map(({ label, result }) => <div key={label} style={{ border: '1px solid var(--border)', background: 'var(--bg-2)', borderRadius: 'var(--radius)', padding: 11 }}>
+            <div className="h-stack" style={{ justifyContent: 'space-between', gap: 8 }}><span style={{ color: 'var(--fg)', fontSize: 11.5, fontWeight: 650 }}>{label} · {result.provider}</span><span style={{ color: result.ok ? 'var(--accent)' : '#E0696B', fontSize: 10, fontFamily: 'var(--font-mono)' }}>{result.ok ? 'HEALTHY' : 'FAILED'}</span></div>
+            <div style={{ color: result.ok ? 'var(--fg-2)' : '#E0696B', fontSize: 11, lineHeight: 1.45, marginTop: 5 }}>{result.message}</div>
+            <div style={{ color: 'var(--fg-3)', fontSize: 9.5, fontFamily: 'var(--font-mono)', marginTop: 5 }}>{'host' in result && result.host ? result.host : 'location' in result && result.location ? result.location : 'Active provider'} · {result.latencyMs} ms</div>
+          </div>)}
+        </div>
+      </div> : null}
 
       {user.isSuperAdmin ? <div>
         <div style={{ color: 'var(--fg-3)', fontSize: 10.5, fontFamily: 'var(--font-mono)', letterSpacing: '.08em', textTransform: 'uppercase', marginBottom: 8 }}>Site database plan</div>

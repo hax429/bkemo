@@ -8,11 +8,55 @@ import {
   startDatabaseMigration,
   startDatabaseCutover,
   startDatabaseReturnToLocal,
+  sanitizeDatabaseMigrationError,
 } from '../lib/databaseMigration';
+import {
+  attachExistingDevelopmentNeon,
+  getDevelopmentNeonAttachStatus,
+  preflightDevelopmentNeonAttach,
+} from '../lib/developmentNeonAttach';
+import { recordStorageActivity } from '../lib/storageActivity';
 
 const guarded = authProcedure.use(demoAuthMiddleware).use(superAdminAuthMiddleware);
 
 export const databaseMigrationRouter = router({
+  developmentAttachStatus: guarded
+    .input(z.void())
+    .query(() => getDevelopmentNeonAttachStatus()),
+
+  preflightExistingDevelopmentNeon: guarded
+    .input(z.object({
+      pooledConnectionString: z.string().min(1).max(4096),
+      password: z.string().min(1).max(1024),
+    }))
+    .mutation(({ input, ctx }) => preflightDevelopmentNeonAttach(input.pooledConnectionString, Number(ctx.id), input.password)),
+
+  attachExistingDevelopmentNeon: guarded
+    .input(z.object({
+      pooledConnectionString: z.string().min(1).max(4096),
+      password: z.string().min(1).max(1024),
+      confirmation: z.string().min(1).max(1024),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      try {
+        const result = await attachExistingDevelopmentNeon(input, Number(ctx.id));
+        await recordStorageActivity({
+          category: 'database-transfer', action: 'attach-existing-development-neon', status: 'completed',
+          source: 'local-development', destination: 'neon-development', summary: result.message,
+          requestedById: Number(ctx.id), details: { targetHost: result.targetHost, targetDatabase: result.targetDatabase },
+        });
+        return result;
+      } catch (error) {
+        await recordStorageActivity({
+          category: 'database-transfer', action: 'attach-existing-development-neon', status: 'failed',
+          source: 'local-development', destination: 'neon-development',
+          summary: sanitizeDatabaseMigrationError(error),
+          requestedById: Number(ctx.id),
+        });
+        throw error;
+      }
+    }),
+
   status: guarded
     .input(z.object({ jobId: z.string().uuid().optional() }).optional())
     .query(({ input }) => getDatabaseMigrationStatus(input?.jobId)),

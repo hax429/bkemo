@@ -241,7 +241,7 @@ export async function isDatabaseWriteLocked() {
   return value;
 }
 
-async function verifySuperadminPassword(accountId: number, password: string) {
+export async function verifySuperadminPassword(accountId: number, password: string) {
   const account = await prisma.accounts.findUnique({ where: { id: accountId }, select: { role: true, password: true } });
   if (!account || account.role !== 'superadmin') throw new Error('Only the superadmin can migrate the site database');
   if (!(await verifyPassword(password, account.password))) throw new Error('Current password is incorrect');

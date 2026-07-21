@@ -1,4 +1,4 @@
-import { router, authProcedure, publicProcedure, demoAuthMiddleware, requireManageSite } from '../middleware';
+import { router, authProcedure, publicProcedure, demoAuthMiddleware, requireManageSite, superAdminAuthMiddleware } from '../middleware';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { prisma } from '../prisma';
@@ -10,6 +10,7 @@ import { resolvePermissions } from '../lib/permissions';
 import { normalizeStorageSettings, testStorageConnection, type StorageSettings } from '../lib/storageConnection';
 import { recordStorageActivity } from '../lib/storageActivity';
 import { decryptStorageCredential, encryptStorageCredential } from '../lib/storageCredentialEncryption';
+import { verifyActiveSetup } from '../lib/activeSetupVerification';
 
 const storageSettingsSchema = z.discriminatedUnion('provider', [
   z.object({
@@ -71,6 +72,25 @@ function maskedAccessKey(value: string) {
 function storageConnectionError(error: unknown): TRPCError {
   const message = error instanceof Error ? error.message : 'Storage connection failed';
   return new TRPCError({ code: 'BAD_REQUEST', message });
+}
+
+let activeSetupVerification: ReturnType<typeof verifyActiveSetup> | null = null;
+
+async function activeStorageSettings(): Promise<StorageSettings> {
+  const stored = await getGlobalConfig({ useAdmin: true });
+  if (stored.objectStorage !== 's3') {
+    return { provider: 'local', localCustomPath: stored.localCustomPath };
+  }
+  return {
+    provider: 's3',
+    endpoint: stored.s3Endpoint,
+    region: stored.s3Region || 'auto',
+    bucket: stored.s3Bucket || '',
+    accessKeyId: stored.s3AccessKeyId,
+    secretAccessKey: stored.s3AccessKeySecret,
+    prefix: stored.s3CustomPath,
+    forcePathStyle: stored.s3ForcePathStyle !== false,
+  };
 }
 
 export const getGlobalConfig = async ({ ctx, useAdmin = false }: { ctx?: Context, useAdmin?: boolean }) => {
@@ -285,6 +305,44 @@ export const configRouter = router({
           requestedById: Number(ctx.id),
         });
         throw storageConnectionError(error);
+      }
+    }),
+
+  verifyActiveSetup: authProcedure
+    .use(demoAuthMiddleware)
+    .use(superAdminAuthMiddleware)
+    .input(z.void())
+    .mutation(async ({ ctx }) => {
+      if (activeSetupVerification) throw new TRPCError({ code: 'CONFLICT', message: 'Active setup verification is already running' });
+      const operation = verifyActiveSetup({
+        databaseUrl: process.env.DATABASE_URL,
+        queryDatabase: async () => {
+          const rows = await prisma.$queryRaw<Array<{ database: string }>>`SELECT current_database() AS database`;
+          return { database: rows[0]?.database || 'unknown' };
+        },
+        loadStorageSettings: activeStorageSettings,
+        testStorage: testStorageConnection,
+      });
+      activeSetupVerification = operation;
+      try {
+        const result = await operation;
+        await recordStorageActivity({
+          category: 'active-setup',
+          action: 'verify-active-setup',
+          status: result.ok ? 'completed' : 'failed',
+          source: result.database.provider,
+          destination: result.attachments.provider,
+          summary: `Database ${result.database.ok ? 'healthy' : 'failed'}; attachments ${result.attachments.ok ? 'healthy' : 'failed'}`,
+          requestedById: Number(ctx.id),
+          details: {
+            verifiedAt: result.verifiedAt,
+            database: result.database,
+            attachments: result.attachments,
+          },
+        });
+        return result;
+      } finally {
+        if (activeSetupVerification === operation) activeSetupVerification = null;
       }
     }),
 

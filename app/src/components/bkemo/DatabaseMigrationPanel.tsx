@@ -19,6 +19,8 @@ function formatBytes(value?: number) {
 
 type Preflight = Awaited<ReturnType<typeof api.databaseMigration.preflight.mutate>>;
 type MigrationJob = Awaited<ReturnType<typeof api.databaseMigration.status.query>>;
+type DevelopmentAttachStatus = Awaited<ReturnType<typeof api.databaseMigration.developmentAttachStatus.query>>;
+type DevelopmentAttachPreflight = Awaited<ReturnType<typeof api.databaseMigration.preflightExistingDevelopmentNeon.mutate>>;
 const pollingStatuses = new Set(['queued', 'pausing', 'dumping', 'restoring', 'verifying', 'cutover_pending', 'return_pending', 'verifying_cutover']);
 
 export function DatabaseMigrationPanel({ target, onActivityChange }: { target: 'local' | 'neon'; onActivityChange?: () => void }) {
@@ -28,7 +30,7 @@ export function DatabaseMigrationPanel({ target, onActivityChange }: { target: '
   const [overrideQuota, setOverrideQuota] = useState(false);
   const [preflight, setPreflight] = useState<Preflight | null>(null);
   const [job, setJob] = useState<MigrationJob>(null);
-  const [busy, setBusy] = useState<'preflight' | 'start' | 'cutover' | 'finalize' | 'return' | 'unlock' | null>(null);
+  const [busy, setBusy] = useState<'preflight' | 'start' | 'cutover' | 'finalize' | 'return' | 'unlock' | 'dev-preflight' | 'dev-attach' | null>(null);
   const [error, setError] = useState('');
   const [pooledConnectionString, setPooledConnectionString] = useState('');
   const [cutoverPassword, setCutoverPassword] = useState('');
@@ -36,13 +38,22 @@ export function DatabaseMigrationPanel({ target, onActivityChange }: { target: '
   const [returnConfirmation, setReturnConfirmation] = useState('');
   const [unlockPassword, setUnlockPassword] = useState('');
   const [unlockConfirmation, setUnlockConfirmation] = useState('');
+  const [developmentAttachStatus, setDevelopmentAttachStatus] = useState<DevelopmentAttachStatus | null>(null);
+  const [developmentPooledUrl, setDevelopmentPooledUrl] = useState('');
+  const [developmentPassword, setDevelopmentPassword] = useState('');
+  const [developmentConfirmation, setDevelopmentConfirmation] = useState('');
+  const [developmentPreflight, setDevelopmentPreflight] = useState<DevelopmentAttachPreflight | null>(null);
+  const [developmentMessage, setDevelopmentMessage] = useState('');
   const finalizing = useRef(false);
 
   const loadStatus = async () => {
     try { setJob(await api.databaseMigration.status.query()); } catch { /* schema may not exist before deployment */ }
   };
 
-  useEffect(() => { loadStatus(); }, []);
+  useEffect(() => {
+    loadStatus();
+    api.databaseMigration.developmentAttachStatus.query().then(setDevelopmentAttachStatus).catch(() => undefined);
+  }, []);
   useEffect(() => {
     if (!job || !pollingStatuses.has(job.status)) return;
     const timer = window.setInterval(loadStatus, 1500);
@@ -80,6 +91,36 @@ export function DatabaseMigrationPanel({ target, onActivityChange }: { target: '
       const result = await api.databaseMigration.preflight.mutate({ connectionString, password });
       setPreflight(result); setConfirmHost('');
     } catch (value: any) { setError(value?.message || 'Preflight failed'); }
+    finally { setBusy(null); }
+  };
+
+  const preflightExistingDevelopmentNeon = async () => {
+    if (!developmentPooledUrl || !developmentPassword || busy) return;
+    setBusy('dev-preflight'); setError(''); setDevelopmentMessage(''); setDevelopmentPreflight(null);
+    try {
+      const result = await api.databaseMigration.preflightExistingDevelopmentNeon.mutate({
+        pooledConnectionString: developmentPooledUrl,
+        password: developmentPassword,
+      });
+      setDevelopmentPreflight(result); setDevelopmentConfirmation('');
+    } catch (value: any) { setError(value?.message || 'Could not inspect the existing Neon development database'); }
+    finally { setBusy(null); }
+  };
+
+  const attachExistingDevelopmentNeon = async () => {
+    if (!developmentPreflight || developmentConfirmation !== developmentPreflight.confirmation || busy) return;
+    setBusy('dev-attach'); setError(''); setDevelopmentMessage('');
+    try {
+      const result = await api.databaseMigration.attachExistingDevelopmentNeon.mutate({
+        pooledConnectionString: developmentPooledUrl,
+        password: developmentPassword,
+        confirmation: developmentConfirmation,
+      });
+      setDevelopmentMessage(result.message);
+      setDevelopmentPooledUrl(''); setDevelopmentPassword(''); setDevelopmentConfirmation(''); setDevelopmentPreflight(null);
+      setDevelopmentAttachStatus(await api.databaseMigration.developmentAttachStatus.query());
+      onActivityChange?.();
+    } catch (value: any) { setError(value?.message || 'Could not attach the existing Neon development database'); }
     finally { setBusy(null); }
   };
 
@@ -177,6 +218,16 @@ export function DatabaseMigrationPanel({ target, onActivityChange }: { target: '
         <label style={{ display: 'block', marginTop: 12 }}><span style={{ display: 'block', color: 'var(--fg)', fontSize: 12.5, fontWeight: 600, marginBottom: 6 }}>Current superadmin password</span><input type="password" style={inputStyle} value={password} onChange={(e) => { setPassword(e.target.value); setPreflight(null); }} autoComplete="current-password" /></label>
         <div className="h-stack" style={{ justifyContent: 'flex-end', marginTop: 12 }}><button type="button" onClick={runPreflight} disabled={!!busy || !connectionString || !password} style={{ minHeight: 38, padding: '8px 14px', borderRadius: 'var(--radius)', border: '1px solid var(--border-2)', background: 'var(--bg)', color: 'var(--fg)', opacity: busy || !connectionString || !password ? .5 : 1 }}>{busy === 'preflight' ? 'Checking…' : 'Check empty Neon destination'}</button></div>
         {preflight ? <div style={{ marginTop: 13, padding: 13, borderRadius: 'var(--radius)', border: '1px solid color-mix(in srgb, var(--accent) 55%, var(--border))', background: 'var(--accent-soft)' }}><div style={{ color: 'var(--fg)', fontSize: 12.5, fontWeight: 650 }}>Empty Neon destination verified</div><div style={{ color: 'var(--fg-2)', fontSize: 11.5, lineHeight: 1.6, marginTop: 6 }}>{preflight.sourceTableCount} tables · {formatBytes(preflight.sourceBytes)} source · about {formatBytes(preflight.estimatedBytes)} restored · PostgreSQL {preflight.targetPostgresVersion}</div>{preflight.quotaWarning ? <div style={{ color: '#E0A25F', fontSize: 11.5, marginTop: 7 }}>This approaches Neon’s 0.5 GB free limit.</div> : null}{preflight.quotaBlocked ? <label className="h-stack" style={{ gap: 8, marginTop: 9, color: 'var(--fg-2)', fontSize: 11.5 }}><input type="checkbox" checked={overrideQuota} onChange={(e) => setOverrideQuota(e.target.checked)} /> I understand the estimate exceeds 450 MiB</label> : null}<label style={{ display: 'block', marginTop: 10 }}><span style={{ display: 'block', color: 'var(--fg-2)', fontSize: 11.5, marginBottom: 5 }}>Type destination host to confirm: <code>{preflight.targetHost}</code></span><input style={inputStyle} value={confirmHost} onChange={(e) => setConfirmHost(e.target.value)} autoComplete="off" /></label><button type="button" onClick={start} disabled={!!busy || confirmHost !== preflight.targetHost || (preflight.quotaBlocked && !overrideQuota)} style={{ width: '100%', minHeight: 40, marginTop: 10, border: 0, borderRadius: 'var(--radius)', background: 'var(--accent)', color: '#fff', fontWeight: 650, opacity: confirmHost !== preflight.targetHost || (preflight.quotaBlocked && !overrideQuota) ? .5 : 1 }}>{busy === 'start' ? 'Starting…' : 'Lock writes and copy to Neon'}</button></div> : null}
+
+        {developmentAttachStatus?.available ? <details style={{ marginTop: 16, borderTop: '1px solid var(--border)', paddingTop: 13 }}>
+          <summary style={{ color: 'var(--accent)', fontSize: 12, fontWeight: 650, cursor: 'pointer' }}>Development only: connect an existing Neon branch</summary>
+          <div style={{ color: 'var(--fg-2)', fontSize: 11.5, lineHeight: 1.55, marginTop: 9 }}>This one-use local path verifies a compatible non-empty bkemo database and applies pending migrations. It never restores or merges data, and the production server rejects this operation unconditionally.</div>
+          <label style={{ display: 'block', marginTop: 11 }}><span style={{ display: 'block', color: 'var(--fg)', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Existing Neon pooled connection URL</span><input type="password" style={inputStyle} value={developmentPooledUrl} onChange={(event) => { setDevelopmentPooledUrl(event.target.value); setDevelopmentPreflight(null); setError(''); }} placeholder="postgresql://…-pooler…neon.tech/…?sslmode=require" autoComplete="new-password" /></label>
+          <label style={{ display: 'block', marginTop: 9 }}><span style={{ display: 'block', color: 'var(--fg)', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Current local superadmin password</span><input type="password" style={inputStyle} value={developmentPassword} onChange={(event) => { setDevelopmentPassword(event.target.value); setDevelopmentPreflight(null); }} autoComplete="current-password" /></label>
+          <button type="button" onClick={preflightExistingDevelopmentNeon} disabled={!!busy || !developmentPooledUrl || !developmentPassword} style={{ width: '100%', minHeight: 38, marginTop: 10, borderRadius: 'var(--radius)', border: '1px solid var(--border-2)', background: 'var(--bg)', color: 'var(--fg)', opacity: !developmentPooledUrl || !developmentPassword ? .5 : 1 }}>{busy === 'dev-preflight' ? 'Inspecting…' : 'Inspect existing Neon branch'}</button>
+          {developmentPreflight ? <div style={{ marginTop: 10, padding: 11, borderRadius: 'var(--radius)', background: 'var(--accent-soft)', border: '1px solid color-mix(in srgb, var(--accent) 55%, var(--border))' }}><div style={{ color: 'var(--fg)', fontSize: 12, fontWeight: 650 }}>Compatible non-empty bkemo database</div><div style={{ color: 'var(--fg-2)', fontSize: 11, lineHeight: 1.5, marginTop: 5 }}>{developmentPreflight.tableCount} tables · {developmentPreflight.accountCount} accounts · {developmentPreflight.superadminCount} superadmin</div><label style={{ display: 'block', marginTop: 9 }}><span style={{ display: 'block', color: 'var(--fg-2)', fontSize: 11, marginBottom: 5 }}>Type host/database to confirm: <code>{developmentPreflight.confirmation}</code></span><input style={inputStyle} value={developmentConfirmation} onChange={(event) => setDevelopmentConfirmation(event.target.value)} autoComplete="off" /></label><button type="button" onClick={attachExistingDevelopmentNeon} disabled={!!busy || developmentConfirmation !== developmentPreflight.confirmation} style={{ width: '100%', minHeight: 40, marginTop: 9, border: 0, borderRadius: 'var(--radius)', background: 'var(--accent)', color: '#fff', fontWeight: 650, opacity: developmentConfirmation !== developmentPreflight.confirmation ? .5 : 1 }}>{busy === 'dev-attach' ? 'Applying migrations and configuring…' : 'Configure once and require restart'}</button></div> : null}
+        </details> : null}
+        {developmentMessage ? <div style={{ marginTop: 12, padding: 11, borderRadius: 'var(--radius)', background: 'var(--accent-soft)', color: 'var(--fg)', fontSize: 11.5, lineHeight: 1.5 }}>{developmentMessage}</div> : null}
       </div> : null}
 
       {showReturnSetup ? <div style={{ marginTop: 16, padding: 13, borderRadius: 'var(--radius)', border: '1px solid var(--border)', background: 'var(--bg)' }}><div style={{ color: 'var(--fg-2)', fontSize: 11.5, lineHeight: 1.6 }}>The helper will snapshot Neon, back up the retained local database, restore the current site into local PostgreSQL, restart bkemo, and keep both databases locked until verification passes.</div><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 9, marginTop: 10 }}><input type="password" style={inputStyle} value={returnPassword} onChange={(e) => setReturnPassword(e.target.value)} placeholder="Current superadmin password" autoComplete="current-password" /><input style={inputStyle} value={returnConfirmation} onChange={(e) => setReturnConfirmation(e.target.value)} placeholder="Type RETURN TO LOCAL" autoComplete="off" /></div><button type="button" onClick={returnLocal} disabled={!!busy || returnConfirmation !== 'RETURN TO LOCAL' || !returnPassword || !job?.cutoverHelperAvailable} style={{ width: '100%', minHeight: 40, marginTop: 10, border: 0, borderRadius: 'var(--radius)', background: 'var(--accent)', color: '#fff', fontWeight: 650, opacity: returnConfirmation !== 'RETURN TO LOCAL' || !returnPassword || !job?.cutoverHelperAvailable ? .5 : 1 }}>{busy === 'return' ? 'Starting guarded return…' : 'Back up, transfer, restart, and verify'}</button></div> : null}

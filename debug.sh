@@ -129,12 +129,29 @@ esac
 
 command -v bun >/dev/null 2>&1 || die "bun is required (https://bun.sh)"
 
+# A remote Neon database is allowed only after the development-only attach
+# workflow validates it and writes the consumed approval marker. Production
+# migration remains a separate empty-destination flow.
+REMOTE_NEON=0
+if [ -f .env ]; then
+  DB_KIND="$(bun --env-file ./.env -e 'try { const host = new URL(process.env.DATABASE_URL || "").hostname; console.log(host.endsWith(".neon.tech") ? "neon" : "local") } catch { console.log("local") }')"
+  if [ "$DB_KIND" = "neon" ]; then
+    [ -f .bkemo/dev-existing-neon-attach.json ] || die "Remote Neon was not configured through the one-use development attach workflow"
+    REMOTE_NEON=1
+  fi
+fi
+
 # ---------------------------------------------------------------------------
 # 1. Postgres
 # ---------------------------------------------------------------------------
-if [ "$USE_DOCKER" = "1" ]; then start_pg_docker; else start_pg_brew; fi
-[ "${RESET:-0}" = "1" ] && drop_db
-c_green "✓ Postgres ready on localhost:$PG_PORT (db=$PG_DB)"
+if [ "$REMOTE_NEON" = "1" ]; then
+  [ "${RESET:-0}" = "0" ] || die "--reset is never allowed for an attached Neon development database"
+  c_green "✓ Using the approved existing Neon development database"
+else
+  if [ "$USE_DOCKER" = "1" ]; then start_pg_docker; else start_pg_brew; fi
+  [ "${RESET:-0}" = "1" ] && drop_db
+  c_green "✓ Postgres ready on localhost:$PG_PORT (db=$PG_DB)"
+fi
 
 # ---------------------------------------------------------------------------
 # 2. .env
@@ -162,14 +179,24 @@ fi
 c_blue "→ Prisma generate"
 ( cd prisma && bunx prisma generate >/dev/null )
 
-c_blue "→ Prisma db push (applies task columns)"
-( cd prisma && DATABASE_URL="$DATABASE_URL" bunx prisma db push --skip-generate )
+if [ "$REMOTE_NEON" = "1" ]; then
+  DIRECT_DATABASE_URL="$(bun --env-file ./.env -e 'const url = new URL(process.env.DATABASE_URL); url.hostname = url.hostname.replace(/-pooler(?=\.)/i, ""); console.log(url.toString())')"
+  c_blue "→ Prisma migrate deploy (approved Neon development branch, direct endpoint)"
+  ( cd prisma && DATABASE_URL="$DIRECT_DATABASE_URL" bunx prisma migrate deploy )
+else
+  c_blue "→ Prisma db push (applies task columns)"
+  ( cd prisma && DATABASE_URL="$DATABASE_URL" bunx prisma db push --skip-generate )
+fi
 
 # ---------------------------------------------------------------------------
 # 4. Dev login
 # ---------------------------------------------------------------------------
-c_blue "→ Ensuring dev login (admin / 123456)"
-bun --env-file ./.env scripts/dev-create-admin.ts || c_yellow "  (admin step skipped/failed — you can sign up in the UI)"
+if [ "$REMOTE_NEON" = "1" ]; then
+  c_green "✓ Keeping accounts from the existing Neon development database"
+else
+  c_blue "→ Ensuring dev login (admin / 123456)"
+  bun --env-file ./.env scripts/dev-create-admin.ts || c_yellow "  (admin step skipped/failed — you can sign up in the UI)"
+fi
 
 # ---------------------------------------------------------------------------
 # 5. Run the app (backend + frontend on :1111)

@@ -358,7 +358,9 @@ async function bootstrap() {
     // Interrupted one-time copies cannot resume because credentials are never
     // persisted. Recover them before deciding whether background writes may run.
     await recoverInterruptedDatabaseMigrationJobs();
-    if (!await isDatabaseWriteLocked()) await initializeJobs();
+    const attachedDevelopmentNeon = process.env.NODE_ENV !== 'production' && process.env.BKEMO_DEV_ATTACHED_NEON === 'true';
+    if (!await isDatabaseWriteLocked() && !attachedDevelopmentNeon) await initializeJobs();
+    else if (attachedDevelopmentNeon) console.log('Existing Neon development database attached: background jobs are disabled locally');
     else console.log('Database cutover ready: background jobs remain paused until restart on the target');
 
     // Start or update server
