@@ -33,6 +33,7 @@ out/
 # Source-deployment artifacts (see DEPLOYMENT.md)
 .blinko
 server/public
+backups/
 
 # IDEs and editors
 .vscode/

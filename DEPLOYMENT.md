@@ -156,6 +156,31 @@ vite-express] Serving static files from /opt/bkemo/server/public
 ✨ Seed done! ✨
 ```
 
+### 9.1 Guarded Neon cutover helper
+
+The Storage page never gives the web process unrestricted root access. Its
+Neon cutover button talks to a root-owned helper through
+`/run/bkemo-cutover.sock`. Review `deploy/bkemo-cutover-helper.service`, adjust
+the project path, environment-file path, service user group, and Bun path, then
+install it:
+
+```bash
+sudo install -m 0644 deploy/bkemo-cutover-helper.service /etc/systemd/system/bkemo-cutover-helper.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now bkemo-cutover-helper.service
+sudo systemctl status bkemo-cutover-helper.service --no-pager
+```
+
+The helper accepts only local Unix-socket requests. It runs Prisma migrations
+through Neon’s direct endpoint, updates only `DATABASE_URL`, restarts bkemo,
+and leaves both databases in maintenance mode. The authenticated Storage page
+then verifies accounts, notes, attachments, the selected attachment provider,
+and reversible note creation before opening writes on the destination.
+
+Before the first Neon cutover, ensure `.env` has mode `0600`. The helper keeps
+`.env.pre-neon` for the seven-day rollback window and writes PostgreSQL return
+snapshots under `backups/`; neither path should be committed.
+
 ## 10. nginx (TLS reverse proxy)
 
 Minimal config — terminate TLS, proxy to `localhost:1111`, allow large bodies for attachment uploads, forward upgrade headers for WebSocket / SSE:

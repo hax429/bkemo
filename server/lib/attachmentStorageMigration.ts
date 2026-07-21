@@ -104,18 +104,20 @@ async function replaceStoredPathReferences(
 }
 
 async function refreshJobSummary(jobId: string, terminal = false) {
-  const [migrated, failed, migratedBytes] = await Promise.all([
+  const [migrated, failed, skipped, migratedBytes] = await Promise.all([
     prisma.storageMigrationItem.count({ where: { jobId, status: 'completed' } }),
     prisma.storageMigrationItem.count({ where: { jobId, status: 'failed' } }),
+    prisma.storageMigrationItem.count({ where: { jobId, status: 'skipped' } }),
     prisma.storageMigrationItem.aggregate({ where: { jobId, status: 'completed' }, _sum: { size: true } }),
   ]);
-  const processed = migrated + failed;
+  const processed = migrated + failed + skipped;
   return prisma.storageMigrationJob.update({
     where: { id: jobId },
     data: {
       processed,
       migrated,
       failed,
+      skipped,
       migratedBytes: migratedBytes._sum.size ?? new Prisma.Decimal(0),
       ...(terminal ? {
         status: failed ? 'completed_with_errors' : 'completed',
@@ -132,7 +134,13 @@ async function recoverOrCopyItem(itemId: number) {
     where: { id: item.attachmentId },
     select: { id: true, portableId: true, path: true, accountId: true, name: true, type: true },
   });
-  if (!attachment) throw new Error('Attachment metadata no longer exists');
+  if (!attachment) {
+    await prisma.storageMigrationItem.update({
+      where: { id: item.id },
+      data: { status: 'skipped', errorMessage: 'Attachment metadata was deleted; stale transfer record skipped' },
+    });
+    return;
+  }
 
   if (item.destinationPath && attachment.path === item.destinationPath) {
     await prisma.storageMigrationItem.update({ where: { id: item.id }, data: { status: 'completed', errorMessage: null } });
@@ -284,6 +292,28 @@ export async function retryAttachmentMigration(jobId: string) {
   return getAttachmentMigrationJob(jobId);
 }
 
+async function reconcileStaleAttachmentItems(jobId: string) {
+  const candidates = await prisma.storageMigrationItem.findMany({
+    where: { jobId, status: { in: ['pending', 'copying', 'failed'] } },
+    select: { id: true, attachmentId: true },
+  });
+  if (!candidates.length) return 0;
+
+  const existing = await prisma.attachments.findMany({
+    where: { id: { in: candidates.map((item) => item.attachmentId) } },
+    select: { id: true },
+  });
+  const existingIds = new Set(existing.map((item) => item.id));
+  const staleIds = candidates.filter((item) => !existingIds.has(item.attachmentId)).map((item) => item.id);
+  if (!staleIds.length) return 0;
+
+  await prisma.storageMigrationItem.updateMany({
+    where: { id: { in: staleIds } },
+    data: { status: 'skipped', errorMessage: 'Attachment metadata was deleted; stale transfer record skipped' },
+  });
+  return staleIds.length;
+}
+
 function isMissingObject(error: any) {
   return error?.code === 'ENOENT' || error?.name === 'NoSuchKey' || error?.$metadata?.httpStatusCode === 404;
 }
@@ -347,6 +377,7 @@ function serializeAttachmentMigrationJob(job: any, errors: any[] = []) {
     migrated: job.migrated,
     migratedBytes: decimalNumber(job.migratedBytes),
     failed: job.failed,
+    skipped: job.skipped,
     cleanupStatus: job.cleanupStatus,
     cleanupDeleted: job.cleanupDeleted,
     cleanupFailed: job.cleanupFailed,
@@ -359,10 +390,14 @@ function serializeAttachmentMigrationJob(job: any, errors: any[] = []) {
 }
 
 export async function getAttachmentMigrationJob(jobId?: string) {
-  const job = jobId
+  let job = jobId
     ? await prisma.storageMigrationJob.findUnique({ where: { id: jobId } })
     : await prisma.storageMigrationJob.findFirst({ orderBy: { createdAt: 'desc' } });
   if (!job) return null;
+  const reconciled = await reconcileStaleAttachmentItems(job.id);
+  if (reconciled) {
+    job = await refreshJobSummary(job.id, ['completed', 'completed_with_errors', 'failed'].includes(job.status));
+  }
   const errors = await prisma.storageMigrationItem.findMany({
     where: { jobId: job.id, status: 'failed' },
     orderBy: { updatedAt: 'desc' },

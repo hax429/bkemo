@@ -97,6 +97,7 @@ model storageMigrationJob {
   migrated            Int                    @default(0)
   migratedBytes       Decimal                @default(0) @db.Decimal
   failed              Int                    @default(0)
+  skipped             Int                    @default(0)
   cleanupStatus       String                 @default("idle") @db.VarChar
   cleanupDeleted      Int                    @default(0)
   cleanupFailed       Int                    @default(0)
@@ -108,6 +109,26 @@ model storageMigrationJob {
   items               storageMigrationItem[]
 
   @@index([status])
+}
+
+// Append-only storage control-plane events. Transfer jobs and database copy
+// jobs remain in their dedicated tables; this log records provider tests and
+// activations so the Storage screen can present one chronological history.
+model storageActivityLog {
+  id            String    @id @db.Uuid
+  category      String    @db.VarChar
+  action        String    @db.VarChar
+  status        String    @db.VarChar
+  source        String?   @db.VarChar
+  destination   String?   @db.VarChar
+  summary       String    @db.Text
+  details       Json?     @db.Json
+  requestedById Int?
+  createdAt     DateTime  @default(now()) @db.Timestamptz(6)
+  completedAt   DateTime? @db.Timestamptz(6)
+
+  @@index([createdAt])
+  @@index([category, createdAt])
 }
 
 model storageMigrationItem {
@@ -135,6 +156,7 @@ model storageMigrationItem {
 // are deliberately absent: target URLs only live in memory while a job runs.
 model databaseMigrationJob {
   id                 String    @id @db.Uuid
+  direction          String    @default("local-to-neon") @db.VarChar
   status             String    @db.VarChar
   targetHost         String    @db.VarChar
   targetDatabase     String    @db.VarChar

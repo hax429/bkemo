@@ -355,6 +355,8 @@
 @media (max-width: 520px) {
   .bkemo .bkemo-storage-grid { grid-template-columns: 1fr !important; }
   .bkemo .bkemo-storage-grid > * { grid-column: 1 !important; }
+  .bkemo .bkemo-storage-activity-row { grid-template-columns: 1fr !important; gap: 5px !important; }
+  .bkemo .bkemo-storage-activity-row > :last-child { justify-content: flex-start !important; }
   .bkemo .bk-analytics-header { padding: 0 14px; }
   .bkemo .bk-analytics-toolbar { align-items: flex-start; }
   .bkemo .bk-analytics-scope { width: 100%; }

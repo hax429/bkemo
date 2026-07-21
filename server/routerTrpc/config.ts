@@ -8,6 +8,8 @@ import { Context } from '../context';
 import { reinitializeOAuthStrategies } from '../routerExpress/auth/config';
 import { resolvePermissions } from '../lib/permissions';
 import { normalizeStorageSettings, testStorageConnection, type StorageSettings } from '../lib/storageConnection';
+import { recordStorageActivity } from '../lib/storageActivity';
+import { decryptStorageCredential, encryptStorageCredential } from '../lib/storageCredentialEncryption';
 
 const storageSettingsSchema = z.discriminatedUnion('provider', [
   z.object({
@@ -38,8 +40,8 @@ function storageConfigEntries(settings: StorageSettings): Array<[string, unknown
     ['s3Endpoint', settings.endpoint ?? ''],
     ['s3Region', settings.region],
     ['s3Bucket', settings.bucket],
-    ['s3AccessKeyId', settings.accessKeyId ?? ''],
-    ['s3AccessKeySecret', settings.secretAccessKey ?? ''],
+    ['s3AccessKeyId', encryptStorageCredential(settings.accessKeyId ?? '')],
+    ['s3AccessKeySecret', encryptStorageCredential(settings.secretAccessKey ?? '')],
     ['s3CustomPath', settings.prefix ?? ''],
     ['s3ForcePathStyle', settings.forcePathStyle !== false],
   ];
@@ -58,6 +60,12 @@ async function withStoredStorageCredentials(settings: StorageSettings): Promise<
     accessKeyId: stored.s3AccessKeyId || undefined,
     secretAccessKey: stored.s3AccessKeySecret || undefined,
   };
+}
+
+function maskedAccessKey(value: string) {
+  if (!value) return '';
+  const visible = value.slice(-4);
+  return `${'*'.repeat(Math.max(8, Math.min(20, value.length - visible.length)))}${visible}`;
 }
 
 function storageConnectionError(error: unknown): TRPCError {
@@ -110,12 +118,19 @@ export const getGlobalConfig = async ({ ctx, useAdmin = false }: { ctx?: Context
     return acc;
   }, {} as Record<string, any>);
 
+  if (globalConfig.s3AccessKeyId) globalConfig.s3AccessKeyId = decryptStorageCredential(globalConfig.s3AccessKeyId);
+  if (globalConfig.s3AccessKeySecret) globalConfig.s3AccessKeySecret = decryptStorageCredential(globalConfig.s3AccessKeySecret);
+
   if (!useAdmin) {
-    const hasAccessKey = Boolean(globalConfig.s3AccessKeyId);
-    const hasSecretKey = Boolean(globalConfig.s3AccessKeySecret);
+    const savedAccessKey = String(globalConfig.s3AccessKeyId ?? '');
+    const savedSecret = String(globalConfig.s3AccessKeySecret ?? '');
+    const hasAccessKey = Boolean(savedAccessKey);
+    const hasSecretKey = Boolean(savedSecret);
     delete globalConfig.s3AccessKeyId;
     delete globalConfig.s3AccessKeySecret;
     globalConfig.s3CredentialsConfigured = hasAccessKey && hasSecretKey;
+    globalConfig.s3AccessKeyIdMasked = hasAccessKey ? maskedAccessKey(savedAccessKey) : '';
+    globalConfig.s3SecretAccessKeyMasked = hasSecretKey ? '****************' : '';
   }
 
   return globalConfig as GlobalConfig;
@@ -247,10 +262,28 @@ export const configRouter = router({
     .use(demoAuthMiddleware)
     .use(requireManageSite)
     .input(storageSettingsSchema)
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       try {
-        return await testStorageConnection(await withStoredStorageCredentials(input));
+        const result = await testStorageConnection(await withStoredStorageCredentials(input));
+        await recordStorageActivity({
+          category: 'attachment-provider',
+          action: 'connection-test',
+          status: 'completed',
+          destination: input.provider,
+          summary: result.message,
+          requestedById: Number(ctx.id),
+          details: { location: result.location },
+        });
+        return result;
       } catch (error) {
+        await recordStorageActivity({
+          category: 'attachment-provider',
+          action: 'connection-test',
+          status: 'failed',
+          destination: input.provider,
+          summary: error instanceof Error ? error.message : 'Storage connection failed',
+          requestedById: Number(ctx.id),
+        });
         throw storageConnectionError(error);
       }
     }),
@@ -259,7 +292,9 @@ export const configRouter = router({
     .use(demoAuthMiddleware)
     .use(requireManageSite)
     .input(storageSettingsSchema)
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
+      const previous = await getGlobalConfig({ useAdmin: true });
+      const source = previous.objectStorage === 's3' ? 's3' : 'local';
       try {
         const normalized = normalizeStorageSettings(await withStoredStorageCredentials(input));
         const connection = await testStorageConnection(normalized);
@@ -270,10 +305,49 @@ export const configRouter = router({
             await tx.config.create({ data: { key, config: { type: typeof value, value } } });
           }
         });
+        await recordStorageActivity({
+          category: 'attachment-provider',
+          action: source === normalized.provider ? 'configuration-saved' : 'provider-activated',
+          status: 'completed',
+          source,
+          destination: normalized.provider,
+          summary: `${connection.message}. ${normalized.provider === 's3' ? 'S3/R2' : 'Local filesystem'} is active`,
+          requestedById: Number(ctx.id),
+          details: { location: connection.location },
+        });
         return { ...connection, active: normalized.provider };
       } catch (error) {
+        await recordStorageActivity({
+          category: 'attachment-provider',
+          action: 'provider-activation',
+          status: 'failed',
+          source,
+          destination: input.provider,
+          summary: error instanceof Error ? error.message : 'Storage provider activation failed',
+          requestedById: Number(ctx.id),
+        });
         throw storageConnectionError(error);
       }
+    }),
+
+  removeStorageCredentials: authProcedure
+    .use(demoAuthMiddleware)
+    .use(requireManageSite)
+    .input(z.object({ confirmation: z.literal('REMOVE S3 CREDENTIALS') }))
+    .mutation(async ({ ctx }) => {
+      const current = await getGlobalConfig({ useAdmin: true });
+      if (current.objectStorage === 's3') throw new Error('Switch attachments to local storage before removing the active S3 credentials');
+      await prisma.$transaction(async (tx) => {
+        for (const key of ['s3AccessKeyId', 's3AccessKeySecret']) {
+          await tx.config.deleteMany({ where: { key } });
+          await tx.config.create({ data: { key, config: { type: 'string', value: '' } } });
+        }
+      });
+      await recordStorageActivity({
+        category: 'attachment-provider', action: 'credentials-removed', status: 'completed',
+        source: 's3', summary: 'Saved S3 credentials were removed', requestedById: Number(ctx.id),
+      });
+      return { ok: true };
     }),
 
   setPluginConfig: authProcedure
