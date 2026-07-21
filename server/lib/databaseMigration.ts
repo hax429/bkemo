@@ -1,12 +1,15 @@
 import { randomUUID } from 'crypto';
 import { spawn } from 'child_process';
 import fs from 'fs/promises';
+import http from 'http';
 import os from 'os';
 import path from 'path';
 import { PrismaClient } from '@prisma/client';
 import { verifyPassword } from '../../prisma/seed';
 import { prisma } from '../prisma';
 import { pauseBackgroundJobs, startBackgroundJobs } from './jobLifecycle';
+import { decryptStorageCredential } from './storageCredentialEncryption';
+import { testStorageConnection } from './storageConnection';
 
 const WARN_BYTES = 400 * 1024 * 1024;
 const BLOCK_BYTES = 450 * 1024 * 1024;
@@ -51,11 +54,28 @@ export function parsePostgresTarget(connectionString: string) {
   if (!['require', 'verify-ca', 'verify-full'].includes(sslMode ?? '')) {
     throw new Error('The hosted PostgreSQL destination must require TLS with sslmode=require or stronger');
   }
+  if (!url.hostname.toLowerCase().endsWith('.neon.tech')) {
+    throw new Error('Only Neon PostgreSQL destinations are supported');
+  }
   return {
     url,
     host: url.hostname,
     database: decodeURIComponent(url.pathname.slice(1)),
   };
+}
+
+function normalizedNeonHost(hostname: string) {
+  return hostname.toLowerCase().replace(/-pooler(?=\.)/, '');
+}
+
+export function deriveDirectNeonUrl(pooledConnectionString: string) {
+  const target = parsePostgresTarget(pooledConnectionString);
+  if (!target.host.toLowerCase().includes('-pooler.')) {
+    throw new Error('Enter Neon’s pooled connection URL (its hostname contains -pooler)');
+  }
+  const direct = new URL(target.url.toString());
+  direct.hostname = direct.hostname.replace(/-pooler(?=\.)/i, '');
+  return direct.toString();
 }
 
 function safeDsn(connectionString: string) {
@@ -212,11 +232,11 @@ export async function isDatabaseWriteLocked() {
   const job = await prisma.databaseMigrationJob.findFirst({
     where: { maintenanceMode: true },
     orderBy: { createdAt: 'desc' },
-    select: { targetHost: true },
+    select: { id: true },
   }).catch(() => null);
-  // A cloned target contains the source's maintenance row. It is safe to open
-  // writes once the process is actually connected to that target host.
-  const value = !!job && job.targetHost !== currentDatabaseHost();
+  // The ready row is intentionally cloned to Neon. Both databases stay locked
+  // until the target completes its authenticated post-restart verification.
+  const value = !!job;
   maintenanceCache = { value, expiresAt: Date.now() + 5_000 };
   return value;
 }
@@ -265,7 +285,7 @@ async function updateTargetJob(connectionString: string, jobId: string, status: 
   await withTarget(connectionString, async (client) => {
     await client.databaseMigrationJob.update({
       where: { id: jobId },
-      data: { status, message, maintenanceMode: false, completedAt: new Date() },
+      data: { status, message, maintenanceMode: true, completedAt: new Date() },
     });
   });
 }
@@ -314,7 +334,7 @@ async function runDatabaseMigration(jobId: string, connectionString: string) {
       throw new Error(`Schema verification failed (${missingObjects.length} missing, ${unexpectedObjects.length} unexpected object(s))`);
     }
 
-    const readyMessage = 'Copy verified. Set DATABASE_URL to the Neon pooled connection and restart bkemo';
+    const readyMessage = 'Copy verified. Enter the Neon pooled connection to begin the guarded cutover';
     await updateTargetJob(connectionString, jobId, 'ready', readyMessage);
     await prisma.databaseMigrationJob.update({
       where: { id: jobId },
@@ -386,11 +406,231 @@ export async function cancelReadyDatabaseMigration(jobId: string, accountId: num
   return getDatabaseMigrationStatus(jobId);
 }
 
+function cutoverSocketPath() {
+  return process.env.BKEMO_CUTOVER_SOCKET || '/run/bkemo-cutover.sock';
+}
+
+async function readCutoverHelperStatus() {
+  const file = process.env.BKEMO_CUTOVER_STATUS_FILE || '/run/bkemo-cutover-status.json';
+  try {
+    const value = JSON.parse(await fs.readFile(file, 'utf8')) as { jobId?: string; state?: string; message?: string; updatedAt?: string };
+    return value.jobId ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+async function cutoverHelperAvailable() {
+  return fs.stat(cutoverSocketPath()).then((stat) => stat.isSocket()).catch(() => false);
+}
+
+async function sendCutoverRequest(endpoint: '/cutover' | '/return-local', payload: Record<string, unknown>) {
+  const body = JSON.stringify(payload);
+  return new Promise<void>((resolve, reject) => {
+    const request = http.request({
+      socketPath: cutoverSocketPath(),
+      path: endpoint,
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'content-length': Buffer.byteLength(body) },
+      timeout: 5_000,
+    }, (response) => {
+      let responseBody = '';
+      response.setEncoding('utf8');
+      response.on('data', (chunk) => { responseBody += chunk; });
+      response.on('end', () => {
+        if ((response.statusCode ?? 500) >= 300) reject(new Error(responseBody || 'Cutover helper rejected the request'));
+        else resolve();
+      });
+    });
+    request.on('timeout', () => request.destroy(new Error('Cutover helper timed out')));
+    request.on('error', reject);
+    request.end(body);
+  });
+}
+
+export async function startDatabaseCutover(jobId: string, pooledConnectionString: string, accountId: number, password: string) {
+  await verifySuperadminPassword(accountId, password);
+  if (!await cutoverHelperAvailable()) throw new Error('The guarded cutover helper is not installed on this server');
+
+  const job = await prisma.databaseMigrationJob.findUnique({ where: { id: jobId } });
+  if (!job || !['ready', 'verification_failed'].includes(job.status) || !job.maintenanceMode) throw new Error('The verified Neon copy is not ready for cutover');
+
+  const pooled = parsePostgresTarget(pooledConnectionString);
+  const directConnectionString = deriveDirectNeonUrl(pooledConnectionString);
+  const direct = parsePostgresTarget(directConnectionString);
+  if (normalizedNeonHost(direct.host) !== normalizedNeonHost(job.targetHost) || direct.database !== job.targetDatabase) {
+    throw new Error('The pooled URL does not match the verified Neon destination');
+  }
+
+  await withTarget(directConnectionString, async (client) => {
+    const targetJob = await client.databaseMigrationJob.findUnique({ where: { id: jobId } });
+    if (!targetJob || !['ready', 'cutover_pending', 'verification_failed'].includes(targetJob.status) || !targetJob.maintenanceMode) {
+      throw new Error('The verified migration record is missing from the Neon destination');
+    }
+  });
+
+  const message = 'Guarded cutover requested; both databases remain read-only';
+  await withTarget(directConnectionString, (client) => client.databaseMigrationJob.update({
+    where: { id: jobId }, data: { status: 'cutover_pending', maintenanceMode: true, message, completedAt: null },
+  }));
+  await prisma.databaseMigrationJob.update({
+    where: { id: jobId }, data: { status: 'cutover_pending', maintenanceMode: true, message, completedAt: null },
+  });
+  setDatabaseMaintenanceCache(true);
+
+  try {
+    await sendCutoverRequest('/cutover', {
+      jobId,
+      pooledConnectionString: pooled.url.toString(),
+      directConnectionString,
+      expectedTargetHost: job.targetHost,
+    });
+  } catch (error) {
+    const safeMessage = sanitizeDatabaseMigrationError(error);
+    await withTarget(directConnectionString, (client) => client.databaseMigrationJob.update({
+      where: { id: jobId }, data: { status: 'ready', maintenanceMode: true, message: `Cutover helper failed: ${safeMessage}`, completedAt: new Date() },
+    })).catch(() => undefined);
+    await prisma.databaseMigrationJob.update({
+      where: { id: jobId }, data: { status: 'ready', maintenanceMode: true, message: `Cutover helper failed: ${safeMessage}`, completedAt: new Date() },
+    });
+    throw error;
+  }
+
+  return getDatabaseMigrationStatus(jobId);
+}
+
+export async function startDatabaseReturnToLocal(accountId: number, password: string, confirmation: string) {
+  await verifySuperadminPassword(accountId, password);
+  if (confirmation !== 'RETURN TO LOCAL') throw new Error('Confirmation text did not match');
+  if (!currentDatabaseHost().endsWith('.neon.tech') || !currentDatabaseHost().includes('-pooler.')) {
+    throw new Error('bkemo is not currently using a Neon pooled connection');
+  }
+  if (!await cutoverHelperAvailable()) throw new Error('The guarded cutover helper is not installed on this server');
+  const active = await prisma.databaseMigrationJob.findFirst({ where: { maintenanceMode: true }, orderBy: { createdAt: 'desc' } });
+  if (active && (active.direction !== 'neon-to-local' || active.status !== 'verification_failed')) {
+    throw new Error('A database transfer or verification is already active');
+  }
+
+  const info = await databaseInfo(prisma);
+  const id = active?.id ?? randomUUID();
+  const data = {
+      direction: 'neon-to-local',
+      status: 'return_pending',
+      targetHost: 'local-postgresql',
+      targetDatabase: info.database,
+      sourceDatabase: info.database,
+      sourceBytes: BigInt(info.bytes),
+      estimatedBytes: BigInt(Math.ceil(Number(info.bytes) * 1.15)),
+      sourceTableCount: (await publicTables(prisma)).length,
+      requestedById: accountId,
+      maintenanceMode: true,
+      message: 'Return to local PostgreSQL requested; Neon and local PostgreSQL remain read-only',
+  };
+  if (active) {
+    await prisma.databaseMigrationJob.update({ where: { id }, data: { ...data, completedAt: null } });
+  } else {
+    await prisma.databaseMigrationJob.create({ data: { id, ...data } });
+  }
+  setDatabaseMaintenanceCache(true);
+  await pauseBackgroundJobs();
+
+  try {
+    await sendCutoverRequest('/return-local', { id, pooledConnectionString: process.env.DATABASE_URL });
+  } catch (error) {
+    const message = sanitizeDatabaseMigrationError(error);
+    await prisma.databaseMigrationJob.update({
+      where: { id },
+      data: { status: 'verification_failed', maintenanceMode: true, completedAt: new Date(), message: `Local return helper failed: ${message}. Both databases remain locked` },
+    });
+    throw error;
+  }
+  return getDatabaseMigrationStatus(id);
+}
+
+async function verifyCutoverStorage() {
+  const rows = await prisma.config.findMany({
+    where: { key: { in: ['objectStorage', 'localCustomPath', 's3Endpoint', 's3Region', 's3Bucket', 's3AccessKeyId', 's3AccessKeySecret', 's3CustomPath', 's3ForcePathStyle'] } },
+    orderBy: { id: 'asc' },
+  });
+  const config = rows.reduce((result, row) => {
+    if (!(row.key in result)) result[row.key] = (row.config as { value?: unknown } | null)?.value;
+    return result;
+  }, {} as Record<string, any>);
+  if (config.objectStorage === 's3') {
+    return testStorageConnection({
+      provider: 's3',
+      endpoint: config.s3Endpoint,
+      region: config.s3Region || 'auto',
+      bucket: config.s3Bucket || '',
+      accessKeyId: decryptStorageCredential(config.s3AccessKeyId),
+      secretAccessKey: decryptStorageCredential(config.s3AccessKeySecret),
+      prefix: config.s3CustomPath,
+      forcePathStyle: config.s3ForcePathStyle !== false,
+    });
+  }
+  return testStorageConnection({ provider: 'local', localCustomPath: config.localCustomPath });
+}
+
+export async function finalizeDatabaseCutover(jobId: string, accountId: number, password: string) {
+  await verifySuperadminPassword(accountId, password);
+  const job = await prisma.databaseMigrationJob.findUnique({ where: { id: jobId } });
+  if (!job || !['cutover_pending', 'return_pending', 'verification_failed'].includes(job.status) || !job.maintenanceMode) {
+    throw new Error('No guarded Neon cutover is awaiting verification');
+  }
+  const returningLocal = job.direction === 'neon-to-local';
+  if (returningLocal ? currentDatabaseHost().endsWith('.neon.tech') : normalizedNeonHost(currentDatabaseHost()) !== normalizedNeonHost(job.targetHost) || !currentDatabaseHost().includes('-pooler.')) {
+    throw new Error(returningLocal ? 'bkemo is not running on the restored local PostgreSQL database' : 'bkemo is not running on the verified Neon pooled connection');
+  }
+
+  await prisma.databaseMigrationJob.update({
+    where: { id: jobId }, data: { status: 'verifying_cutover', maintenanceMode: true, message: 'Verifying accounts, notes, attachments, storage, and reversible note creation' },
+  });
+  setDatabaseMaintenanceCache(true);
+
+  try {
+    const [accountCount, noteCount, attachmentCount] = await Promise.all([
+      prisma.accounts.count(),
+      prisma.notes.count(),
+      prisma.attachments.count(),
+    ]);
+    if (!accountCount) throw new Error('Account verification failed: no accounts were found');
+
+    await prisma.$transaction(async (tx) => {
+      const canary = await tx.notes.create({
+        data: { accountId, type: 0, content: `bkemo cutover verification ${randomUUID()}` },
+        select: { id: true },
+      });
+      await tx.notes.delete({ where: { id: canary.id } });
+    });
+    const storage = await verifyCutoverStorage();
+
+    await prisma.databaseMigrationJob.update({
+      where: { id: jobId },
+      data: {
+        status: 'completed', maintenanceMode: false, completedAt: new Date(),
+        message: `${returningLocal ? 'Local PostgreSQL return' : 'Neon cutover'} verified: ${accountCount} accounts, ${noteCount} notes, ${attachmentCount} attachments; ${storage.message}`,
+      },
+    });
+    setDatabaseMaintenanceCache(false);
+    await startBackgroundJobs();
+    return getDatabaseMigrationStatus(jobId);
+  } catch (error) {
+    const message = sanitizeDatabaseMigrationError(error);
+    await prisma.databaseMigrationJob.update({
+      where: { id: jobId },
+      data: { status: 'verification_failed', maintenanceMode: true, completedAt: new Date(), message: `Cutover verification failed: ${message}. Both databases remain locked` },
+    }).catch(() => undefined);
+    setDatabaseMaintenanceCache(true);
+    throw new Error(message);
+  }
+}
+
 function serializeJob(job: any) {
   if (!job) return null;
   return {
     id: job.id,
     status: job.status,
+    direction: job.direction,
     targetHost: job.targetHost,
     targetDatabase: job.targetDatabase,
     sourceDatabase: job.sourceDatabase,
@@ -407,10 +647,25 @@ function serializeJob(job: any) {
 }
 
 export async function getDatabaseMigrationStatus(jobId?: string) {
-  const job = jobId
+  let job = jobId
     ? await prisma.databaseMigrationJob.findUnique({ where: { id: jobId } })
     : await prisma.databaseMigrationJob.findFirst({ orderBy: { createdAt: 'desc' } });
-  return serializeJob(job);
+  const helperStatus = await readCutoverHelperStatus();
+  if (job?.maintenanceMode && helperStatus?.jobId === job.id && helperStatus.state === 'failed' && ['cutover_pending', 'return_pending'].includes(job.status)) {
+    job = await prisma.databaseMigrationJob.update({
+      where: { id: job.id },
+      data: { status: 'verification_failed', maintenanceMode: true, completedAt: new Date(), message: `${helperStatus.message || 'Guarded transfer failed'}. Both databases remain locked` },
+    });
+  }
+  const serialized = serializeJob(job);
+  if (!serialized) return null;
+  return {
+    ...serialized,
+    currentProvider: currentDatabaseHost().endsWith('.neon.tech') ? 'neon' as const : 'local' as const,
+    currentHost: currentDatabaseHost(),
+    cutoverHelperAvailable: await cutoverHelperAvailable(),
+    helperStatus: helperStatus?.jobId === serialized.id ? helperStatus : null,
+  };
 }
 
 /** A connection URL is intentionally never persisted, so an interrupted copy

@@ -11,6 +11,7 @@ import {
   startAttachmentMigration,
   startAttachmentSourceCleanup,
 } from '../lib/attachmentStorageMigration';
+import { getStorageActivity } from '../lib/storageActivity';
 
 export interface AttachmentResult {
   id: number | null;
@@ -56,6 +57,12 @@ export const attachmentsRouter = router({
     .use(requireManageSite)
     .input(z.object({ jobId: z.string().uuid().optional() }).optional())
     .query(async ({ input }) => getAttachmentMigrationJob(input?.jobId)),
+
+  storageActivity: authProcedure
+    .use(demoAuthMiddleware)
+    .use(requireManageSite)
+    .input(z.void())
+    .query(async () => getStorageActivity()),
 
   startStorageMigration: authProcedure
     .use(demoAuthMiddleware)

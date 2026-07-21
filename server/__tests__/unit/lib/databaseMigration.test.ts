@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { parsePostgresTarget, sanitizeDatabaseMigrationError } from '../../../lib/databaseMigration';
+import { deriveDirectNeonUrl, parsePostgresTarget, sanitizeDatabaseMigrationError } from '../../../lib/databaseMigration';
 
 describe('database migration connection safety', () => {
   test('accepts a complete TLS PostgreSQL URL without exposing the password', () => {
@@ -11,6 +11,16 @@ describe('database migration connection safety', () => {
   test('rejects destinations without required TLS', () => {
     expect(() => parsePostgresTarget('postgresql://owner:secret@example.neon.tech/site')).toThrow('require TLS');
     expect(() => parsePostgresTarget('postgresql://owner:secret@example.neon.tech/site?sslmode=disable')).toThrow('require TLS');
+  });
+
+  test('rejects hosted PostgreSQL providers other than Neon', () => {
+    expect(() => parsePostgresTarget('postgresql://owner:secret@example.com/site?sslmode=require')).toThrow('Only Neon');
+  });
+
+  test('derives and validates the direct endpoint from a Neon pooled URL', () => {
+    const direct = new URL(deriveDirectNeonUrl('postgresql://owner:secret@ep-example-pooler.c-2.us-east-1.aws.neon.tech/site?sslmode=require'));
+    expect(direct.hostname).toBe('ep-example.c-2.us-east-1.aws.neon.tech');
+    expect(() => deriveDirectNeonUrl('postgresql://owner:secret@ep-example.c-2.us-east-1.aws.neon.tech/site?sslmode=require')).toThrow('pooled');
   });
 
   test('redacts connection strings and Neon-style passwords from errors', () => {

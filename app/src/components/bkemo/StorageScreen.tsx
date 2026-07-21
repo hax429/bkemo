@@ -38,6 +38,7 @@ type StorageStats = {
 };
 
 type MigrationJob = Awaited<ReturnType<typeof api.attachments.migrationStatus.query>>;
+type StorageActivity = Awaited<ReturnType<typeof api.attachments.storageActivity.query>>;
 type ProviderPayload = { provider: 'local'; localCustomPath?: string } | {
   provider: 's3'; endpoint?: string; region: string; bucket: string; accessKeyId?: string;
   secretAccessKey?: string; prefix?: string; forcePathStyle?: boolean;
@@ -155,8 +156,12 @@ export const StorageScreen = observer(function StorageScreen() {
   const [stats, setStats] = useState<StorageStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
   const [migration, setMigration] = useState<MigrationJob>(null);
+  const [activity, setActivity] = useState<StorageActivity | null>(null);
+  const [selectedDatabase, setSelectedDatabase] = useState<'local' | 'neon' | null>(null);
+  const [transferPanelRequested, setTransferPanelRequested] = useState(false);
   const [switchOffer, setSwitchOffer] = useState<SwitchOffer>(null);
   const [cleanupConfirmation, setCleanupConfirmation] = useState('');
+  const [credentialConfirmation, setCredentialConfirmation] = useState('');
   const [migrationBusy, setMigrationBusy] = useState<'start' | 'retry' | 'cleanup' | 'cancel-switch' | null>(null);
 
   const loadStats = async () => {
@@ -170,6 +175,11 @@ export const StorageScreen = observer(function StorageScreen() {
     }
   };
 
+  const loadActivity = async () => {
+    try { setActivity(await api.attachments.storageActivity.query()); }
+    catch { setActivity(null); }
+  };
+
   useEffect(() => {
     if (!blinko.config.value) {
       blinko.config.call();
@@ -181,12 +191,13 @@ export const StorageScreen = observer(function StorageScreen() {
       endpoint: config.s3Endpoint ?? '',
       region: config.s3Region || 'auto',
       bucket: config.s3Bucket ?? '',
-      accessKeyId: '',
-      secretAccessKey: '',
+      accessKeyId: config.s3AccessKeyIdMasked ?? '',
+      secretAccessKey: config.s3SecretAccessKeyMasked ?? '',
       prefix: config.s3CustomPath ?? '',
       forcePathStyle: config.s3ForcePathStyle !== false,
     });
     loadStats();
+    loadActivity();
     api.attachments.migrationStatus.query().then(setMigration).catch(() => undefined);
   }, [blinko.config.value]);
 
@@ -196,11 +207,24 @@ export const StorageScreen = observer(function StorageScreen() {
       const next = await api.attachments.migrationStatus.query({ jobId: migration.id }).catch(() => null);
       if (next) {
         setMigration(next);
-        if (!['queued', 'running'].includes(next.status) && next.cleanupStatus !== 'running') await loadStats();
+        if (!['queued', 'running'].includes(next.status) && next.cleanupStatus !== 'running') {
+          await Promise.all([loadStats(), loadActivity()]);
+          if (!next.failed) setTransferPanelRequested(false);
+        }
       }
     }, 1500);
     return () => window.clearInterval(timer);
   }, [migration?.id, migration?.status, migration?.cleanupStatus]);
+
+  useEffect(() => {
+    if (!activity) return;
+    const activeDatabaseTransfer = activity.records.find((record) => record.category === 'database-transfer' && !['completed', 'cancelled', 'failed'].includes(record.status));
+    if (activeDatabaseTransfer) {
+      setSelectedDatabase(activeDatabaseTransfer.destination === 'neon' ? 'neon' : 'local');
+    } else {
+      setSelectedDatabase((current) => current ?? activity.database.provider);
+    }
+  }, [activity]);
 
   const payload = useMemo(() => form.provider === 'local' ? {
     provider: 'local' as const,
@@ -210,8 +234,8 @@ export const StorageScreen = observer(function StorageScreen() {
     endpoint: form.endpoint,
     region: form.region,
     bucket: form.bucket,
-    accessKeyId: form.accessKeyId,
-    secretAccessKey: form.secretAccessKey,
+    accessKeyId: form.accessKeyId === config.s3AccessKeyIdMasked ? '' : form.accessKeyId,
+    secretAccessKey: form.secretAccessKey === config.s3SecretAccessKeyMasked ? '' : form.secretAccessKey,
     prefix: form.prefix,
     forcePathStyle: form.forcePathStyle,
   }, [form]);
@@ -230,6 +254,16 @@ export const StorageScreen = observer(function StorageScreen() {
     setForm((current) => ({ ...current, [key]: value }));
   };
 
+  const selectAttachmentProvider = (provider: Provider) => {
+    setConnection(null);
+    if (provider === activeProvider) {
+      setSwitchOffer(null);
+      setTransferPanelRequested(false);
+    }
+    if (provider !== activeProvider) setTransferPanelRequested(true);
+    setForm((current) => ({ ...current, provider }));
+  };
+
   const run = async (action: 'test' | 'save') => {
     if (busy || !canSubmit) return;
     setBusy(action);
@@ -244,12 +278,15 @@ export const StorageScreen = observer(function StorageScreen() {
       setConnection({ kind: 'success', message: action === 'save' ? `${result.message}. Storage provider activated.` : result.message, location: result.location, freeBytes: result.freeBytes });
       if (action === 'save') {
         await blinko.config.call();
-        await loadStats();
+        await Promise.all([loadStats(), loadActivity()]);
         if (previousProvider !== form.provider && previousStats) {
           const direction = form.provider === 's3' ? 'local-to-s3' : 's3-to-local';
           const count = direction === 'local-to-s3' ? previousStats.localCount : previousStats.s3Count;
           const bytes = direction === 'local-to-s3' ? previousStats.localBytes : previousStats.s3Bytes;
-          if (count) setSwitchOffer({ direction, count, bytes, previousPayload });
+          if (count) {
+            setSwitchOffer({ direction, count, bytes, previousPayload });
+            setTransferPanelRequested(true);
+          }
         }
       }
     } catch (error: any) {
@@ -264,6 +301,8 @@ export const StorageScreen = observer(function StorageScreen() {
     try {
       setMigration(await api.attachments.startStorageMigration.mutate({ direction }));
       setSwitchOffer(null);
+      setTransferPanelRequested(true);
+      await loadActivity();
     } catch (error: any) {
       setConnection({ kind: 'error', message: error?.message || 'Could not start attachment migration' });
     } finally { setMigrationBusy(null); }
@@ -272,7 +311,7 @@ export const StorageScreen = observer(function StorageScreen() {
   const retryMigration = async () => {
     if (!migration) return;
     setMigrationBusy('retry');
-    try { setMigration(await api.attachments.retryStorageMigration.mutate({ jobId: migration.id })); }
+    try { setMigration(await api.attachments.retryStorageMigration.mutate({ jobId: migration.id })); setTransferPanelRequested(true); }
     catch (error: any) { setConnection({ kind: 'error', message: error?.message || 'Could not retry migration' }); }
     finally { setMigrationBusy(null); }
   };
@@ -297,10 +336,40 @@ export const StorageScreen = observer(function StorageScreen() {
     try {
       await api.config.saveStorage.mutate(switchOffer.previousPayload);
       setSwitchOffer(null);
+      setTransferPanelRequested(false);
       await blinko.config.call();
-      await loadStats();
+      await Promise.all([loadStats(), loadActivity()]);
     } finally {
       setMigrationBusy(null);
+    }
+  };
+
+  const removeStoredCredentials = async () => {
+    if (credentialConfirmation !== 'REMOVE S3 CREDENTIALS') return;
+    setBusy('save'); setConnection(null);
+    try {
+      await api.config.removeStorageCredentials.mutate({ confirmation: 'REMOVE S3 CREDENTIALS' });
+      setCredentialConfirmation('');
+      await Promise.all([blinko.config.call(), loadActivity()]);
+      setConnection({ kind: 'success', message: 'Saved S3 credentials removed' });
+    } catch (error: any) {
+      setConnection({ kind: 'error', message: error?.message || 'Could not remove saved credentials' });
+    } finally { setBusy(null); }
+  };
+
+  const databaseProvider = activity?.database.provider ?? 'local';
+  const chosenDatabase = selectedDatabase ?? databaseProvider;
+  const showTransferPanel = transferPanelRequested || !!switchOffer || migrationRunning || (!!migration && migration.failed > 0);
+  const providerSelectionPending = form.provider !== activeProvider;
+  const lastSelectedProviderCheck = activity?.records.find((record) => record.category === 'attachment-provider' && record.destination === form.provider && record.status === 'completed');
+
+  const openTransferRecord = async (recordId: string) => {
+    if (!recordId.startsWith('attachment:')) return;
+    const jobId = recordId.slice('attachment:'.length);
+    const selected = await api.attachments.migrationStatus.query({ jobId }).catch(() => null);
+    if (selected) {
+      setMigration(selected);
+      setTransferPanelRequested(true);
     }
   };
 
@@ -315,7 +384,7 @@ export const StorageScreen = observer(function StorageScreen() {
         <div style={{ border: '1px solid var(--border)', background: 'var(--bg-2)', borderRadius: 'var(--radius-lg)', padding: 16 }}>
           <div className="h-stack" style={{ gap: 10, marginBottom: 9 }}>
             <span style={{ width: 32, height: 32, borderRadius: 9, display: 'grid', placeItems: 'center', background: 'var(--accent-soft)', color: 'var(--accent)' }}><Icon icon="tabler:database" width={18} height={18} /></span>
-            <div><div style={{ color: 'var(--fg)', fontSize: 13.5, fontWeight: 650 }}>PostgreSQL / Neon</div><div style={{ color: 'var(--fg-3)', fontSize: 10.5 }}>Site database</div></div>
+            <div><div style={{ color: 'var(--fg)', fontSize: 13.5, fontWeight: 650 }}>Site database</div><div style={{ color: 'var(--fg-3)', fontSize: 10.5 }}>{databaseProvider === 'neon' ? `Neon PostgreSQL${activity?.database.pooled ? ' · pooled' : ''}` : 'Local PostgreSQL'} · active</div></div>
           </div>
           <div style={{ color: 'var(--fg-2)', fontSize: 11.5, lineHeight: 1.55 }}>Accounts, configuration, memo text, task state, sharing records, and attachment metadata. Memo attachment bytes are never written to PostgreSQL.</div>
           <div style={{ color: 'var(--fg-3)', fontFamily: 'var(--font-mono)', fontSize: 10.5, marginTop: 9 }}>{statsLoading ? 'Measuring…' : stats?.databaseBytes != null ? `${formatBytes(stats.databaseBytes)} database size` : 'Database size unavailable'}</div>
@@ -323,21 +392,33 @@ export const StorageScreen = observer(function StorageScreen() {
         <div style={{ border: '1px solid var(--border)', background: 'var(--bg-2)', borderRadius: 'var(--radius-lg)', padding: 16 }}>
           <div className="h-stack" style={{ gap: 10, marginBottom: 9 }}>
             <span style={{ width: 32, height: 32, borderRadius: 9, display: 'grid', placeItems: 'center', background: 'var(--accent-soft)', color: 'var(--accent)' }}><Icon icon="tabler:cloud-network" width={18} height={18} /></span>
-            <div><div style={{ color: 'var(--fg)', fontSize: 13.5, fontWeight: 650 }}>Attachments</div><div style={{ color: 'var(--fg-3)', fontSize: 10.5 }}>{activeProvider === 's3' ? 'S3-compatible / R2' : 'Local filesystem'}</div></div>
+            <div><div style={{ color: 'var(--fg)', fontSize: 13.5, fontWeight: 650 }}>Attachments</div><div style={{ color: 'var(--fg-3)', fontSize: 10.5 }}>{activeProvider === 's3' ? 'S3-compatible / R2 · active' : 'Local filesystem · active'}</div></div>
           </div>
           <div style={{ color: 'var(--fg-2)', fontSize: 11.5, lineHeight: 1.55 }}>Images, PDFs, audio, video, archives, and other uploaded files. PostgreSQL keeps only the object path, filename, size, MIME type, owner, and note relationship.</div>
           <div style={{ color: 'var(--fg-3)', fontFamily: 'var(--font-mono)', fontSize: 10.5, marginTop: 9 }}>{statsLoading ? 'Measuring…' : stats ? `${stats.totalCount} files · ${formatBytes(stats.totalBytes) || '0 B'}` : 'Attachment totals unavailable'}</div>
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 10 }}>
+      {user.isSuperAdmin ? <div>
+        <div style={{ color: 'var(--fg-3)', fontSize: 10.5, fontFamily: 'var(--font-mono)', letterSpacing: '.08em', textTransform: 'uppercase', marginBottom: 8 }}>Site database plan</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 10 }}>
+          <ProviderCard active={databaseProvider === 'local'} selected={chosenDatabase === 'local'} icon="tabler:database" title="Local PostgreSQL" description="Keep site configuration, accounts, memo text, and metadata in the server’s retained PostgreSQL database." onClick={() => setSelectedDatabase('local')} />
+          <ProviderCard active={databaseProvider === 'neon'} selected={chosenDatabase === 'neon'} icon="tabler:cloud-network" title="Neon PostgreSQL" description="Use a Neon direct connection for migration and its pooled connection for the production application." onClick={() => setSelectedDatabase('neon')} />
+        </div>
+      </div> : null}
+
+      {user.isSuperAdmin && chosenDatabase !== databaseProvider ? <DatabaseMigrationPanel target={chosenDatabase} onActivityChange={loadActivity} /> : null}
+
+      <div>
+        <div style={{ color: 'var(--fg-3)', fontSize: 10.5, fontFamily: 'var(--font-mono)', letterSpacing: '.08em', textTransform: 'uppercase', marginBottom: 8 }}>Attachment storage plan</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 10 }}>
         <ProviderCard
           active={activeProvider === 'local'}
           selected={form.provider === 'local'}
           icon="tabler:cards"
           title="Local filesystem"
           description="Keep binary files in bkemo’s managed uploads directory. PostgreSQL still stores only their metadata."
-          onClick={() => update('provider', 'local')}
+          onClick={() => selectAttachmentProvider('local')}
         />
         <ProviderCard
           active={activeProvider === 's3'}
@@ -345,16 +426,18 @@ export const StorageScreen = observer(function StorageScreen() {
           icon="tabler:cloud-network"
           title="S3-compatible"
           description="Connect AWS S3, Cloudflare R2, MinIO, Backblaze B2, or another S3-compatible bucket."
-          onClick={() => update('provider', 's3')}
+          onClick={() => selectAttachmentProvider('s3')}
         />
+        </div>
       </div>
 
       <div style={{ border: '1px solid var(--border)', background: 'var(--bg-2)', borderRadius: 'var(--radius-lg)', padding: 18 }}>
         <div className="h-stack" style={{ gap: 10, marginBottom: 18 }}>
           <Icon icon={form.provider === 'local' ? 'tabler:cards' : 'tabler:cloud-network'} width={19} height={19} style={{ color: 'var(--accent)' }} />
           <div>
-            <div style={{ color: 'var(--fg)', fontSize: 14, fontWeight: 650 }}>{form.provider === 'local' ? 'Local connection' : 'S3 connection'}</div>
+            <div className="h-stack" style={{ gap: 8, color: 'var(--fg)', fontSize: 14, fontWeight: 650 }}>{form.provider === 'local' ? 'Local connection' : 'S3 connection'}{form.provider === activeProvider ? <span style={{ padding: '2px 7px', borderRadius: 100, background: 'var(--accent)', color: '#fff', fontSize: 9, fontFamily: 'var(--font-mono)', letterSpacing: '.05em' }}>{form.provider === 's3' ? 'USING S3/R2' : 'USING LOCAL'}</span> : null}</div>
             <div style={{ color: 'var(--fg-3)', fontSize: 11.5, marginTop: 2 }}>{form.provider === 'local' ? 'The server will verify that this folder can be written and read.' : 'The test creates, reads, and removes one small temporary object.'}</div>
+            {lastSelectedProviderCheck ? <div style={{ color: 'var(--fg-3)', fontSize: 10, fontFamily: 'var(--font-mono)', marginTop: 3 }}>Last verified {new Date(lastSelectedProviderCheck.createdAt).toLocaleString()}</div> : null}
           </div>
         </div>
 
@@ -375,12 +458,12 @@ export const StorageScreen = observer(function StorageScreen() {
             <Field label="Bucket">
               <input style={inputStyle} value={form.bucket} onChange={(event) => update('bucket', event.target.value)} placeholder="bkemo-files" autoComplete="off" />
             </Field>
-            <Field label="Access key ID" hint="Leave both credential fields blank to keep saved credentials, or when the server uses an AWS instance or task role.">
-              <input style={inputStyle} value={form.accessKeyId} onChange={(event) => update('accessKeyId', event.target.value)} placeholder={config.s3CredentialsConfigured ? 'Saved access key (leave blank to keep)' : 'Access key ID'} autoComplete="off" spellCheck={false} />
+            <Field label="Access key ID" hint={config.s3CredentialsConfigured ? 'Masked saved key. Leave it unchanged to keep the stored credential.' : 'Enter the access key ID and secret together.'}>
+              <input style={inputStyle} value={form.accessKeyId} onChange={(event) => update('accessKeyId', event.target.value)} placeholder="Access key ID" autoComplete="off" spellCheck={false} />
             </Field>
             <Field label="Secret access key">
               <div style={{ position: 'relative' }}>
-                <input style={{ ...inputStyle, paddingRight: 40 }} type={showSecret ? 'text' : 'password'} value={form.secretAccessKey} onChange={(event) => update('secretAccessKey', event.target.value)} placeholder={config.s3CredentialsConfigured ? 'Saved secret (leave blank to keep)' : 'Secret access key'} autoComplete="new-password" spellCheck={false} />
+                <input style={{ ...inputStyle, paddingRight: 40 }} type={showSecret ? 'text' : 'password'} value={form.secretAccessKey} onChange={(event) => update('secretAccessKey', event.target.value)} placeholder="Secret access key" autoComplete="new-password" spellCheck={false} />
                 <button type="button" onClick={() => setShowSecret((value) => !value)} aria-label={showSecret ? 'Hide secret' : 'Show secret'} style={{ position: 'absolute', right: 7, top: 7, width: 28, height: 28, display: 'grid', placeItems: 'center', border: 0, background: 'transparent', color: 'var(--fg-3)', cursor: 'pointer' }}>
                   <Icon icon="tabler:eye" width={16} height={16} />
                 </button>
@@ -395,6 +478,7 @@ export const StorageScreen = observer(function StorageScreen() {
               <input type="checkbox" checked={form.forcePathStyle} onChange={(event) => update('forcePathStyle', event.target.checked)} style={{ accentColor: 'var(--accent)', width: 15, height: 15 }} />
               Use path-style URLs <span style={{ color: 'var(--fg-3)' }}>(recommended for MinIO, R2, and many compatible providers)</span>
             </label>
+            {config.s3CredentialsConfigured ? <details style={{ gridColumn: '1 / -1' }}><summary style={{ color: 'var(--fg-3)', fontSize: 11.5, cursor: 'pointer' }}>Remove saved credentials</summary><div className="h-stack" style={{ gap: 8, marginTop: 8, flexWrap: 'wrap' }}><input style={{ ...inputStyle, flex: '1 1 260px' }} value={credentialConfirmation} onChange={(event) => setCredentialConfirmation(event.target.value)} placeholder="Type REMOVE S3 CREDENTIALS" autoComplete="off" /><button type="button" onClick={removeStoredCredentials} disabled={activeProvider === 's3' || credentialConfirmation !== 'REMOVE S3 CREDENTIALS' || !!busy} style={{ minHeight: 40, padding: '8px 12px', borderRadius: 'var(--radius)', border: '1px solid #E0696B', background: 'transparent', color: '#E0696B', opacity: activeProvider === 's3' || credentialConfirmation !== 'REMOVE S3 CREDENTIALS' ? .5 : 1 }}>Remove credentials</button></div>{activeProvider === 's3' ? <div style={{ color: 'var(--fg-3)', fontSize: 10.5, marginTop: 5 }}>Switch to local attachments before removing credentials used by the active provider.</div> : null}</details> : null}
           </div>
         )}
 
@@ -418,7 +502,7 @@ export const StorageScreen = observer(function StorageScreen() {
         </div>
       </div>
 
-      <div style={{ border: '1px solid var(--border)', background: 'var(--bg-2)', borderRadius: 'var(--radius-lg)', padding: 18 }}>
+      {showTransferPanel ? <div style={{ border: '1px solid var(--border)', background: 'var(--bg-2)', borderRadius: 'var(--radius-lg)', padding: 18 }}>
         <div className="h-stack" style={{ justifyContent: 'space-between', gap: 14, alignItems: 'flex-start', flexWrap: 'wrap' }}>
           <div style={{ minWidth: 0 }}>
             <div className="h-stack" style={{ gap: 8, color: 'var(--fg)', fontSize: 14, fontWeight: 650 }}><Icon icon="material-symbols:settings-backup-restore-rounded" width={18} height={18} style={{ color: 'var(--accent)' }} />Attachment transfer service</div>
@@ -427,14 +511,15 @@ export const StorageScreen = observer(function StorageScreen() {
           <div style={{ color: 'var(--fg-3)', fontFamily: 'var(--font-mono)', fontSize: 10.5, whiteSpace: 'nowrap' }}>{statsLoading ? 'Measuring…' : stats ? `${stats.localCount} local (${formatBytes(stats.localBytes) || '0 B'}) · ${stats.s3Count} cloud (${formatBytes(stats.s3Bytes) || '0 B'})` : 'Totals unavailable'}</div>
         </div>
 
-        {migration ? (
+        {migration && !providerSelectionPending ? (
           <div style={{ marginTop: 14, borderRadius: 'var(--radius)', border: `1px solid ${migration.failed ? '#E0A25F' : 'var(--border)'}`, background: migration.failed ? 'rgba(224,162,95,.08)' : 'var(--bg)', padding: '12px', color: 'var(--fg-2)', fontSize: 11.5, lineHeight: 1.5 }}>
             <div className="h-stack" style={{ justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
               <div style={{ color: 'var(--fg)', fontWeight: 600 }}>{migration.direction === 'local-to-s3' ? 'Local → S3/R2' : 'S3/R2 → local'} · {migration.status.replaceAll('_', ' ')}</div>
-              <div style={{ fontFamily: 'var(--font-mono)', color: 'var(--fg-3)' }}>{migration.migrated}/{migration.totalCount} · {formatBytes(migration.migratedBytes) || '0 B'}</div>
+              <div style={{ fontFamily: 'var(--font-mono)', color: 'var(--fg-3)' }}>{migration.migrated + migration.skipped}/{migration.totalCount} · {formatBytes(migration.migratedBytes) || '0 B'}</div>
             </div>
             <div style={{ height: 5, marginTop: 9, borderRadius: 10, background: 'var(--bg-3)', overflow: 'hidden' }}><div style={{ width: `${migration.totalCount ? Math.min(100, Math.round((migration.processed / migration.totalCount) * 100)) : 100}%`, height: '100%', background: 'var(--accent)', transition: 'width .2s ease' }} /></div>
             {migration.errorMessage ? <div style={{ color: '#E0696B', marginTop: 7 }}>{migration.errorMessage}</div> : null}
+            {migration.skipped ? <div style={{ marginTop: 7, color: 'var(--fg-3)' }}>{migration.skipped} stale transfer record{migration.skipped === 1 ? '' : 's'} skipped because its attachment metadata was already deleted.</div> : null}
             {migration.errors.length ? <div style={{ marginTop: 7, color: '#E0A25F' }}>{migration.failed} failed: {migration.errors.slice(0, 3).map((item) => `${item.name}: ${item.message}`).join(' · ')}</div> : null}
             {migration.cleanupStatus !== 'idle' ? <div style={{ marginTop: 7 }}>{migration.cleanupDeleted} verified originals deleted{migration.cleanupFailed ? ` · ${migration.cleanupFailed} cleanup failures` : ''} · cleanup {migration.cleanupStatus}</div> : null}
             {migration.failed && !migrationRunning ? <button type="button" onClick={retryMigration} disabled={!!migrationBusy} style={{ marginTop: 10, minHeight: 34, padding: '6px 11px', border: '1px solid var(--border-2)', borderRadius: 'var(--radius)', background: 'var(--bg)', color: 'var(--fg)' }}>{migrationBusy === 'retry' ? 'Retrying…' : `Retry ${migration.failed} failed files`}</button> : null}
@@ -451,16 +536,25 @@ export const StorageScreen = observer(function StorageScreen() {
         ) : null}
 
         <div className="h-stack" style={{ justifyContent: 'flex-end', marginTop: 16 }}>
-          <button type="button" disabled={!availableCount || migrationRunning || !!migrationBusy} onClick={() => startMigration(availableDirection)} style={{ minHeight: 38, padding: '8px 15px', borderRadius: 'var(--radius)', border: 0, background: 'var(--accent)', color: '#fff', cursor: !availableCount || migrationRunning ? 'not-allowed' : 'pointer', opacity: !availableCount || migrationRunning ? .5 : 1, fontFamily: 'inherit', fontSize: 12.5, fontWeight: 600 }}>
-            {migrationRunning ? 'Transfer running on server…' : availableCount ? `${activeProvider === 's3' ? 'Upload' : 'Download'} ${availableCount} existing attachments` : `All attachments are ${activeProvider === 's3' ? 'in S3/R2' : 'local'}`}
+          <button type="button" disabled={providerSelectionPending || !availableCount || migrationRunning || !!migrationBusy} onClick={() => startMigration(availableDirection)} style={{ minHeight: 38, padding: '8px 15px', borderRadius: 'var(--radius)', border: 0, background: 'var(--accent)', color: '#fff', cursor: providerSelectionPending || !availableCount || migrationRunning ? 'not-allowed' : 'pointer', opacity: providerSelectionPending || !availableCount || migrationRunning ? .5 : 1, fontFamily: 'inherit', fontSize: 12.5, fontWeight: 600 }}>
+            {providerSelectionPending ? `Save & use ${form.provider === 's3' ? 'S3/R2' : 'local storage'} above to continue` : migrationRunning ? 'Transfer running on server…' : availableCount ? `${activeProvider === 's3' ? 'Upload' : 'Download'} ${availableCount} existing attachments` : `All attachments are ${activeProvider === 's3' ? 'in S3/R2' : 'local'}`}
           </button>
         </div>
-      </div>
-
-      {user.isSuperAdmin ? <DatabaseMigrationPanel /> : null}
+      </div> : null}
 
       <div style={{ color: 'var(--fg-3)', fontSize: 11.5, lineHeight: 1.55 }}>
         Provider changes affect new uploads immediately. Existing physical paths remain readable during a mixed-storage migration; public attachment links stay stable.
+      </div>
+
+      <div style={{ border: '1px solid var(--border)', background: 'var(--bg-2)', borderRadius: 'var(--radius-lg)', padding: 18 }}>
+        <div className="h-stack" style={{ justifyContent: 'space-between', gap: 10, marginBottom: 12 }}><div className="h-stack" style={{ gap: 8, color: 'var(--fg)', fontSize: 14, fontWeight: 650 }}><Icon icon="tabler:clock" width={18} height={18} style={{ color: 'var(--accent)' }} />Storage activity</div><button type="button" onClick={loadActivity} style={{ border: 0, background: 'transparent', color: 'var(--fg-3)', fontSize: 11, cursor: 'pointer' }}>Refresh</button></div>
+        {!activity?.records.length ? <div style={{ color: 'var(--fg-3)', fontSize: 11.5 }}>No storage activity has been recorded yet.</div> : <div className="v-stack" style={{ gap: 0, maxHeight: 420, overflow: 'auto' }}>
+          {activity.records.map((record) => <div key={record.id} style={{ display: 'grid', gridTemplateColumns: 'minmax(130px, .7fr) minmax(180px, 1.7fr) auto', gap: 12, alignItems: 'center', padding: '10px 2px', borderTop: '1px solid var(--border)', contentVisibility: 'auto', containIntrinsicSize: '56px' }} className="bkemo-storage-activity-row">
+            <div><div style={{ color: 'var(--fg)', fontSize: 11.5, fontWeight: 600 }}>{record.action.replaceAll('-', ' → ')}</div><div style={{ color: 'var(--fg-3)', fontFamily: 'var(--font-mono)', fontSize: 9.5, marginTop: 3 }}>{new Date(record.createdAt).toLocaleString()}</div></div>
+            <div style={{ color: record.status.includes('failed') ? '#E0696B' : 'var(--fg-2)', fontSize: 11.5, lineHeight: 1.45 }}>{record.summary}</div>
+            <div className="h-stack" style={{ gap: 7, justifyContent: 'flex-end' }}><span style={{ padding: '3px 7px', borderRadius: 100, background: record.status === 'completed' ? 'var(--accent-soft)' : 'var(--bg-3)', color: record.status.includes('failed') ? '#E0696B' : 'var(--fg-2)', fontSize: 9.5, fontFamily: 'var(--font-mono)' }}>{record.status.replaceAll('_', ' ')}</span>{record.id.startsWith('attachment:') ? <button type="button" onClick={() => openTransferRecord(record.id)} style={{ border: 0, background: 'transparent', color: 'var(--accent)', fontSize: 10.5, cursor: 'pointer' }}>Manage</button> : null}</div>
+          </div>)}
+        </div>}
       </div>
 
       {switchOffer ? (
@@ -471,7 +565,7 @@ export const StorageScreen = observer(function StorageScreen() {
             <div style={{ color: 'var(--fg-2)', fontSize: 12.5, lineHeight: 1.6 }}>{switchOffer.count} files ({formatBytes(switchOffer.bytes) || '0 B'}) are still on {switchOffer.direction === 'local-to-s3' ? 'the local server' : 'S3/R2'}. Copying runs on the server and continues if you close this page. Originals are retained.</div>
             <div className="h-stack" style={{ justifyContent: 'flex-end', gap: 8, marginTop: 18, flexWrap: 'wrap' }}>
               <button type="button" onClick={cancelProviderSwitch} disabled={!!migrationBusy} style={{ minHeight: 38, padding: '8px 12px', borderRadius: 'var(--radius)', border: '1px solid var(--border-2)', background: 'transparent', color: 'var(--fg-2)' }}>{migrationBusy === 'cancel-switch' ? 'Reverting…' : 'Cancel switch'}</button>
-              <button type="button" onClick={() => setSwitchOffer(null)} disabled={!!migrationBusy} style={{ minHeight: 38, padding: '8px 12px', borderRadius: 'var(--radius)', border: '1px solid var(--border-2)', background: 'var(--bg)', color: 'var(--fg)' }}>Later</button>
+              <button type="button" onClick={() => { setSwitchOffer(null); setTransferPanelRequested(false); }} disabled={!!migrationBusy} style={{ minHeight: 38, padding: '8px 12px', borderRadius: 'var(--radius)', border: '1px solid var(--border-2)', background: 'var(--bg)', color: 'var(--fg)' }}>Later</button>
               <button type="button" onClick={() => startMigration(switchOffer.direction)} disabled={!!migrationBusy} style={{ minHeight: 38, padding: '8px 14px', borderRadius: 'var(--radius)', border: 0, background: 'var(--accent)', color: '#fff', fontWeight: 650 }}>{migrationBusy === 'start' ? 'Starting…' : switchOffer.direction === 'local-to-s3' ? 'Upload now' : 'Download now'}</button>
             </div>
           </div>

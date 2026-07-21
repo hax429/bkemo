@@ -1,0 +1,26 @@
+[Unit]
+Description=bkemo guarded Neon cutover helper
+After=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+Environment=BKEMO_PROJECT_DIR=/home/ubuntu/services/notes/bkemo
+Environment=BKEMO_ENV_FILE=/home/ubuntu/services/notes/bkemo/.env
+Environment=BKEMO_SERVICE_NAME=bkemo.service
+Environment=BKEMO_CUTOVER_SOCKET=/run/bkemo-cutover.sock
+Environment=BKEMO_CUTOVER_STATUS_FILE=/run/bkemo-cutover-status.json
+Environment=BKEMO_SOCKET_GROUP=ubuntu
+Environment=BKEMO_HEALTH_URL=http://127.0.0.1:1111/health
+ExecStart=/home/ubuntu/.bun/bin/bun /home/ubuntu/services/notes/bkemo/scripts/bkemo-neon-cutover-helper.ts
+Restart=on-failure
+RestartSec=2
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=read-only
+ProtectSystem=full
+ReadWritePaths=/home/ubuntu/services/notes/bkemo /run
+
+[Install]
+WantedBy=multi-user.target
