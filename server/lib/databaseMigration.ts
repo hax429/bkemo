@@ -462,17 +462,7 @@ export async function startDatabaseCutover(jobId: string, pooledConnectionString
     throw new Error('The pooled URL does not match the verified Neon destination');
   }
 
-  await withTarget(directConnectionString, async (client) => {
-    const targetJob = await client.databaseMigrationJob.findUnique({ where: { id: jobId } });
-    if (!targetJob || !['ready', 'cutover_pending', 'verification_failed'].includes(targetJob.status) || !targetJob.maintenanceMode) {
-      throw new Error('The verified migration record is missing from the Neon destination');
-    }
-  });
-
   const message = 'Guarded cutover requested; both databases remain read-only';
-  await withTarget(directConnectionString, (client) => client.databaseMigrationJob.update({
-    where: { id: jobId }, data: { status: 'cutover_pending', maintenanceMode: true, message, completedAt: null },
-  }));
   await prisma.databaseMigrationJob.update({
     where: { id: jobId }, data: { status: 'cutover_pending', maintenanceMode: true, message, completedAt: null },
   });
@@ -487,9 +477,6 @@ export async function startDatabaseCutover(jobId: string, pooledConnectionString
     });
   } catch (error) {
     const safeMessage = sanitizeDatabaseMigrationError(error);
-    await withTarget(directConnectionString, (client) => client.databaseMigrationJob.update({
-      where: { id: jobId }, data: { status: 'ready', maintenanceMode: true, message: `Cutover helper failed: ${safeMessage}`, completedAt: new Date() },
-    })).catch(() => undefined);
     await prisma.databaseMigrationJob.update({
       where: { id: jobId }, data: { status: 'ready', maintenanceMode: true, message: `Cutover helper failed: ${safeMessage}`, completedAt: new Date() },
     });

@@ -5,6 +5,8 @@ import { chmod, copyFile, mkdir, mkdtemp, readFile, rename, rm, unlink, writeFil
 import http from 'http';
 import os from 'os';
 import path from 'path';
+import { PrismaClient } from '@prisma/client';
+import { prepareNeonDestinationForCutover } from '../server/lib/databaseCutoverProtocol';
 
 const socketPath = process.env.BKEMO_CUTOVER_SOCKET || '/run/bkemo-cutover.sock';
 const projectDirectory = process.env.BKEMO_PROJECT_DIR || process.cwd();
@@ -76,15 +78,21 @@ async function waitForHealth() {
 }
 
 async function performCutover(payload: any) {
+  const jobId = String(payload.jobId || '');
   const pooled = new URL(String(payload.pooledConnectionString || ''));
   const direct = new URL(String(payload.directConnectionString || ''));
   const expectedHost = String(payload.expectedTargetHost || '').toLowerCase();
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(jobId)) throw new Error('Cutover job ID is invalid');
   if (!pooled.hostname.endsWith('.neon.tech') || !pooled.hostname.includes('-pooler.')) throw new Error('Pooled URL is not a Neon pooled endpoint');
   if (!direct.hostname.endsWith('.neon.tech') || direct.hostname.includes('-pooler.')) throw new Error('Direct URL is not a Neon direct endpoint');
   if (direct.hostname.toLowerCase() !== expectedHost) throw new Error('Direct URL does not match the verified Neon host');
 
   const bun = process.execPath;
-  await run(bun, ['run', 'prisma:migrate:deploy'], { ...process.env, DATABASE_URL: direct.toString() }, 30 * 60_000);
+  await prepareNeonDestinationForCutover({
+    jobId,
+    migrate: () => run(bun, ['run', 'prisma:migrate:deploy'], { ...process.env, DATABASE_URL: direct.toString() }, 30 * 60_000),
+    createClient: () => new PrismaClient({ datasources: { db: { url: direct.toString() } } }),
+  });
 
   const previous = await readFile(environmentFile, 'utf8');
   const backup = `${environmentFile}.pre-neon`;
