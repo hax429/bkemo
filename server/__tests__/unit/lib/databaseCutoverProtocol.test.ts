@@ -1,7 +1,20 @@
 import { describe, expect, test } from 'bun:test';
-import { prepareNeonDestinationForCutover } from '../../../lib/databaseCutoverProtocol';
+import { prepareNeonDestinationForCutover, prismaMigrateInvocation } from '../../../lib/databaseCutoverProtocol';
 
 describe('guarded Neon cutover protocol', () => {
+  test('runs the Prisma CLI with Bun without invoking the system Node shebang', () => {
+    expect(prismaMigrateInvocation('/srv/bkemo', '/opt/bun')).toEqual({
+      command: '/opt/bun',
+      args: [
+        '/srv/bkemo/node_modules/prisma/build/index.js',
+        'migrate',
+        'deploy',
+        '--schema',
+        '/srv/bkemo/prisma/schema.prisma',
+      ],
+    });
+  });
+
   test('applies pending schema migrations before querying the copied Neon job', async () => {
     let migrated = false;
     const calls: string[] = [];

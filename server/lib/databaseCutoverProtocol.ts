@@ -1,7 +1,22 @@
+import path from 'path';
+
 type CutoverJob = {
   status: string;
   maintenanceMode: boolean;
 };
+
+export function prismaMigrateInvocation(projectDirectory: string, bunExecutable: string) {
+  return {
+    command: bunExecutable,
+    args: [
+      path.join(projectDirectory, 'node_modules/prisma/build/index.js'),
+      'migrate',
+      'deploy',
+      '--schema',
+      path.join(projectDirectory, 'prisma/schema.prisma'),
+    ],
+  };
+}
 
 type CutoverDatabaseClient = {
   databaseMigrationJob: {
