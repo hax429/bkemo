@@ -27,7 +27,7 @@ edit -> local server -> focused checks -> user acceptance
 | Production host | SSH alias `Oracle` | Ubuntu server |
 | Production checkout | `/home/ubuntu/services/notes/bkemo` | Source-built live checkout |
 | Production process | `bkemo.service` | systemd service running `bun dist/index.js` on port `1111` |
-| Public edge | nginx | TLS proxy from `bk.hax429.me` to `localhost:1111` |
+| Public edge | Cloudflare and nginx | Cloudflare proxies to nginx, which terminates TLS and forwards `bk.hax429.me` to `localhost:1111` |
 | Public service | `https://bk.hax429.me` | Web application and API endpoint used by native clients |
 
 Production is a source deployment, not a bkemo Docker image. PostgreSQL and
@@ -158,7 +158,25 @@ A healthy startup log includes the server listening on `0.0.0.0:1111`. Also
 check the user-visible behavior that motivated the deployment; HTTP 200 alone
 does not verify a feature.
 
-## 7. Native clients and frontend delivery
+## 7. Cache-safe frontend releases
+
+Keep stable app-shell and service-worker URLs revalidated on every request.
+`server/lib/staticCache.ts` must continue serving `index.html`, manifests,
+`registerSW.js`, and every `sw*.js` file with `no-cache, no-store,
+must-revalidate`. Only content-hashed files under `assets/` are immutable.
+
+`app/public/sw.js` is a permanent retirement endpoint for browsers controlled
+by the legacy worker. Do not remove or turn it back into an application worker.
+It clears the legacy caches, unregisters itself, and reloads open windows so the
+current app shell can register `sw-bkemo-v2.js`.
+
+If Cloudflare previously cached an update-sensitive URL with an immutable
+header, deploy the corrected origin first and then purge only the affected URLs,
+normally `/`, `/index.html`, `/registerSW.js`, `/sw.js`, and the current
+versioned worker. Verify the returned cache headers and perform a browser mount
+check after the purge; HTTP 200 alone cannot detect an empty React root.
+
+## 8. Native clients and frontend delivery
 
 The web deployment immediately updates the browser application and backend API.
 The production Tauri builds currently package `dist/public` through
@@ -176,7 +194,7 @@ Do not substitute that command into the production workflow until the active
 client URL and rollout procedure in [`../plans/IOS.md`](../plans/IOS.md) are
 verified. Native clients continue to use `https://bk.hax429.me` for API data.
 
-## 8. Host bootstrap reference
+## 9. Host bootstrap reference
 
 For a new systemd host, the required shape is:
 
