@@ -679,10 +679,10 @@ networksetup -setairportpower en0 on     # on
 
 ## 9. Next Steps
 
-> **Related docs:** [`WORKFLOW.md`](./WORKFLOW.md) (how a change reaches production),
-> [`MAC.md`](./MAC.md) (macOS native + Quick Note), [`MCP.md`](./MCP.md) (MCP server
-> over the REST API), [`MOBILE_CLIENT_DESIGN.md`](./MOBILE_CLIENT_DESIGN.md) (client
-> design + the coherent-UI contract).
+> **Related docs:** [`../agents/DEPLOYMENT.md`](../agents/DEPLOYMENT.md) (how a
+> change reaches production), [`../agents/PROJECT.md`](../agents/PROJECT.md)
+> (current client architecture), and [`MCP.md`](./MCP.md) (future MCP server over
+> the REST API).
 >
 > **Native direction (locked):** iOS + macOS should lean on native elements (panels,
 > menus, notifications, share sheets, fast offline) to feel quick — but the *content*
@@ -697,7 +697,9 @@ window-URL flip pending). Remaining, in priority order:
 2. **Flip the OTA window URL** to `bundle://localhost/index.html` in `tauri.ios.conf.json` once §5.1 + an OTA download/update cycle pass on-device (Phase 8 task 8g). One-line change; activates auto frontend updates.
 3. **Phase 7 — TestFlight upload** (§5.5). Pre-req: a one-time App Store Connect listing for `me.hax429.bk`.
 4. **Activate task notifications** — needs a native rebuild (Cargo/Xcode); JS + wiring already landed. Create a task due in ~2 min, background the app, confirm the banner.
-5. **Phase 5 / macOS** — signing, notarization, GitHub releases, and the global-shortcut Quick Note ([`MAC.md`](./MAC.md)). Independent of iOS.
+5. **Phase 5 / macOS** — signing, notarization, GitHub releases, and the
+   global-shortcut Quick Note. This work is independent of iOS and remains part
+   of this cross-platform native-client plan.
 6. **Phase 6 remainder** — extract a pure offline-queue reducer and cover `syncOfflineNotes` ordering.
 
 ---

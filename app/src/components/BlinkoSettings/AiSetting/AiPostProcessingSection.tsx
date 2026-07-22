@@ -48,7 +48,7 @@ export const AiPostProcessingSection = observer(() => {
   };
 
   return (
-    <CollapsibleCard icon="hugeicons:ai-innovation-01" title="AI Post Processing">
+    <CollapsibleCard icon="hugeicons:ai-innovation-01" title="AI Post Processing" className="bk-ai-card bk-ai-compact-card">
       <Item
         leftContent={
           <ItemWithTooltip

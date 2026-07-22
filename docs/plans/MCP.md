@@ -14,7 +14,7 @@ Everything an MCP tool needs already exists:
 - **REST surface**: `/api/v1/note/{list,detail,upsert,toggle-done,batch-trash,batch-delete}`,
   plus tags, attachments (incl. `allFiles`), comments, reactions, notifications,
   follows, analytics — all documented (`/api/openapi.json`, Swagger `/api-doc`,
-  Redoc `/docs`). See `CLAUDE.md` "bkemo — Direction D".
+  Redoc `/docs`). See [`../agents/PROJECT.md`](../agents/PROJECT.md).
 - **Auth + scopes**: named tokens from Settings → **Security & API**
   (`SecurityScreen.tsx` → `accessToken` router), minted as JWTs carrying expanded
   permission paths; `authProcedure` gates each call (`shared/lib/accessTokenScopes.ts`).
@@ -112,7 +112,8 @@ Claude Desktop (`claude_desktop_config.json`) / Claude Code (`.mcp.json`):
 
 - **Reuse the REST API, don't add tRPC-only surface.** Tools map to documented
   `openapi`-meta endpoints; `conversation`/`ai`/`message` are intentionally tRPC-only
-  and out of scope (matching the access-token scope design in `CLAUDE.md`).
+  and out of scope (matching the access-token scope design in
+  [`../agents/PROJECT.md`](../agents/PROJECT.md)).
 - **Token = boundary.** The MCP server never holds credentials beyond the user's
   scoped token; revoking it (Settings → Security & API) instantly cuts MCP access
   (revocation enforced in `getTokenFromRequest`).
@@ -120,6 +121,6 @@ Claude Desktop (`claude_desktop_config.json`) / Claude Code (`.mcp.json`):
   a multi-tenant HTTP server is a later, optional add.
 
 ## Cross-references
-- `CLAUDE.md` — REST API + access-token scopes (source of truth for endpoints).
+- [`../agents/PROJECT.md`](../agents/PROJECT.md) — current REST API and access-token conventions.
 - `scripts/test-api.ts` / `scripts/test-api.sh` — working calls for every endpoint.
 - For building MCP servers / the Agent SDK, use the `claude-api` skill reference.

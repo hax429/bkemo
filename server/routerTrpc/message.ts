@@ -1,6 +1,7 @@
 import { router, authProcedure } from '../middleware';
 import { z } from 'zod';
 import { prisma } from '../prisma';
+import { requireOwnedConversation, requireOwnedMessage } from '@server/lib/noteAccess';
 
 export const messageRouter = router({
   create: authProcedure
@@ -11,6 +12,7 @@ export const messageRouter = router({
       metadata: z.any(),
     }))
     .mutation(async ({ input, ctx }) => {
+      await requireOwnedConversation(input.conversationId, Number(ctx.id));
       return await prisma.message.create({
         data: {
           content: input.content,
@@ -28,6 +30,7 @@ export const messageRouter = router({
       size: z.number().default(20),
     }))
     .query(async ({ input, ctx }) => {
+      await requireOwnedConversation(input.conversationId, Number(ctx.id));
       const skip = (input.page - 1) * input.size;
       const [total, messages] = await Promise.all([
         prisma.message.count({
@@ -53,6 +56,7 @@ export const messageRouter = router({
       content: z.string(),
     }))
     .mutation(async ({ input, ctx }) => {
+      await requireOwnedMessage(input.id, Number(ctx.id));
       return await prisma.message.update({
         where: {
           id: input.id,
@@ -68,19 +72,7 @@ export const messageRouter = router({
       id: z.number()
     }))
     .mutation(async ({ input, ctx }) => {
-      const message = await prisma.message.findUnique({
-        where: {
-          id: input.id,
-        },
-        select: {
-          conversationId: true,
-          createdAt: true,
-        },
-      });
-
-      if (!message) {
-        throw new Error('Message not found');
-      }
+      const message = await requireOwnedMessage(input.id, Number(ctx.id));
 
       return await prisma.$transaction(async (prisma) => {
         await prisma.message.delete({
@@ -105,19 +97,7 @@ export const messageRouter = router({
       id: z.number()
     }))
     .mutation(async ({ input, ctx }) => {
-      const message = await prisma.message.findUnique({
-        where: {
-          id: input.id,
-        },
-        select: {
-          conversationId: true,
-          createdAt: true,
-        },
-      });
-
-      if (!message) {
-        throw new Error('Message not found');
-      }
+      const message = await requireOwnedMessage(input.id, Number(ctx.id));
 
       await prisma.message.deleteMany({
         where: {
@@ -132,4 +112,4 @@ export const messageRouter = router({
         success: true
       }
     }),
-}); 
+});

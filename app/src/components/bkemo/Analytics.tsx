@@ -13,6 +13,8 @@ type CharacterBucket = {
   count: number;
 };
 type AnalyticsScope = "month" | "year" | "all";
+type AIDiscoverKind = "default" | "value";
+type AIDiscoverRange = "3m" | "1y" | "all";
 type AnalyticsSummary = {
   noteCount: number;
   totalWords: number;
@@ -358,6 +360,78 @@ function CharacterDistribution({
   );
 }
 
+function AIAnalyticsPanel({ blinko }: { blinko: BlinkoStore }) {
+  const [kind, setKind] = useState<AIDiscoverKind>("default");
+  const [range, setRange] = useState<AIDiscoverRange>("3m");
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<{ content: string; noteIds: number[]; noteCount: number } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const run = async (nextKind = kind) => {
+    setKind(nextKind);
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await api.ai.discover.mutate({ kind: nextKind, range } as any);
+      setResult(data as any);
+    } catch (cause: any) {
+      console.error("[analytics-ai] discovery failed:", cause);
+      setError(cause?.message || "AI discovery failed.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const save = async () => {
+    if (!result?.content) return;
+    await blinko.upsertNote.call({
+      content: `# AI ${kind === "value" ? "Value" : "Default"} Discovery\n\n${result.content}`,
+      references: result.noteIds,
+      showToast: true,
+      refresh: true,
+    } as any);
+  };
+
+  return (
+    <section className="bk-analytics-panel bk-ai-analytics-panel">
+      <div className="bk-analytics-panel-heading">
+        <div>
+          <h2>AI analytics</h2>
+          <p>Discover patterns across your bkemos with a reusable prompt pipeline.</p>
+        </div>
+        <div className="h-stack bk-ai-analytics-actions">
+          <select value={range} onChange={(event) => setRange(event.currentTarget.value as AIDiscoverRange)} disabled={loading}>
+            <option value="3m">Recent 3 months</option>
+            <option value="1y">Recent year</option>
+            <option value="all">All notes</option>
+          </select>
+          <button type="button" onClick={() => run("value")} disabled={loading}>
+            Value discover
+          </button>
+          <button type="button" onClick={() => run("default")} disabled={loading}>
+            Default discover
+          </button>
+        </div>
+      </div>
+      {error ? <div className="bk-analytics-error" role="alert">{error}</div> : null}
+      {loading ? <div className="bk-ai-discovery-placeholder">Reading notes and thinking…</div> : null}
+      {result ? (
+        <div className="bk-ai-discovery-result">
+          <div className="h-stack bk-ai-discovery-meta">
+            <span>{kind === "value" ? "Value discovery" : "Default discovery"}</span>
+            <span>{result.noteCount} notes</span>
+            <span className="spacer" />
+            <button type="button" onClick={save}>Save as bkemo</button>
+          </div>
+          <div className="bk-ai-discovery-text">{result.content}</div>
+        </div>
+      ) : !loading ? (
+        <div className="bk-ai-discovery-placeholder">Choose a range, then run value or default discovery.</div>
+      ) : null}
+    </section>
+  );
+}
+
 export const Analytics = observer(function Analytics() {
   const blinko = RootStore.Get(BlinkoStore);
   const currentYear = dayjs().year();
@@ -557,6 +631,8 @@ export const Analytics = observer(function Analytics() {
           mode={scope === "all" ? "rolling" : "year"}
           year={activityYear}
         />
+
+        <AIAnalyticsPanel blinko={blinko} />
 
         <div className="bk-analytics-distributions">
           <TagDistribution

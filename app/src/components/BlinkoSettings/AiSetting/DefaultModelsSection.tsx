@@ -15,6 +15,11 @@ export const DefaultModelsSection = observer(() => {
   const { t } = useTranslation();
   const aiSettingStore = RootStore.Get(AiSettingStore);
   const blinko = RootStore.Get(BlinkoStore);
+  const hasLoadedModels = !!aiSettingStore.allModels.value;
+  const selectedMainMissing = hasLoadedModels && !!blinko.config.value?.mainModelId && !aiSettingStore.inferenceModels.some((model) => model.id === blinko.config.value?.mainModelId);
+  const selectedEmbeddingMissing = hasLoadedModels && !!blinko.config.value?.embeddingModelId && !aiSettingStore.embeddingModels.some((model) => model.id === blinko.config.value?.embeddingModelId);
+  const selectedVoiceMissing = hasLoadedModels && !!blinko.config.value?.voiceModelId && !aiSettingStore.voiceModels.some((model) => model.id === blinko.config.value?.voiceModelId);
+  const selectedImageMissing = hasLoadedModels && !!blinko.config.value?.imageModelId && !aiSettingStore.imageModels.some((model) => model.id === blinko.config.value?.imageModelId);
 
   useEffect(() => {
     blinko.config.call();
@@ -35,8 +40,11 @@ export const DefaultModelsSection = observer(() => {
   }, []);
 
   return (
-    <CollapsibleCard icon="hugeicons:settings-02" title="Default Models Configuration">
+    <CollapsibleCard icon="hugeicons:settings-02" title="Default Models Configuration" className="bk-ai-card">
       <div className="space-y-6">
+        <div className="bk-ai-section-note">
+          Main chat is required. Embedding is optional for plain chat, but required for note search, card context, and analytics discovery.
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Main Chat Model */}
           <div className="space-y-2">
@@ -48,6 +56,7 @@ export const DefaultModelsSection = observer(() => {
               classNames={{
                 trigger: "h-12",
               }}
+              isDisabled={aiSettingStore.inferenceModels.length === 0}
               placeholder={'select'}
               selectedKeys={blinko.config.value?.mainModelId ? [String(blinko.config.value.mainModelId)] : []}
               renderValue={(items) => {
@@ -95,6 +104,8 @@ export const DefaultModelsSection = observer(() => {
                 </SelectItem>
               ))}
             </Select>
+            {selectedMainMissing ? <div className="bk-ai-field-warning">The saved main model no longer exists or is not marked as inference-capable.</div> : null}
+            {aiSettingStore.inferenceModels.length === 0 ? <div className="bk-ai-field-warning">Create a model with the inference capability before using AI chat.</div> : null}
           </div>
 
           {/* Embedding Model */}
@@ -107,6 +118,7 @@ export const DefaultModelsSection = observer(() => {
               classNames={{
                 trigger: "h-12",
               }}
+              isDisabled={aiSettingStore.embeddingModels.length === 0}
               placeholder="Select embedding model"
               selectedKeys={blinko.config.value?.embeddingModelId ? [String(blinko.config.value.embeddingModelId)] : []}
               renderValue={(items) => {
@@ -154,6 +166,8 @@ export const DefaultModelsSection = observer(() => {
                 </SelectItem>
               ))}
             </Select>
+            {selectedEmbeddingMissing ? <div className="bk-ai-field-warning">The saved embedding model no longer exists or is not marked as embedding-capable.</div> : null}
+            {aiSettingStore.embeddingModels.length === 0 ? <div className="bk-ai-field-help">Add an embedding-capable model to enable RAG and rebuilds.</div> : null}
           </div>
 
           {/* Voice Model */}
@@ -166,6 +180,7 @@ export const DefaultModelsSection = observer(() => {
               classNames={{
                 trigger: "h-12",
               }}
+              isDisabled={aiSettingStore.voiceModels.length === 0}
               placeholder="Select voice model"
               selectedKeys={blinko.config.value?.voiceModelId ? [String(blinko.config.value.voiceModelId)] : []}
               renderValue={(items) => {
@@ -213,6 +228,7 @@ export const DefaultModelsSection = observer(() => {
                 </SelectItem>
               ))}
             </Select>
+            {selectedVoiceMissing ? <div className="bk-ai-field-warning">The saved voice model no longer exists or is not audio-capable.</div> : null}
           </div>
 
           {/* Vision Model */}
@@ -225,6 +241,7 @@ export const DefaultModelsSection = observer(() => {
               classNames={{
                 trigger: "h-12",
               }}
+              isDisabled={aiSettingStore.imageModels.length === 0}
               placeholder="Select vision model"
               selectedKeys={blinko.config.value?.imageModelId ? [String(blinko.config.value.imageModelId)] : []}
               renderValue={(items) => {
@@ -272,6 +289,7 @@ export const DefaultModelsSection = observer(() => {
                 </SelectItem>
               ))}
             </Select>
+            {selectedImageMissing ? <div className="bk-ai-field-warning">The saved vision model no longer exists or is not image-capable.</div> : null}
           </div>
         </div>
       </div>

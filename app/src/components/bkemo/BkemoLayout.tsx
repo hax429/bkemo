@@ -4,7 +4,7 @@ import { ReactNode, CSSProperties } from 'react';
 export type Density = 'compact' | 'regular' | 'comfy';
 
 /**
- * Root surface for the Direction D UI. Applies the `.bkemo` token scope plus
+ * Root surface for the bkemo UI. Applies the `.bkemo` token scope plus
  * density and accent overrides (sourced from settings/localStorage). Everything
  * inside reads the CSS variables defined in styles/bkemo-theme.css.
  */

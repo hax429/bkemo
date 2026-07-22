@@ -66,7 +66,7 @@ function TagNavNode({ node, depth, activeRoute, onNav }: { node: any; depth: num
         className="h-stack"
         style={{
           gap: 8,
-          padding: depth === 0 ? '8px 12px' : `6px 12px 6px ${24 + depth * 14}px`,
+          padding: depth === 0 ? '5px 12px' : `4px 12px 4px ${24 + depth * 14}px`,
           borderRadius: 'var(--radius-lg, 12px)',
           fontSize: depth === 0 ? 13.5 : 12.5,
           cursor: 'pointer',
@@ -191,7 +191,7 @@ export const Sidebar = observer(function Sidebar({ activeRoute, onNav, onNewMemo
                 { id: 'calendar' as BkemoRoute, icon: '▦', label: 'Calendar' },
                 { id: 'files' as BkemoRoute, icon: '◳', label: 'Files' },
                 { id: 'analytics' as BkemoRoute, icon: '▥', label: 'Analytics' },
-                { id: 'ai' as BkemoRoute, icon: '✧', label: 'AI · Coming soon' },
+                { id: 'ai' as BkemoRoute, icon: '✧', label: 'AI' },
                 { id: 'settings' as BkemoRoute, icon: '⚙', label: 'Settings' },
               ].map((item) => (
                 <div

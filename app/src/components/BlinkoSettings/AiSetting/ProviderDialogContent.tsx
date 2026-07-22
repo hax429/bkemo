@@ -1,44 +1,66 @@
 import { observer } from 'mobx-react-lite';
-import { Button, Input, Select, SelectItem, Card, CardBody, user } from '@heroui/react';
+import type { ReactNode } from 'react';
 import { Icon } from '@/components/Common/Iconify/icons';
 import { useTranslation } from 'react-i18next';
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { RootStore } from '@/store';
 import { DialogStore } from '@/store/module/Dialog';
 import { ProviderIcon } from '@/components/BlinkoSettings/AiSetting/AIIcon';
 import { AiProvider, AiSettingStore } from '@/store/aiSettingStore';
 import { PROVIDER_TEMPLATES } from './constants';
-import { Copy } from '@/components/Common/Copy';
 
 interface ProviderDialogContentProps {
   provider?: AiProvider;
 }
 
-// Steps indicator component
-const StepsIndicator = ({ currentStep, totalSteps }: { currentStep: number; totalSteps: number }) => {
+function StepsIndicator({ currentStep, totalSteps }: { currentStep: number; totalSteps: number }) {
   return (
-    <div className="flex items-center justify-center mb-8">
-      {Array.from({ length: totalSteps }, (_, index) => (
-        <div key={index} className="flex items-center">
-          <div
-            className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-all ${index + 1 <= currentStep
-              ? 'bg-primary text-primary-foreground'
-              : 'bg-default-100 text-default-500'
-              }`}
-          >
-            {index + 1}
+    <div className="bk-ai-dialog-steps">
+      {Array.from({ length: totalSteps }, (_, index) => {
+        const active = index + 1 <= currentStep;
+        return (
+          <div key={index} className="bk-ai-dialog-step-wrap">
+            <div className={active ? 'bk-ai-dialog-step is-active' : 'bk-ai-dialog-step'}>{index + 1}</div>
+            {index < totalSteps - 1 ? (
+              <div className={index + 1 < currentStep ? 'bk-ai-dialog-step-line is-active' : 'bk-ai-dialog-step-line'} />
+            ) : null}
           </div>
-          {index < totalSteps - 1 && (
-            <div
-              className={`w-12 h-0.5 mx-2 transition-all ${index + 1 < currentStep ? 'bg-primary' : 'bg-default-200'
-                }`}
-            />
-          )}
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
-};
+}
+
+function NativeField({
+  label,
+  value,
+  placeholder,
+  type = 'text',
+  onChange,
+  endContent,
+}: {
+  label: string;
+  value: string;
+  placeholder?: string;
+  type?: string;
+  onChange: (value: string) => void;
+  endContent?: ReactNode;
+}) {
+  return (
+    <label className="bk-native-field">
+      <span>{label}</span>
+      <div className="bk-native-input-wrap">
+        <input
+          type={type}
+          value={value}
+          placeholder={placeholder}
+          onChange={(event) => onChange(event.currentTarget.value)}
+        />
+        {endContent ? <div className="bk-native-field-end">{endContent}</div> : null}
+      </div>
+    </label>
+  );
+}
 
 export default observer(function ProviderDialogContent({ provider }: ProviderDialogContentProps) {
   const { t } = useTranslation();
@@ -47,9 +69,7 @@ export default observer(function ProviderDialogContent({ provider }: ProviderDia
   const [selectedTemplate, setSelectedTemplate] = useState<string>(provider?.provider || '');
 
   const [editingProvider, setEditingProvider] = useState<Partial<AiProvider>>(() => {
-    if (provider) {
-      return { ...provider };
-    }
+    if (provider) return { ...provider };
     return {
       id: 0,
       title: '',
@@ -57,11 +77,10 @@ export default observer(function ProviderDialogContent({ provider }: ProviderDia
       baseURL: '',
       apiKey: '',
       sortOrder: 0,
-      models: []
+      models: [],
     };
   });
 
-  // Initialize editing mode if provider exists
   useEffect(() => {
     if (provider) {
       setCurrentStep(2);
@@ -72,21 +91,21 @@ export default observer(function ProviderDialogContent({ provider }: ProviderDia
   const handleTemplateSelect = (templateValue: string) => {
     if (templateValue === 'custom') {
       setSelectedTemplate('custom');
-      setEditingProvider(prev => ({
+      setEditingProvider((prev) => ({
         ...prev,
         provider: 'custom',
         title: 'Custom Provider',
-        baseURL: 'https://api.example.com/v1'
+        baseURL: 'https://api.example.com/v1',
       }));
     } else {
-      const template = PROVIDER_TEMPLATES.find(t => t.value === templateValue);
+      const template = PROVIDER_TEMPLATES.find((item) => item.value === templateValue);
       if (template) {
         setSelectedTemplate(templateValue);
-        setEditingProvider(prev => ({
+        setEditingProvider((prev) => ({
           ...prev,
           provider: template.value,
           title: template.defaultName,
-          baseURL: template.defaultBaseURL
+          baseURL: template.defaultBaseURL,
         }));
       }
     }
@@ -95,7 +114,6 @@ export default observer(function ProviderDialogContent({ provider }: ProviderDia
 
   const handleSaveProvider = async () => {
     if (!editingProvider) return;
-
     if (editingProvider.id) {
       await aiSettingStore.updateProvider.call(editingProvider as any);
     } else {
@@ -104,157 +122,130 @@ export default observer(function ProviderDialogContent({ provider }: ProviderDia
     RootStore.Get(DialogStore).close();
   };
 
-  // Step 1: Provider Selection
-  const renderProviderSelection = () => (
-    <div className="space-y-6">
-      {/* Custom Configuration Option */}
-      <Card
-        shadow='none'
-        isPressable
-        className="hover:bg-default-50 transition-colors cursor-pointer bg-secondbackground w-full"
-        onPress={() => handleTemplateSelect('custom')}
-      >
-        <CardBody className="flex flex-row items-center gap-4 p-4">
-          <div className="flex-shrink-0">
-            <div className="w-12 h-12 rounded-lg flex items-center justify-center relative">
-              <ProviderIcon provider="openai" className="w-6 h-6 text-primary" />
-              <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-white rounded-full flex items-center justify-center">
-                <Icon icon="hugeicons:settings-03" className="w-2.5 h-2.5 text-primary" />
-              </div>
-            </div>
-          </div>
-          <div className="flex-1">
-            <h4 className="font-medium">{t('custom-configuration')}</h4>
-            <p className="text-sm text-default-500">{t('configure-your-own-api-endpoint')}</p>
-          </div>
-          <Icon icon="hugeicons:arrow-right-02" className="w-5 h-5 text-default-400" />
-        </CardBody>
-      </Card>
+  const selectedProviderLabel = selectedTemplate === 'custom'
+    ? t('custom-configuration')
+    : PROVIDER_TEMPLATES.find((item) => item.value === selectedTemplate)?.label;
 
-      {/* Provider Templates */}
-      <div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {PROVIDER_TEMPLATES.map((template) => {
-            return (
-              <Card
-                shadow='none'
-                key={template.value}
-                isPressable
-                className="hover:bg-default-50 transition-colors cursor-pointer bg-secondbackground"
-                onPress={() => handleTemplateSelect(template.value)}
-              >
-                <CardBody className="flex flex-row items-center gap-3 p-4">
-                  <div className="flex-shrink-0">
-                    <ProviderIcon provider={template.value} className="w-8 h-8" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h5 className="font-medium truncate">{template.label}</h5>
-                    <p className="text-xs text-default-500 line-clamp-2">{template.description}</p>
-                  </div>
-                  <Icon icon="hugeicons:arrow-right-02" className="w-4 h-4 text-default-400" />
-                </CardBody>
-              </Card>
-            );
-          })}
-        </div>
-      </div>
+  const copyKey = () => {
+    if (editingProvider.apiKey) navigator.clipboard?.writeText(editingProvider.apiKey);
+  };
+
+  const renderProviderSelection = () => (
+    <div className="bk-ai-template-grid is-compact">
+      <button type="button" className="bk-ai-template-card is-wide" onClick={() => handleTemplateSelect('custom')}>
+        <span className="bk-ai-provider-badge">
+          <ProviderIcon provider="openai" className="w-6 h-6" />
+          <span className="bk-ai-provider-badge-mark">
+            <Icon icon="hugeicons:settings-03" width="10" height="10" />
+          </span>
+        </span>
+        <span className="bk-ai-template-copy">
+          <span className="bk-ai-template-title">Custom provider</span>
+          <span className="bk-ai-template-desc">OpenAI-compatible endpoint, local gateway, or proxy.</span>
+        </span>
+        <Icon icon="hugeicons:arrow-right-02" width="17" height="17" className="bk-ai-template-arrow" />
+      </button>
+
+      {PROVIDER_TEMPLATES.map((template) => (
+        <button key={template.value} type="button" className="bk-ai-template-card" onClick={() => handleTemplateSelect(template.value)}>
+          <ProviderIcon provider={template.value} className="w-7 h-7" />
+          <span className="bk-ai-template-copy">
+            <span className="bk-ai-template-title">{template.label}</span>
+            <span className="bk-ai-template-desc">{template.description}</span>
+          </span>
+          <Icon icon="hugeicons:arrow-right-02" width="15" height="15" className="bk-ai-template-arrow" />
+        </button>
+      ))}
     </div>
   );
 
-  // Step 2: Configuration
-  const renderConfiguration = () => {
-    const template = PROVIDER_TEMPLATES.find(t => t.value === selectedTemplate);
-
-    return (
-      <div className="space-y-4">
-        <div className="flex items-center justify-center gap-3 mb-6">
-          <ProviderIcon provider={selectedTemplate} className="w-8 h-8" />
-          <h3 className="text-lg font-semibold">
-            {selectedTemplate === 'custom' ? t('custom-configuration') : template?.label}
-          </h3>
+  const renderConfiguration = () => (
+    <div className="bk-ai-form-stack">
+      <div className="bk-ai-dialog-provider-head">
+        <span className="bk-ai-provider-badge is-large">
+          <ProviderIcon provider={selectedTemplate || 'openai'} className="w-8 h-8" />
+        </span>
+        <div>
+          <div className="bk-ai-dialog-kicker">provider endpoint</div>
+          <h3>{selectedProviderLabel}</h3>
         </div>
-
-        <Input
-          label={t('provider-name')}
-          placeholder={t('enter-provider-name')}
-          value={editingProvider.title || ''}
-          onValueChange={(value) => {
-            setEditingProvider(prev => ({ ...prev, title: value }));
-          }}
-        />
-
-        <Input
-          label={t('base-url')}
-          placeholder={t('enter-api-base-url')}
-          value={editingProvider.baseURL || ''}
-          onValueChange={(value) => {
-            setEditingProvider(prev => ({ ...prev, baseURL: value }));
-          }}
-        />
-
-        <Input
-          label={t('api-key')}
-          placeholder={t('enter-api-key')}
-          type="password"
-          value={editingProvider.apiKey || ''}
-          onValueChange={(value) => {
-            setEditingProvider(prev => ({ ...prev, apiKey: value }));
-          }}
-          endContent={<Copy size={20} content={editingProvider.apiKey ?? ''} />}
-        />
-
-        {(editingProvider.provider === 'azure' || editingProvider.provider === 'azureopenai') && (
-          <Input
-            label={t('api-version')}
-            placeholder="Enter API version (e.g., 2024-02-01)"
-            value={editingProvider.config?.apiVersion || ''}
-            onValueChange={(value) => {
-              setEditingProvider(prev => ({
-                ...prev,
-                config: {
-                  ...prev.config,
-                  apiVersion: value
-                }
-              }));
-            }}
-          />
-        )}
       </div>
-    );
-  };
+
+      <NativeField
+        label={t('provider-name')}
+        placeholder={t('enter-provider-name')}
+        value={editingProvider.title || ''}
+        onChange={(value) => setEditingProvider((prev) => ({ ...prev, title: value }))}
+      />
+      <NativeField
+        label={t('base-url')}
+        placeholder={t('enter-api-base-url')}
+        value={editingProvider.baseURL || ''}
+        onChange={(value) => setEditingProvider((prev) => ({ ...prev, baseURL: value }))}
+      />
+      <NativeField
+        label={t('api-key')}
+        placeholder={t('enter-api-key')}
+        type="password"
+        value={editingProvider.apiKey || ''}
+        onChange={(value) => setEditingProvider((prev) => ({ ...prev, apiKey: value }))}
+        endContent={(
+          <button type="button" className="bk-native-mini-button" onClick={copyKey}>
+            copy
+          </button>
+        )}
+      />
+
+      {(editingProvider.provider === 'azure' || editingProvider.provider === 'azureopenai') ? (
+        <NativeField
+          label={t('api-version')}
+          placeholder="2024-02-01"
+          value={editingProvider.config?.apiVersion || ''}
+          onChange={(value) => {
+            setEditingProvider((prev) => ({
+              ...prev,
+              config: {
+                ...prev.config,
+                apiVersion: value,
+              },
+            }));
+          }}
+        />
+      ) : null}
+    </div>
+  );
 
   return (
-    <div className="mx-auto w-full">
-      {/* Steps Indicator */}
-      <StepsIndicator currentStep={currentStep} totalSteps={2} />
-
-      {/* Content */}
-      <div className="min-h-[400px]">
-        {currentStep === 1 && renderProviderSelection()}
-        {currentStep === 2 && renderConfiguration()}
+    <div className="bk-ai-dialog">
+      <button type="button" className="bk-ai-dialog-close" onClick={() => RootStore.Get(DialogStore).close()} aria-label="Close">
+        <Icon icon="hugeicons:cancel-01" width="18" height="18" />
+      </button>
+      <div className="bk-ai-dialog-hero">
+        <div>
+          <div className="bk-ai-dialog-kicker">AI provider</div>
+          <h2>{provider ? 'Edit provider' : 'Connect provider'}</h2>
+          <p>Pick an API source, then keep its key and endpoint stored in bkemo settings.</p>
+        </div>
+        <StepsIndicator currentStep={currentStep} totalSteps={2} />
       </div>
 
-      {/* Navigation */}
-      <div className="flex justify-between items-center pt-6 border-t border-default-200">
-        <div>
-          {currentStep > 1 && (
-            <Button
-              variant="flat"
-              startContent={<Icon icon="hugeicons:arrow-left-02" width="16" height="16" />}
-              onPress={() => setCurrentStep(currentStep - 1)}
-            >
-              {t('back')}
-            </Button>
-          )}
-        </div>
+      <div className="bk-ai-dialog-body">
+        {currentStep === 1 ? renderProviderSelection() : renderConfiguration()}
+      </div>
 
-        <div className="flex gap-2">
-          {currentStep === 2 && (
-            <Button color="primary" onPress={handleSaveProvider}>
-              {editingProvider.id ? t('update') : t('create')}
-            </Button>
-          )}
-        </div>
+      <div className="bk-ai-dialog-footer">
+        {currentStep > 1 ? (
+          <button type="button" className="bk-native-button is-secondary" onClick={() => setCurrentStep(currentStep - 1)}>
+            <Icon icon="hugeicons:arrow-left-02" width="16" height="16" />
+            {t('back')}
+          </button>
+        ) : <span />}
+
+        {currentStep === 2 ? (
+          <button type="button" className="bk-native-button is-primary" onClick={handleSaveProvider}>
+            {editingProvider.id ? t('update') : t('create')}
+          </button>
+        ) : null}
       </div>
     </div>
   );

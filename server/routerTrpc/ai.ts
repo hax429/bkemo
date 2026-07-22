@@ -11,18 +11,28 @@ import { ModelCapabilities } from '@server/aiServer/types';
 import { aiProviders, aiModels } from '@shared/lib/prismaZodType';
 import { fetchWithProxy } from '@server/lib/proxy';
 import { inferModelCapabilities } from '@shared/lib/modelTemplates';
+import { requireOwnedConversation, requireReadableNote } from '@server/lib/noteAccess';
+import { getAiConfigStatus } from '@server/lib/aiConfigStatus';
+import { requireEmbeddingModel, requireMainChatModel, streamAIConversation } from '@server/lib/aiConversation';
+import { runAIDiscovery } from '@server/lib/aiDiscovery';
 
 export const aiRouter = router({
+  configStatus: authProcedure
+    .query(async () => {
+      return getAiConfigStatus();
+    }),
+
   embeddingUpsert: authProcedure
     .input(z.object({
       id: z.number(),
       content: z.string(),
       type: z.enum(['update', 'insert'])
     }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       const { id, content, type } = input
-      const createTime = await prisma.notes.findUnique({ where: { id } }).then(i => i?.createdAt)
-      const { ok, error } = await AiService.embeddingUpsert({ id, content, type, createTime: createTime! })
+      const note = await requireReadableNote(id, Number(ctx.id));
+      await requireEmbeddingModel();
+      const { ok, error } = await AiService.embeddingUpsert({ id, content, type, createTime: note.createdAt! })
       if (!ok) {
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
@@ -37,9 +47,15 @@ export const aiRouter = router({
       id: z.number(),
       filePath: z.string() //api/file/text.pdf
     }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       const { id, filePath } = input
       try {
+        const note = await requireReadableNote(id, Number(ctx.id));
+        await requireEmbeddingModel();
+        const hasAttachment = note.attachments.some((attachment) => attachment.path === filePath || `/api/file/${attachment.path}` === filePath);
+        if (!hasAttachment) {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'Attachment is not readable' });
+        }
         const res = await AiService.embeddingInsertAttachments({ id, filePath })
         return res
       } catch (error) {
@@ -51,9 +67,11 @@ export const aiRouter = router({
     .input(z.object({
       id: z.number()
     }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       const { id } = input
       try {
+        await requireReadableNote(id, Number(ctx.id));
+        await requireEmbeddingModel();
         const res = await AiService.embeddingDelete({ id })
         return res
       } catch (error) {
@@ -73,6 +91,7 @@ export const aiRouter = router({
     .mutation(async function* ({ input, ctx }) {
       try {
         const { question, conversations, withTools = false, withOnline = false, withRAG = true, systemPrompt } = input
+        const status = await requireMainChatModel();
         let _conversations = conversations as CoreMessage[]
         const { result: responseStream, notes } = await AiService.completions({
           question,
@@ -80,7 +99,7 @@ export const aiRouter = router({
           ctx,
           withTools,
           withOnline,
-          withRAG,
+          withRAG: withRAG && status.embeddingModelReady,
           systemPrompt
         })
         yield { notes }
@@ -88,11 +107,43 @@ export const aiRouter = router({
           yield { chunk }
         }
       } catch (error) {
+        if (error instanceof TRPCError) throw error;
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
           message: error?.message
         })
       }
+    }),
+
+  chat: authProcedure
+    .input(z.object({
+      conversationId: z.number().optional(),
+      question: z.string().min(1),
+      scope: z.enum(['global', 'note']).default('global'),
+      noteId: z.number().optional(),
+      contextNoteIds: z.array(z.number()).default([]),
+      withOnline: z.boolean().optional(),
+      withRAG: z.boolean().optional(),
+      systemPrompt: z.string().optional(),
+    }))
+    .mutation(async function* ({ input, ctx }) {
+      yield* streamAIConversation(input, ctx);
+    }),
+
+  discover: authProcedure
+    .input(z.object({
+      kind: z.enum(['default', 'value']).default('default'),
+      range: z.enum(['3m', '1y', 'all']).default('3m'),
+      customPrompt: z.string().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      return runAIDiscovery({
+        accountId: Number(ctx.id),
+        ctx,
+        kind: input.kind,
+        range: input.range,
+        customPrompt: input.customPrompt,
+      });
     }),
 
   speechToText: authProcedure
@@ -117,10 +168,12 @@ export const aiRouter = router({
     .mutation(async function* ({ input }) {
       const { force } = input
       try {
+        await requireEmbeddingModel();
         for await (const result of AiService.rebuildEmbeddingIndex({ force })) {
           yield result;
         }
       } catch (error) {
+        if (error instanceof TRPCError) throw error;
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
           message: error?.message
@@ -133,8 +186,9 @@ export const aiRouter = router({
       conversations: z.array(z.object({ role: z.string(), content: z.string() })),
       conversationId: z.number()
     }))
-    .mutation(async function ({ input }) {
+    .mutation(async function ({ input, ctx }) {
       const { conversations, conversationId } = input
+      await requireOwnedConversation(conversationId, Number(ctx.id));
       const agent = await AiModelFactory.SummarizeAgent()
       const conversationString = JSON.stringify(
         conversations.map(i => ({
@@ -204,7 +258,8 @@ export const aiRouter = router({
       content: z.string(),
       noteId: z.number()
     }))
-    .mutation(async function ({ input }) {
+    .mutation(async function ({ input, ctx }) {
+      await requireReadableNote(input.noteId, Number(ctx.id));
       return await AiService.AIComment(input)
     }),
 
@@ -214,18 +269,21 @@ export const aiRouter = router({
       incremental: z.boolean().optional(),
     }))
     .mutation(async ({ input }) => {
+      await requireEmbeddingModel();
       await RebuildEmbeddingJob.ForceRebuild(input.force ?? true, input.incremental ?? false);
       return { success: true };
     }),
 
   rebuildEmbeddingResume: authProcedure
     .mutation(async () => {
+      await requireEmbeddingModel();
       await RebuildEmbeddingJob.ResumeRebuild();
       return { success: true };
     }),
 
   rebuildEmbeddingRetryFailed: authProcedure
     .mutation(async () => {
+      await requireEmbeddingModel();
       await RebuildEmbeddingJob.RetryFailedNotes();
       return { success: true };
     }),

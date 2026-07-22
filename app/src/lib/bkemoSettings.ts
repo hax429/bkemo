@@ -1,5 +1,5 @@
 /**
- * Lightweight persisted UI preferences for the Direction D surface
+ * Lightweight persisted UI preferences for the bkemo surface
  * (theme / accent / density). localStorage is the synchronous pre-paint cache /
  * offline fallback; the server (per-user config) is authoritative.
  */

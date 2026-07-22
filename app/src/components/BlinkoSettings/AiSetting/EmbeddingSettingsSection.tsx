@@ -13,11 +13,16 @@ import TagSelector from '@/components/Common/TagSelector';
 import { useMediaQuery } from 'usehooks-ts';
 import { showTipsDialog } from '@/components/Common/TipsDialog';
 import { ShowRebuildEmbeddingProgressDialog } from '@/components/Common/RebuildEmbeddingProgress';
+import { AiSettingStore } from '@/store/aiSettingStore';
 
 export const EmbeddingSettingsSection = observer(function EmbeddingSettingsSection() {
   const { t } = useTranslation();
   const blinko = RootStore.Get(BlinkoStore);
+  const aiStore = RootStore.Get(AiSettingStore);
   const isPc = useMediaQuery('(min-width: 768px)');
+  const hasLoadedModels = !!aiStore.allModels.value;
+  const selectedEmbeddingModel = aiStore.embeddingModels.find((model) => model.id === blinko.config.value?.embeddingModelId);
+  const embeddingReady = !hasLoadedModels || !!selectedEmbeddingModel;
 
   const [localState, setLocalState] = useState({
     embeddingTopK: blinko.config.value?.embeddingTopK ?? 5,
@@ -62,6 +67,8 @@ export const EmbeddingSettingsSection = observer(function EmbeddingSettingsSecti
   };
 
   useEffect(() => {
+    blinko.config.call();
+    aiStore.allModels.call();
     fetchRebuildProgress();
     return () => stopPolling();
   }, []);
@@ -70,6 +77,14 @@ export const EmbeddingSettingsSection = observer(function EmbeddingSettingsSecti
   const handleRebuildClick = async () => {
     try {
       // Check the latest status from database
+      if (!embeddingReady) {
+        showTipsDialog({
+          title: 'Embedding model required',
+          content: 'Choose an embedding-capable model before rebuilding the index.',
+        });
+        return;
+      }
+
       const latestProgress = await api.ai.rebuildEmbeddingProgress.query();
 
       if (latestProgress?.isRunning) {
@@ -103,8 +118,13 @@ export const EmbeddingSettingsSection = observer(function EmbeddingSettingsSecti
 
 
   return (
-    <CollapsibleCard icon="mingcute:vector-line" title="Embedding Management">
+    <CollapsibleCard icon="mingcute:vector-line" title="Embedding Management" className="bk-ai-card bk-ai-compact-card">
       <div className="space-y-4">
+        {!embeddingReady ? (
+          <div className="bk-ai-section-warning">
+            Embedding is not configured. AI chat can still answer, but note retrieval, card context, and discovery should stay disabled until you choose an embedding model.
+          </div>
+        ) : null}
         <Item
           type={isPc ? 'row' : 'col'}
           leftContent={
@@ -247,6 +267,7 @@ export const EmbeddingSettingsSection = observer(function EmbeddingSettingsSecti
                 )
               }
               onPress={handleRebuildClick}
+              isDisabled={!embeddingReady}
             >
               {rebuildProgress?.isRunning ? t('rebuild-in-progress') : t('force-rebuild')}
             </Button>

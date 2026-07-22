@@ -1,5 +1,4 @@
 import { observer } from 'mobx-react-lite';
-import { Textarea } from '@heroui/react';
 import { CollapsibleCard } from '../../Common/CollapsibleCard';
 import { useTranslation } from 'react-i18next';
 import { useEffect, useState } from 'react';
@@ -36,16 +35,13 @@ export const GlobalPromptSection = observer(() => {
   };
 
   return (
-    <CollapsibleCard icon="hugeicons:message-01" title="Global Prompt Configuration">
+    <CollapsibleCard icon="hugeicons:message-01" title="Global Prompt Configuration" className="bk-ai-card bk-ai-compact-card">
       <div className="space-y-4">
         <div className="flex flex-col gap-2">
           <div className="font-medium">{t('global-prompt')}</div>
         </div>
 
-        <Textarea
-          radius="lg"
-          minRows={4}
-          maxRows={8}
+        <textarea
           value={globalPrompt}
           onChange={(e) => handlePromptChange(e.target.value)}
           onBlur={handlePromptBlur}
@@ -56,7 +52,8 @@ export const GlobalPromptSection = observer(() => {
 
 Always respond in the user's language.
 Maintain a friendly and professional conversational tone.`}
-          className="w-full"
+          className="bk-native-textarea"
+          rows={6}
         />
       </div>
     </CollapsibleCard>

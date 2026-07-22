@@ -60,7 +60,7 @@ export const AboutSetting = observer(() => {
           </div>
           <div className="h-stack" style={{ justifyContent: 'space-between', padding: '12px 16px', background: 'var(--bg-2)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
             <span style={{ fontSize: 13, color: 'var(--fg-2)' }}>Architecture</span>
-            <span style={{ fontSize: 13, color: 'var(--fg)', textTransform: 'capitalize' }}>Direction D</span>
+            <span style={{ fontSize: 13, color: 'var(--fg)' }}>Unified notes + tasks</span>
           </div>
         </div>
       </div>

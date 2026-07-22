@@ -6,9 +6,9 @@ A personal, self-hosted note app — derived from [blinkospace/blinko](https://g
 
 ## What's different from upstream Blinko
 
-- **No Docker.** The server runs from source on a Linux VM under `systemd`. See [`DEPLOYMENT.md`](./DEPLOYMENT.md).
-- **Every memo is a todo ("Direction D").** The web UI was rebuilt around a unified note/task model and a TipTap editor. Inline task syntax in any composer: a `-[]` checkbox promotes a memo to a task, and a `due:` token (`due:today`, `due:tmr`, `due:06/25/2026`, `due:06/25/26`) sets the due date.
-- **iOS / macOS first.** The Tauri shell is the primary client. The web UI still works; the iOS app gets dedicated offline handling, keyboard-aware editor sizing, an OTA bundle updater, and visualViewport-based layout. See [`IOS.md`](./IOS.md).
+- **No Docker.** The server runs from source on a Linux VM under `systemd`. See the [deployment workflow](./docs/agents/DEPLOYMENT.md).
+- **Unified notes and tasks.** The web UI uses one memo/task model and a TipTap editor. Inline task syntax in any composer includes `-[]` to promote a memo to a task and a `due:` token (`due:today`, `due:tmr`, `due:06/25/2026`, `due:06/25/26`) to set the due date.
+- **iOS / macOS first.** The Tauri shell is the primary client. The web UI still works; the iOS app gets dedicated offline handling, keyboard-aware editor sizing, an OTA bundle updater, and visualViewport-based layout. See the [iOS/macOS plan](./docs/plans/IOS.md).
 - **Single-tenant.** No multi-user provisioning, no PikaPods, no public install.sh.
 - **Renamed.** Bundle id is `me.hax429.bk`, Xcode target is `bkemo-ios`, Cargo crate is `bkemo`.
 
@@ -37,9 +37,9 @@ Everything else — tRPC API, the Prisma schema, much of the React frontend, the
 ├── server/               Node + tRPC + Express backend
 ├── prisma/               DB schema + migrations
 ├── shared/, blinko-types/  Shared utilities & type defs
-├── DEPLOYMENT.md         Source-from-scratch server deployment
-├── IOS.md                iOS build, debug, and offline-mode recipes
-└── CLAUDE.md             Notes for Claude Code when working in this repo
+├── docs/agents/          Current project and deployment memory
+├── docs/plans/           Large future-work plans
+└── AGENTS.md             Navigation index for coding agents
 ```
 
 ## Quickstart (dev)
@@ -52,12 +52,12 @@ bun run dev:backend     # backend on :1111
 bun run dev:frontend    # vite dev server
 ```
 
-`bun run dev` launches the full Tauri desktop shell. For iOS, see [`IOS.md`](./IOS.md) (you'll need the Xcode toolchain and an Apple developer account).
+`bun run dev` launches the full Tauri desktop shell. For iOS, see the [iOS/macOS plan](./docs/plans/IOS.md) (you'll need the Xcode toolchain and an Apple developer account).
 
 ## Deployment
 
-- **Server:** [`DEPLOYMENT.md`](./DEPLOYMENT.md) — bare-metal install on a systemd host with nginx in front.
-- **iOS / macOS:** [`IOS.md`](./IOS.md) — Tauri shell build, code signing, offline diagnosis, OTA bundle.
+- **Server:** [deployment workflow](./docs/agents/DEPLOYMENT.md) — local acceptance, source deployment to the systemd host, and production verification.
+- **iOS / macOS:** [iOS/macOS plan](./docs/plans/IOS.md) — Tauri shell build, code signing, offline diagnosis, and OTA work.
 
 ## Credits & license
 

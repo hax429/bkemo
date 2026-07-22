@@ -21,6 +21,7 @@ import { AiSettingStore } from '@/store/aiSettingStore';
 import { Copy } from '../../Common/Copy';
 import { MarkdownRender } from '../../Common/MarkdownRender';
 import { getBlinkoEndpoint } from '@/lib/blinkoEndpoint';
+import { AiSetupOverview } from './AiSetupOverview';
 
 
 export default observer(function AiSetting() {
@@ -32,23 +33,27 @@ export default observer(function AiSetting() {
   useEffect(() => {
     blinko.config.call();
     aiStore.aiProviders.call();
+    aiStore.allModels.call();
   }, []);
 
   return (
-    <div className='flex flex-col gap-4'>
-      <CollapsibleCard icon="hugeicons:ai-magic" title="AI Providers & Models">
+    <div className='bk-ai-settings flex flex-col gap-4'>
+      <AiSetupOverview />
+
+      <CollapsibleCard icon="hugeicons:ai-magic" title="AI Providers & Models" className="bk-ai-card">
         <div className="space-y-4">
           <div className="flex justify-between items-center">
             <Button
               size='md'
-              className='ml-auto'
-              color="primary"
+              className='bk-ai-dialog-button is-primary ml-auto'
               startContent={<Icon icon="iconamoon:cloud-add-light" width="20" height="20" />}
               onPress={() => {
                 RootStore.Get(DialogStore).setData({
                   isOpen: true,
                   size: '2xl',
-                  title: 'Add Provider',
+                  noPadding: true,
+                  onlyContent: true,
+                  className: 'bk-ai-modal',
                   content: <ProviderDialogContent />,
                 });
               }}
@@ -57,7 +62,11 @@ export default observer(function AiSetting() {
             </Button>
           </div>
 
-          {aiStore.aiProviders.value?.map(provider => (
+          {(aiStore.aiProviders.value?.length ?? 0) === 0 ? (
+            <div className="bk-ai-empty-state">
+              Add a provider first, then create one or more models under it. API keys stay server-side.
+            </div>
+          ) : aiStore.aiProviders.value?.map(provider => (
             <ProviderCard key={provider.id} provider={provider as any} />
           ))}
         </div>
@@ -76,7 +85,7 @@ export default observer(function AiSetting() {
 
       <McpServersSection />
 
-      <CollapsibleCard icon="hugeicons:api" title="MCP Integration">
+      <CollapsibleCard icon="hugeicons:api" title="MCP Integration" className="bk-ai-card">
         <div className="space-y-4">
           <div className="text-sm text-default-600 mb-4">
             {t('mcp-integration-desc', 'Model Context Protocol (MCP) integration allows AI assistants to connect to Blinko and use its tools.')}

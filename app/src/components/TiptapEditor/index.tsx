@@ -57,7 +57,7 @@ type Props = {
 
 /**
  * Markdown-backed rich text editor (TipTap v3). Replaces Vditor for the new
- * Direction D flow. Stores/serializes plain markdown so notes.content and the
+ * bkemo flow. Stores/serializes plain markdown so notes.content and the
  * offline cache stay markdown strings — no storage model change.
  */
 export const TiptapEditor = forwardRef<TiptapEditorHandle, Props>(function TiptapEditor(

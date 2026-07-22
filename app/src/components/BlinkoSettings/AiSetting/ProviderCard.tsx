@@ -1,5 +1,5 @@
 import { observer } from 'mobx-react-lite';
-import { Card, CardBody, Button, Chip, Select, SelectItem } from '@heroui/react';
+import { Button, Select, SelectItem } from '@heroui/react';
 import { Icon } from '@/components/Common/Iconify/icons';
 import { useTranslation } from 'react-i18next';
 import { useState, useEffect } from 'react';
@@ -9,7 +9,7 @@ import ProviderDialogContent from './ProviderDialogContent';
 import ModelDialogContent from './ModelDialogContent';
 import { ProviderIcon, ModelIcon } from '@/components/BlinkoSettings/AiSetting/AIIcon';
 import { useMediaQuery } from 'usehooks-ts';
-import { CAPABILITY_ICONS, CAPABILITY_LABELS, CAPABILITY_COLORS, PROVIDER_TEMPLATES } from './constants';
+import { CAPABILITY_ICONS, CAPABILITY_LABELS, PROVIDER_TEMPLATES } from './constants';
 import { showTipsDialog } from '@/components/Common/TipsDialog';
 import { DialogStandaloneStore } from '@/store/module/DialogStandalone';
 import { ToastPlugin } from '@/store/module/Toast/Toast';
@@ -95,22 +95,18 @@ export default observer(function ProviderCard({ provider }: ProviderCardProps) {
     return Object.entries(capabilities)
       .filter(([_, enabled]) => enabled)
       .map(([capability]) => (
-        <Chip
+        <span
           key={capability}
-          size="sm"
-          startContent={CAPABILITY_ICONS[capability as keyof ModelCapabilities]}
-          variant="solid"
-          className='text-white'
-          color={CAPABILITY_COLORS[capability as keyof ModelCapabilities]}
+          className="bk-ai-model-chip"
         >
+          {CAPABILITY_ICONS[capability as keyof ModelCapabilities]}
           {CAPABILITY_LABELS[capability as keyof ModelCapabilities]}
-        </Chip>
+        </span>
       ));
   };
 
   return (
-    <Card className="mb-4 bg-secondbackground group" shadow='none'>
-      <CardBody>
+    <div className="bk-ai-provider-card group">
         <div className={`flex ${isMobile ? 'flex-col space-y-3' : 'justify-between items-start'} mb-3`}>
           <div className="flex items-center gap-3">
             <div className="relative">
@@ -135,13 +131,16 @@ export default observer(function ProviderCard({ provider }: ProviderCardProps) {
             <Button
               size="sm"
               variant="flat"
+              className="bk-ai-icon-button"
               isIconOnly
               startContent={<Icon icon="hugeicons:settings-02" width="16" height="16" />}
               onPress={() => {
                 RootStore.Get(DialogStore).setData({
                   isOpen: true,
                   size: isMobile ? 'full' : '2xl',
-                  title: 'Edit Provider',
+                  noPadding: true,
+                  onlyContent: true,
+                  className: 'bk-ai-modal',
                   content: <ProviderDialogContent provider={provider} />,
                 });
               }}
@@ -152,6 +151,7 @@ export default observer(function ProviderCard({ provider }: ProviderCardProps) {
               color="danger"
               isIconOnly
               variant="flat"
+              className="bk-ai-icon-button is-danger"
               startContent={<Icon icon="hugeicons:delete-01" width="16" height="16" />}
               onPress={() => handleDeleteProvider(provider.id)}
             >
@@ -172,14 +172,16 @@ export default observer(function ProviderCard({ provider }: ProviderCardProps) {
             <div className={`flex gap-2 ${isMobile ? 'self-end' : ''}`}>
               <Button
                 size="sm"
-                variant='light'
-                color="primary"
+                variant='flat'
+                className="bk-ai-dialog-button is-secondary"
                 startContent={<Icon icon="hugeicons:add-01" width="14" height="14" />}
                 onPress={() => {
                   RootStore.Get(DialogStore).setData({
                     isOpen: true,
                     size: isMobile ? 'full' : '2xl',
-                    title: `Add Model to ${provider.title}`,
+                    noPadding: true,
+                    onlyContent: true,
+                    className: 'bk-ai-modal',
                     content: <ModelDialogContent model={{
                       id: 0,
                       providerId: provider.id,
@@ -207,6 +209,7 @@ export default observer(function ProviderCard({ provider }: ProviderCardProps) {
               <Button
                 size="sm"
                 variant="flat"
+                className="bk-ai-icon-button"
                 isIconOnly
                 startContent={<Icon icon={isModelsCollapsed ? "hugeicons:arrow-down-01" : "hugeicons:arrow-up-01"} width="14" height="14" />}
                 onPress={toggleModelsCollapse}
@@ -231,7 +234,9 @@ export default observer(function ProviderCard({ provider }: ProviderCardProps) {
                       RootStore.Get(DialogStore).setData({
                         isOpen: true,
                         size: isMobile ? 'full' : '3xl',
-                        title: `Add ${model.name} to ${provider.title}`,
+                        noPadding: true,
+                        onlyContent: true,
+                        className: 'bk-ai-modal',
                         content: <ModelDialogContent model={{
                           id: 0,
                           providerId: provider.id,
@@ -263,7 +268,7 @@ export default observer(function ProviderCard({ provider }: ProviderCardProps) {
             <div className="space-y-2">
               {provider.models && provider.models.length > 0 ? (
                 provider.models.map(model => (
-                  <div key={model.id} className={`${isMobile ? 'block' : 'flex items-center'} gap-3 p-3 bg-default-50 rounded-lg hover:bg-default-100 transition-colors group`}>
+                  <div key={model.id} className={`${isMobile ? 'block' : 'flex items-center'} bk-ai-model-row group`}>
                     {/* Mobile Layout */}
                     {isMobile ? (
                       <div className="space-y-2">
@@ -277,6 +282,7 @@ export default observer(function ProviderCard({ provider }: ProviderCardProps) {
                             <Button
                               size="sm"
                               variant="flat"
+                              className="bk-ai-icon-button"
                               isIconOnly
                               startContent={<Icon icon="hugeicons:connect" width="12" height="12" />}
                               onPress={() => {
@@ -297,13 +303,16 @@ export default observer(function ProviderCard({ provider }: ProviderCardProps) {
                             <Button
                               size="sm"
                               variant="flat"
+                              className="bk-ai-icon-button"
                               isIconOnly
                               startContent={<Icon icon="hugeicons:settings-02" width="12" height="12" />}
                               onPress={() => {
                                 RootStore.Get(DialogStore).setData({
                                   isOpen: true,
                                   size: 'full',
-                                  title: 'Edit Model',
+                                  noPadding: true,
+                                  onlyContent: true,
+                                  className: 'bk-ai-modal',
                                   content: <ModelDialogContent model={model} />,
                                 });
                               }}
@@ -312,6 +321,7 @@ export default observer(function ProviderCard({ provider }: ProviderCardProps) {
                               size="sm"
                               color="danger"
                               variant="flat"
+                              className="bk-ai-icon-button is-danger"
                               isIconOnly
                               startContent={<Icon icon="hugeicons:delete-01" width="12" height="12" />}
                               onPress={() => handleDeleteModel(model.id, model.providerId)}
@@ -346,6 +356,7 @@ export default observer(function ProviderCard({ provider }: ProviderCardProps) {
                           <Button
                             size="sm"
                             variant="flat"
+                            className="bk-ai-icon-button"
                             isIconOnly
                             startContent={<Icon icon="hugeicons:connect" width="12" height="12" />}
                             onPress={() => {
@@ -366,13 +377,16 @@ export default observer(function ProviderCard({ provider }: ProviderCardProps) {
                           <Button
                             size="sm"
                             variant="flat"
+                            className="bk-ai-icon-button"
                             isIconOnly
                             startContent={<Icon icon="hugeicons:settings-02" width="12" height="12" />}
                             onPress={() => {
                               RootStore.Get(DialogStore).setData({
                                 isOpen: true,
                                 size: '3xl',
-                                title: 'Edit Model',
+                                noPadding: true,
+                                onlyContent: true,
+                                className: 'bk-ai-modal',
                                 content: <ModelDialogContent model={model} />,
                               });
                             }}
@@ -381,6 +395,7 @@ export default observer(function ProviderCard({ provider }: ProviderCardProps) {
                             size="sm"
                             color="danger"
                             variant="flat"
+                            className="bk-ai-icon-button is-danger"
                             isIconOnly
                             startContent={<Icon icon="hugeicons:delete-01" width="12" height="12" />}
                             onPress={() => handleDeleteModel(model.id, model.providerId)}
@@ -391,7 +406,7 @@ export default observer(function ProviderCard({ provider }: ProviderCardProps) {
                   </div>
                 ))
               ) : (
-                <div className="text-center py-8 text-default-400">
+                <div className="bk-ai-empty-state text-center py-8">
                   <Icon icon="hugeicons:file-search" className="w-12 h-12 mx-auto mb-2 opacity-50" />
                   <p className="text-sm">{t('no-data')}</p>
                 </div>
@@ -405,7 +420,7 @@ export default observer(function ProviderCard({ provider }: ProviderCardProps) {
           const template = PROVIDER_TEMPLATES.find(t => t.value === provider.provider.toLowerCase());
           if (template && (template.website || template.docs)) {
             return (
-              <div className="mt-4 pt-3 border-t border-default-200">
+              <div className="bk-ai-provider-links">
                 <p className="text-xs text-default-400">
                   {t('view-provider-info', {
                     provider: template.label,
@@ -447,7 +462,6 @@ export default observer(function ProviderCard({ provider }: ProviderCardProps) {
           }
           return null;
         })()}
-      </CardBody>
-    </Card>
+    </div>
   );
 });

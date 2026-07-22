@@ -93,7 +93,7 @@ export class AiService {
 
       const note = await prisma.notes.findUnique({
         where: { id },
-        select: { metadata: true, attachments: true }
+        select: { metadata: true, attachments: true, accountId: true }
       });
 
       const chunks = await MDocument.fromMarkdown(content).chunk();
@@ -109,7 +109,7 @@ export class AiService {
       await VectorStore.upsert({
         indexName: 'blinko',
         vectors: embeddings,
-        metadata: chunks?.map((chunk) => ({ text: chunk.text, id, noteId: id, createTime, updatedAt })),
+        metadata: chunks?.map((chunk) => ({ text: chunk.text, id, noteId: id, accountId: note?.accountId, createTime, updatedAt })),
       });
 
       try {
@@ -159,6 +159,10 @@ export class AiService {
       }
       const doc = MDocument.fromText(content);
       const chunks = await doc.chunk();
+      const note = await prisma.notes.findUnique({
+        where: { id },
+        select: { metadata: true, accountId: true }
+      });
 
       const { embeddings } = await embedMany({
         values: chunks.map((chunk) => chunk.text + 'Create At: ' + updatedAt?.toISOString() + ' Update At: ' + updatedAt?.toISOString()),
@@ -168,14 +172,10 @@ export class AiService {
       await VectorStore.upsert({
         indexName: 'blinko',
         vectors: embeddings,
-        metadata: chunks?.map((chunk) => ({ text: chunk.text, id, noteId: id, isAttachment: true, updatedAt })),
+        metadata: chunks?.map((chunk) => ({ text: chunk.text, id, noteId: id, accountId: note?.accountId, isAttachment: true, updatedAt })),
       });
 
       try {
-        const note = await prisma.notes.findUnique({
-          where: { id },
-          select: { metadata: true }
-        });
         await prisma.notes.update({
           where: { id },
           data: {

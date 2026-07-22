@@ -2,7 +2,7 @@ import { LLMProvider, EmbeddingProvider, AudioProvider, AiUtilities } from './pr
 import { upsertBlinkoTool } from './tools/createBlinko';
 import { createCommentTool } from './tools/createComment';
 import { LibSQLVector } from "@mastra/libsql";
-import dayjs from 'dayjs';
+import dayjs from '@shared/lib/dayjs';
 import { Agent, Mastra } from '@mastra/core';
 import { LanguageModelV1, EmbeddingModelV1 } from '@ai-sdk/provider';
 import { MarkdownTextSplitter, TokenTextSplitter } from '@langchain/textsplitters';
@@ -33,14 +33,8 @@ export class AiModelFactory {
       // throws, so keep it inside the try so deletion never rejects unhandled.
       const { VectorStore } = await AiModelFactory.GetProvider();
       const query = `
-          WITH target_record AS (
-            SELECT vector_id 
-            FROM 'blinko'
-            WHERE metadata->>'id' = ? 
-            LIMIT 1
-          )
           DELETE FROM 'blinko'
-          WHERE vector_id IN (SELECT vector_id FROM target_record)
+          WHERE metadata->>'id' = ?
           RETURNING *;`;
       //@ts-ignore
       const result = await VectorStore.turso.execute({
@@ -80,18 +74,21 @@ export class AiModelFactory {
     const result = await VectorStore.query({
       indexName: 'blinko',
       queryVector: embedding,
-      topK: topK,
+      topK: topK * 10,
     });
     let filteredResults = result.filter(({ score }) => score >= embeddingMinScore);
+    const filteredIds = _.uniqWith(filteredResults.map((i) => Number(i.metadata?.id))).filter((i) => !!i) as number[];
 
     const notes =
       (
         await prisma.notes.findMany({
           where: {
-            accountId: accountId,
-            id: {
-              in: _.uniqWith(filteredResults.map((i) => Number(i.metadata?.id))).filter((i) => !!i) as number[],
-            },
+            id: { in: filteredIds },
+            isRecycle: false,
+            OR: [
+              { accountId },
+              { internalShares: { some: { accountId } } },
+            ],
           },
           include: {
             tags: { include: { tag: true } },
@@ -132,7 +129,7 @@ export class AiModelFactory {
         })
       ).map((i) => {
         return { ...i, score: filteredResults.find((t) => Number(t.metadata?.id) == i.id)?.score ?? 0 };
-      }) ?? [];
+      }).sort((a, b) => b.score - a.score).slice(0, topK) ?? [];
 
     let aiContext = notes.map((i) => i.content + '\n') || '';
     return { notes, aiContext: aiContext };

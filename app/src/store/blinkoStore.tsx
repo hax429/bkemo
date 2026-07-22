@@ -263,7 +263,7 @@ export class BlinkoStore implements Store {
   }
 
   /**
-   * Generic note query for the Direction D screens (stream / todo lanes /
+   * Generic note query for the bkemo screens (stream / todo lanes /
    * matrix / calendar). Goes through getFilteredNotes so it inherits the
    * online→cache fallback and offline-note merge. The offlineFilter mirrors the
    * common boolean filters so unsynced offline notes still surface in the right

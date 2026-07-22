@@ -25,6 +25,7 @@ import { Calendar } from '@/components/bkemo/Calendar';
 import { Graph } from '@/components/bkemo/Graph';
 import { FilesScreen } from '@/components/bkemo/FilesScreen';
 import { Analytics } from '@/components/bkemo/Analytics';
+import { AIScreen } from '@/components/bkemo/AIScreen';
 import { NoteModal } from '@/components/bkemo/NoteModal';
 import { SearchOverlay } from '@/components/bkemo/SearchOverlay';
 import { UserStore } from '@/store/user';
@@ -169,7 +170,7 @@ const BkemoPage = observer(function BkemoPage() {
     if (route === 'graph') return <Graph onOpen={setEditing} showAll={prefs.graphShowAll} />;
     if (route === 'files') return <FilesScreen />;
     if (route === 'analytics' || route === 'stats') return <Analytics />;
-    if (route === 'ai') return <ComingSoon title="AI" />;
+    if (route === 'ai') return <AIScreen onOpen={setEditing} />;
     if (route === 'settings') return <SettingsScreen prefs={prefs} onChange={updatePrefs} onNavigate={navigateTo} onSearch={() => setShowSearch(true)} section={settingsSection} onSectionChange={navigateSettings} />;
     if (TODO_VIEWS.includes(route as TodoView)) {
       return <Todos view={route as TodoView} onView={navigateTo} onOpen={setEditing} />;

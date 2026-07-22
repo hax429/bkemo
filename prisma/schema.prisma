@@ -221,6 +221,7 @@ model notes {
   histories         noteHistory[]
   internalShares    noteInternalShare[]
   reactions         reaction[]
+  conversations     conversation[]
 
   @@index([accountId, dueDate])
   @@index([accountId, type])
@@ -351,14 +352,19 @@ model conversation {
   portableId String    @unique @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   title      String    @default("") @db.VarChar(255)
   isShare    Boolean   @default(false)
+  scope      String    @default("global") @db.VarChar(32)
+  noteId     Int?
   accountId  Int
   createdAt  DateTime  @default(now()) @db.Timestamptz(6)
   updatedAt  DateTime  @updatedAt @db.Timestamptz(6)
   messages   message[]
 
   account accounts @relation(fields: [accountId], references: [id])
+  note    notes?   @relation(fields: [noteId], references: [id], onDelete: Cascade)
 
   @@index([accountId])
+  @@index([accountId, scope])
+  @@index([noteId])
 }
 
 model message {

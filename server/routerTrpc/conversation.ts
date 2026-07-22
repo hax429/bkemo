@@ -1,17 +1,29 @@
 import { router, authProcedure, publicProcedure } from '../middleware';
 import { z } from 'zod';
 import { prisma } from '../prisma';
+import { TRPCError } from '@trpc/server';
+import { requireOwnedConversation, requireReadableNote } from '@server/lib/noteAccess';
 
 export const conversationRouter = router({
   create: authProcedure
     .input(z.object({
       title: z.string().optional(),
+      scope: z.enum(['global', 'note']).optional(),
+      noteId: z.number().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
+      const accountId = Number(ctx.id);
+      const scope = input.scope ?? (input.noteId ? 'note' : 'global');
+      if (scope === 'note') {
+        if (!input.noteId) throw new TRPCError({ code: 'BAD_REQUEST', message: 'noteId is required for note conversations' });
+        await requireReadableNote(input.noteId, accountId);
+      }
       return await prisma.conversation.create({
         data: {
           title: input.title,
-          accountId: Number(ctx.id),
+          scope,
+          noteId: scope === 'note' ? input.noteId : null,
+          accountId,
         }
       });
     }),
@@ -19,7 +31,8 @@ export const conversationRouter = router({
     .input(z.object({
       id: z.number()
     }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
+      await requireOwnedConversation(input.id, Number(ctx.id));
       await prisma.message.deleteMany({
         where: {
           conversationId: input.id
@@ -33,18 +46,25 @@ export const conversationRouter = router({
     .input(z.object({
       page: z.number().default(1),
       size: z.number().default(20),
+      scope: z.enum(['global', 'note']).optional(),
+      noteId: z.number().optional(),
     }))
     .query(async ({ input, ctx }) => {
       const skip = (input.page - 1) * input.size;
+      const where = {
+        accountId: Number(ctx.id),
+        ...(input.scope ? { scope: input.scope } : {}),
+        ...(input.noteId ? { noteId: input.noteId } : {}),
+      };
       const [total, conversations] = await Promise.all([
         prisma.conversation.count({
-          where: { accountId: Number(ctx.id) }
+          where
         }),
         prisma.conversation.findMany({
-          where: { accountId: Number(ctx.id) },
+          where,
           skip,
           take: input.size,
-          orderBy: { createdAt: 'desc' }
+          orderBy: { updatedAt: 'desc' }
         })
       ]);
       return conversations;
@@ -54,7 +74,7 @@ export const conversationRouter = router({
       id: z.number()
     }))
     .query(async ({ input, ctx }) => {
-      return await prisma.conversation.findUnique({
+      return await prisma.conversation.findFirst({
         where: { id: input.id, accountId: Number(ctx.id) },
         include: {
           messages: {
@@ -117,11 +137,9 @@ export const conversationRouter = router({
       isShare: z.boolean()
     }))
     .mutation(async ({ input, ctx }) => {
+      await requireOwnedConversation(input.id, Number(ctx.id));
       return await prisma.conversation.update({
-        where: {
-          id: input.id,
-          accountId: Number(ctx.id)
-        },
+        where: { id: input.id },
         data: {
           isShare: input.isShare
         }
@@ -134,11 +152,9 @@ export const conversationRouter = router({
       title: z.string().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
+      await requireOwnedConversation(input.id, Number(ctx.id));
       return await prisma.conversation.update({
-        where: {
-          id: input.id,
-          accountId: Number(ctx.id)
-        },
+        where: { id: input.id },
         data: {
           title: input.title,
         }
@@ -151,6 +167,13 @@ export const conversationRouter = router({
     }))
     .mutation(async ({ input, ctx }) => {
       return await prisma.$transaction(async (prisma) => {
+        const conversation = await prisma.conversation.findFirst({
+          where: { id: input.id, accountId: Number(ctx.id) },
+          select: { id: true },
+        });
+        if (!conversation) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Conversation not found' });
+        }
         await prisma.message.deleteMany({
           where: {
             conversationId: input.id
@@ -158,10 +181,9 @@ export const conversationRouter = router({
         });
         return await prisma.conversation.delete({
           where: {
-            id: input.id,
-            accountId: Number(ctx.id)
+            id: input.id
           }
         });
       });
     }),
-}); 
+});

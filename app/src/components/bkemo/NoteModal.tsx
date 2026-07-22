@@ -17,6 +17,7 @@ import { MarkdownView } from './MarkdownView';
 import { toUpsertAttachment } from '@/lib/attachments';
 import { useAttachments, PendingAttachments } from './useAttachments';
 import { AttachmentList } from './AttachmentList';
+import { NoteAIThread } from './ai/AIThread';
 
 /** Memos past this length auto-open in the distraction-free article reader. */
 const ARTICLE_THRESHOLD = 500;
@@ -318,6 +319,7 @@ export const NoteModal = observer(function NoteModal({ note, onClose, startFulls
               )}
               <MarkdownView content={note.content ?? ''} />
               <AttachmentList attachments={(note as any).attachments} />
+              <NoteAIThread note={note} onOpen={(n) => eventBus.emit('bkemo:open-note', { id: n.id })} />
             </div>
           </div>
         </div>
@@ -447,6 +449,8 @@ export const NoteModal = observer(function NoteModal({ note, onClose, startFulls
               </div>
             </div>
           )}
+
+          {note.id && <NoteAIThread note={note} onOpen={(n) => eventBus.emit('bkemo:open-note', { id: n.id })} />}
           </div>
         </div>
 
