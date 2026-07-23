@@ -15,7 +15,11 @@ export const upsertBlinkoTool = createTool({
   execute: async ({ context, runtimeContext }) => {
     const accountId = runtimeContext?.get('accountId') || (await verifyToken(context.token))?.sub;
     
-    console.log(`create note:${context.content}, type:${context.type}, accountId:${accountId}`);
+    console.log('create note via AI tool', {
+      type: context.type,
+      accountId,
+      contentLength: context.content.length,
+    });
     
     // Convert string type to NoteType enum
     let noteType: NoteType;

@@ -22,6 +22,14 @@ import { getAllPathTags } from '@server/lib/helper';
 import { LibSQLVector } from '@mastra/libsql';
 import { RuntimeContext } from "@mastra/core/di";
 
+function isBroadNotesQuestion(question: string) {
+  return /(?:\b(?:all|every|overview|summary|summari[sz]e|themes?)\b.{0,30}\bnotes?\b|\bnotes?\b.{0,30}\b(?:overview|summary|talk about|themes?)\b|所有.*笔记|全部.*笔记|总结.*笔记|笔记.*(?:总结|概览|主题))/i.test(question);
+}
+
+function requestsDetailedAnswer(question: string) {
+  return /\b(?:detailed|in depth|comprehensive|step[- ]by[- ]step|full explanation|long answer)\b|详细|深入|完整说明|逐步/i.test(question);
+}
+
 export function isImage(filePath: string): boolean {
   if (!filePath) return false;
   const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.svg'];
@@ -93,23 +101,32 @@ export class AiService {
 
       const note = await prisma.notes.findUnique({
         where: { id },
-        select: { metadata: true, attachments: true, accountId: true }
+        select: { metadata: true, attachments: true, accountId: true, updatedAt: true }
       });
+      if (!note) {
+        return { ok: false, error: `Note ${id} no longer exists` };
+      }
+      if (updatedAt && note.updatedAt.getTime() > updatedAt.getTime()) {
+        return { ok: false, error: `Note ${id} changed during embedding; stale rebuild result skipped` };
+      }
 
       const chunks = await MDocument.fromMarkdown(content).chunk();
-      if (type == 'update') {
-        AiModelFactory.queryAndDeleteVectorById(id);
-      }
 
       const { embeddings } = await embedMany({
         values: chunks.map((chunk) => chunk.text + 'Create At: ' + createTime.toISOString() + ' Update At: ' + updatedAt?.toISOString()),
         model: Embeddings,
       });
 
-      await VectorStore.upsert({
-        indexName: 'blinko',
-        vectors: embeddings,
-        metadata: chunks?.map((chunk) => ({ text: chunk.text, id, noteId: id, accountId: note?.accountId, createTime, updatedAt })),
+      await AiModelFactory.runVectorWrite(async () => {
+        if (type == 'update') {
+          await AiModelFactory.queryAndDeleteVectorById(id);
+        }
+        await VectorStore.upsert({
+          indexName: 'blinko',
+          ids: chunks.map((_, chunkIndex) => `${id}:${chunkIndex}`),
+          vectors: embeddings,
+          metadata: chunks?.map((chunk) => ({ text: chunk.text, id, noteId: id, accountId: note?.accountId, createTime, updatedAt })),
+        });
       });
 
       try {
@@ -198,7 +215,8 @@ export class AiService {
   }
 
   static async embeddingDelete({ id }: { id: number }) {
-    AiModelFactory.queryAndDeleteVectorById(id);
+    await AiModelFactory.GetProvider();
+    await AiModelFactory.runVectorWrite(() => AiModelFactory.queryAndDeleteVectorById(id));
     return { ok: true };
   }
 
@@ -262,7 +280,13 @@ export class AiService {
 
       // SiliconFlow (and similar OpenAI-compatible gateways) require every system
       // message before the first user/assistant turn. Never append system after history.
-      const systemChunks: string[] = [`Current user name: ${ctx.name}\n`];
+      const detailedAnswer = requestsDetailedAnswer(question);
+      const systemChunks: string[] = [
+        `Current user name: ${ctx.name}\n`,
+        detailedAnswer
+          ? 'The user requested detail. Be thorough but avoid repetition.'
+          : 'Answer directly and concisely. Aim for at most 120 words unless more detail is necessary for correctness.',
+      ];
       if (systemPrompt) systemChunks.push(systemPrompt);
 
       // RAG embedding/search and agent construction are independent — overlap them.
@@ -276,7 +300,12 @@ export class AiService {
       const ragPromise = withRAG
         ? (async () => {
             const tRag0 = Date.now();
-            const { notes, aiContext } = await AiModelFactory.queryVector(question, Number(ctx.id));
+            const broadQuery = isBroadNotesQuestion(question);
+            const { notes, aiContext } = await AiModelFactory.queryVector(
+              question,
+              Number(ctx.id),
+              broadQuery ? 20 : undefined,
+            );
             if (collectDebug) debug.ragMs = Date.now() - tRag0;
             return { notes, aiContext };
           })()
@@ -313,11 +342,20 @@ export class AiService {
         { role: 'user', content: question },
       ];
 
-      console.log(messages, 'conversations');
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('[AiService] prompt ready', {
+          messageCount: messages.length,
+          roles: messages.map((message) => message.role),
+          ragNotes: ragNote.length,
+        });
+      }
       const runtimeContext = new RuntimeContext();
       runtimeContext.set('accountId', Number(ctx.id));
       const tStream0 = Date.now();
-      const result = await agent.stream(messages, { runtimeContext });
+      const result = await agent.stream(messages, {
+        runtimeContext,
+        maxTokens: detailedAnswer ? 700 : 192,
+      });
       if (collectDebug) {
         debug.streamOpenMs = Date.now() - tStream0;
         debug.setupMs = Date.now() - t0;

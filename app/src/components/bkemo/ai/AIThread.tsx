@@ -28,6 +28,7 @@ export type AIMessage = {
 export type AIConfigStatus = {
   mainModelReady: boolean;
   embeddingModelReady: boolean;
+  embeddingIndexReady: boolean;
   mainModelTitle?: string | null;
   embeddingModelTitle?: string | null;
   providerCount: number;
@@ -179,6 +180,7 @@ function useAIThread({
   }, [activeId, loadAllHistory]);
 
   const startNew = () => {
+    if (sendingRef.current) return;
     setActiveId(null);
     setMessagesByConversation((prev) => {
       const next = { ...prev };
@@ -189,7 +191,7 @@ function useAIThread({
   };
 
   const deleteActive = async () => {
-    if (!activeId) return;
+    if (!activeId || sendingRef.current) return;
     await api.conversation.delete.mutate({ id: activeId });
     setMessagesByConversation((prev) => {
       const next = { ...prev };
@@ -312,9 +314,10 @@ function useAIThread({
           });
         }
         if (event.assistantMessage) {
+          assistantContent = String(event.assistantMessage.content ?? assistantContent);
           aiDebugLog('client:assistant_message', {
             id: event.assistantMessage?.id,
-            chars: String(event.assistantMessage?.content || '').length,
+            chars: assistantContent.length,
           }, 'event');
           setMessagesByConversation((prev) => {
             const key = conversationId ?? -1;
@@ -337,7 +340,11 @@ function useAIThread({
         chars: assistantContent.length,
       });
 
-      await refreshConversations(conversationId ?? null, true);
+      if (conversationId) {
+        setConversations((prev) => prev.map((row) => (
+          row.id === conversationId ? { ...row, updatedAt: new Date().toISOString() } : row
+        )));
+      }
       aiDebugLog('client:done', { ms: Date.now() - t0, conversationId: conversationId ?? null });
 
       // Name brand-new threads in the background (after refresh so it can't be clobbered).
@@ -438,11 +445,19 @@ function AIConfigNotice({ status }: { status: AIConfigStatus | null }) {
       </div>
     );
   }
+  if (!status.embeddingIndexReady) {
+    return (
+      <div className="bk-ai-runtime-notice is-danger">
+        <div>Embedding index is empty.</div>
+        <p>Open Settings &gt; AI and rebuild the embedding index before using note-grounded chat.</p>
+      </div>
+    );
+  }
   return null;
 }
 
 function aiReady(status: AIConfigStatus | null) {
-  return !!status?.mainModelReady && !!status?.embeddingModelReady;
+  return !!status?.mainModelReady && !!status?.embeddingModelReady && !!status?.embeddingIndexReady;
 }
 
 function AIMessageList({
@@ -704,6 +719,7 @@ function AIConversationSidebar({
   activeId,
   conversations,
   loading,
+  sending,
   onDelete,
   onNew,
   onSelect,
@@ -711,13 +727,14 @@ function AIConversationSidebar({
   activeId: number | null;
   conversations: AIConversation[];
   loading: boolean;
+  sending: boolean;
   onDelete: () => void;
   onNew: () => void;
   onSelect: (id: number) => void;
 }) {
   return (
     <aside className="bk-scroll bk-ai-sidebar">
-      <button className="bk-ai-new-chat" onClick={onNew}>New chat</button>
+      <button className="bk-ai-new-chat" onClick={onNew} disabled={sending}>New chat</button>
       {loading ? (
         <div className="bk-ai-sidebar-empty">Loading...</div>
       ) : conversations.length === 0 ? (
@@ -729,13 +746,14 @@ function AIConversationSidebar({
             key={conversation.id}
             className={active ? 'bk-ai-conversation is-active' : 'bk-ai-conversation'}
             onClick={() => onSelect(conversation.id)}
+            disabled={sending}
           >
             <span>{conversationTitle(conversation)}</span>
             <small>{conversation.updatedAt ? dayjs(conversation.updatedAt).format('MMM D HH:mm') : `BK-AI-${conversation.id}`}</small>
           </button>
         );
       })}
-      {activeId ? <button className="bk-ai-delete-chat" onClick={onDelete}>Delete current chat</button> : null}
+      {activeId ? <button className="bk-ai-delete-chat" onClick={onDelete} disabled={sending}>Delete current chat</button> : null}
     </aside>
   );
 }
@@ -760,6 +778,7 @@ export const AIGlobalChat = observer(function AIGlobalChat({
         activeId={thread.activeId}
         conversations={thread.conversations}
         loading={thread.loadingList}
+        sending={thread.sending}
         onDelete={thread.deleteActive}
         onNew={thread.startNew}
         onSelect={thread.setActiveId}

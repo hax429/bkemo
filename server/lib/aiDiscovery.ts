@@ -136,7 +136,7 @@ export async function runAIDiscovery({
   range: AIDiscoveryRange;
   customPrompt?: string;
 }) {
-  await requireAiReady();
+  await requireAiReady(accountId);
   const createdAt = sinceDate(range);
   const notes = await prisma.notes.findMany({
     where: {

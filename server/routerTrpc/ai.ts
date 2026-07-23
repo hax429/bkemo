@@ -18,8 +18,8 @@ import { runAIDiscovery } from '@server/lib/aiDiscovery';
 
 export const aiRouter = router({
   configStatus: authProcedure
-    .query(async () => {
-      return getAiConfigStatus();
+    .query(async ({ ctx }) => {
+      return getAiConfigStatus(Number(ctx.id));
     }),
 
   embeddingUpsert: authProcedure
@@ -91,7 +91,7 @@ export const aiRouter = router({
     .mutation(async function* ({ input, ctx }) {
       try {
         const { question, conversations, withTools = false, withOnline = false, withRAG = true, systemPrompt } = input
-        await requireAiReady();
+        await requireAiReady(Number(ctx.id));
         let _conversations = conversations as CoreMessage[]
         const { result: responseStream, notes } = await AiService.completions({
           question,
@@ -195,11 +195,14 @@ export const aiRouter = router({
       const conversationString = JSON.stringify(
         conversations.map(i => ({
           role: i.role,
-          content: i.content.replace(/\n/g, '\\n')
+          content: i.content.slice(0, 500).replace(/\n/g, '\\n')
         })),
         null, 2
       );
-      const result = await agent.generate(conversationString)
+      const result = await agent.generate(conversationString, {
+        maxTokens: 24,
+        temperature: 0.2,
+      })
       const title = String(result?.text || '')
         .replace(/[\r\n]+/g, ' ')
         .replace(/^[\s"'“”‘’]+|[\s"'“”‘’]+$/g, '')

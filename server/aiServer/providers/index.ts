@@ -10,7 +10,7 @@ export { LLMProvider } from './LLMProvider';
 export { EmbeddingProvider } from './EmbeddingProvider';
 export { AudioProvider } from './AudioProvider';
 
-let vectorStore: LibSQLVector;
+let vectorStorePromise: Promise<LibSQLVector> | undefined;
 
 /**
  * Utility class for common AI operations
@@ -31,29 +31,32 @@ export class AiUtilities {
   }
 
   public static async VectorStore(): Promise<LibSQLVector> {
-    if (!vectorStore) {
-      try {
-        // Ensure directory exists before creating database
-        const dbPath = VECTOR_DB_FILE_PATH.replace('file:', '');
-        const dbDir = path.dirname(dbPath);
-        if (!fs.existsSync(dbDir)) {
-          fs.mkdirSync(dbDir, { recursive: true });
+    if (!vectorStorePromise) {
+      vectorStorePromise = (async () => {
+        try {
+          // Ensure directory exists before creating database
+          const dbPath = VECTOR_DB_FILE_PATH.replace('file:', '');
+          const dbDir = path.dirname(dbPath);
+          if (!fs.existsSync(dbDir)) {
+            fs.mkdirSync(dbDir, { recursive: true });
+          }
+
+          const vectorStore = new LibSQLVector({
+            connectionUrl: VECTOR_DB_FILE_PATH,
+          });
+
+          //!index must be created before use
+          await AiModelFactory.rebuildVectorIndex({ vectorStore });
+          return vectorStore;
+        } catch (error) {
+          console.error('Failed to initialize vector database:', error);
+          // Create a minimal fallback to prevent crashes
+          return new LibSQLVector({
+            connectionUrl: VECTOR_DB_FILE_PATH,
+          });
         }
-
-        vectorStore = new LibSQLVector({
-          connectionUrl: VECTOR_DB_FILE_PATH,
-        });
-
-        //!index must be created before use
-        await AiModelFactory.rebuildVectorIndex({ vectorStore });
-      } catch (error) {
-        console.error('Failed to initialize vector database:', error);
-        // Create a minimal fallback to prevent crashes
-        vectorStore = new LibSQLVector({
-          connectionUrl: VECTOR_DB_FILE_PATH,
-        });
-      }
+      })();
     }
-    return vectorStore;
+    return vectorStorePromise;
   }
 }

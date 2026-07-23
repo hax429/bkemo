@@ -37,6 +37,8 @@ export class RebuildEmbeddingJob extends BaseScheduleJob {
   protected static taskName = REBUILD_EMBEDDING_TASK_NAME;
   protected static cronSchedule = '0 0 * * *';
   private static forceStopFlag = false;
+  private static rebuildGeneration = 0;
+  private static runTail: Promise<void> = Promise.resolve();
 
   /**
    * Get progress from cache table
@@ -64,6 +66,7 @@ export class RebuildEmbeddingJob extends BaseScheduleJob {
    */
   static async ForceRebuild(force: boolean = true, incremental: boolean = false): Promise<boolean> {
     try {
+      this.rebuildGeneration += 1;
       this.forceStopFlag = false;
 
       const existingProgress = await this.getProgressFromCache();
@@ -73,6 +76,7 @@ export class RebuildEmbeddingJob extends BaseScheduleJob {
         await this.StopRebuild();
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
+      this.forceStopFlag = false;
 
       let initialProgress: RebuildProgress;
 
@@ -125,6 +129,7 @@ export class RebuildEmbeddingJob extends BaseScheduleJob {
    */
   static async StopRebuild(): Promise<boolean> {
     try {
+      this.rebuildGeneration += 1;
       this.forceStopFlag = true;
       
       const progress = await this.getProgressFromCache();
@@ -148,6 +153,21 @@ export class RebuildEmbeddingJob extends BaseScheduleJob {
   }
 
   protected static async RunTask(): Promise<any> {
+    const previous = this.runTail;
+    let release!: () => void;
+    this.runTail = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await previous.catch(() => undefined);
+    try {
+      return await this.runTaskUnlocked();
+    } finally {
+      release();
+    }
+  }
+
+  private static async runTaskUnlocked(): Promise<any> {
+    const runGeneration = this.rebuildGeneration;
     let currentProgress = await this.getProgressFromCache();
 
     if (!currentProgress) {
@@ -185,6 +205,14 @@ export class RebuildEmbeddingJob extends BaseScheduleJob {
           vectorStore: VectorStore,
           isDelete: true
         });
+        // A resumed full rebuild starts from a freshly truncated index. Do not
+        // skip IDs recorded before a crash or those notes would remain missing.
+        processedIds.clear();
+        failedIds.clear();
+        results.length = 0;
+        currentProgress.current = 0;
+        currentProgress.processedNoteIds = [];
+        currentProgress.failedNoteIds = [];
       }
 
       const whereClause: any = { isRecycle: false };
@@ -207,6 +235,9 @@ export class RebuildEmbeddingJob extends BaseScheduleJob {
       console.log(`[${new Date().toISOString()}] start rebuild embedding, ${notes.length} notes`);
 
       for (let i = 0; i < notes.length; i += BATCH_SIZE) {
+        if (runGeneration !== this.rebuildGeneration) {
+          return currentProgress;
+        }
         if (this.forceStopFlag) {
           return await this.saveStoppedProgress(current, total, results, processedIds, failedIds, currentProgress);
         }
@@ -219,6 +250,9 @@ export class RebuildEmbeddingJob extends BaseScheduleJob {
         const noteBatch = notes.slice(i, i + BATCH_SIZE);
 
         for (const note of noteBatch) {
+          if (runGeneration !== this.rebuildGeneration) {
+            return currentProgress;
+          }
           if (this.forceStopFlag) {
             return await this.saveStoppedProgress(current, total, results, processedIds, failedIds, currentProgress);
           }
@@ -231,7 +265,11 @@ export class RebuildEmbeddingJob extends BaseScheduleJob {
             let noteProcessed = false;
 
             if (note?.content && note.content.trim() !== '') {
-              const result = await this.processNoteWithRetry(note, 3);
+              const result = await this.processNoteWithRetry(
+                note,
+                3,
+                currentProgress.isIncremental ? 'update' : 'insert',
+              );
               if (result.success) {
                 results.push({ type: 'success', content: note?.content.slice(0, 30) ?? '', timestamp: new Date().toISOString() });
                 noteProcessed = true;
@@ -243,6 +281,10 @@ export class RebuildEmbeddingJob extends BaseScheduleJob {
 
             // Images and file attachments are excluded from embedding.
             // Note body text is the only indexed content.
+
+            if (runGeneration !== this.rebuildGeneration) {
+              return currentProgress;
+            }
 
             if (noteProcessed) {
               processedIds.add(note.id);
@@ -338,7 +380,7 @@ export class RebuildEmbeddingJob extends BaseScheduleJob {
     return stoppedProgress;
   }
 
-  private static async processNoteWithRetry(note: any, maxRetries: number): Promise<{ success: boolean; error?: string }> {
+  private static async processNoteWithRetry(note: any, maxRetries: number, type: 'update' | 'insert'): Promise<{ success: boolean; error?: string }> {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         const { ok, error } = await AiService.embeddingUpsert({
@@ -346,7 +388,7 @@ export class RebuildEmbeddingJob extends BaseScheduleJob {
           updatedAt: note.updatedAt,
           id: note.id,
           content: note.content,
-          type: 'update' as const
+          type
         });
 
         if (ok) return { success: true };

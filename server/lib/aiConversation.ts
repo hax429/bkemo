@@ -101,8 +101,8 @@ export async function requireEmbeddingModel() {
 }
 
 /** Hard gate for all note-backed AI surfaces: main chat + embedding must both be ready. */
-export async function requireAiReady() {
-  const status = await getAiConfigStatus();
+export async function requireAiReady(accountId?: number) {
+  const status = await getAiConfigStatus(accountId);
   if (!status.mainModelReady) {
     throw new TRPCError({
       code: 'BAD_REQUEST',
@@ -115,6 +115,12 @@ export async function requireAiReady() {
       message: 'Embedding model is required for AI. Choose an embedding-capable model in Settings > AI, then rebuild the embedding index.',
     });
   }
+  if (accountId && !status.embeddingIndexReady) {
+    throw new TRPCError({
+      code: 'PRECONDITION_FAILED',
+      message: 'Your embedding index is empty. Rebuild it in Settings > AI before using note-grounded chat.',
+    });
+  }
   return status;
 }
 
@@ -124,7 +130,7 @@ export async function* streamAIConversation(input: AIChatInput, ctx: any) {
   const accountId = Number(ctx.id);
   if (debug) yield debugEvent('server:start', { question: input.question.slice(0, 200), scope: input.scope, conversationId: input.conversationId ?? null });
 
-  await requireAiReady();
+  await requireAiReady(accountId);
   if (debug) yield debugEvent('server:ready', { ms: Date.now() - t0 });
 
   let conversation = input.conversationId
@@ -146,10 +152,9 @@ export async function* streamAIConversation(input: AIChatInput, ctx: any) {
     ...(scope === 'note' && noteId ? [noteId] : []),
     ...(input.contextNoteIds ?? []),
   ]);
-  const contextNotes = [];
-  for (const id of requestedNoteIds) {
-    contextNotes.push(await requireReadableNote(id, accountId));
-  }
+  const contextNotes = await Promise.all(
+    requestedNoteIds.map((id) => requireReadableNote(id, accountId)),
+  );
 
   if (!conversation && scope === 'note' && noteId) {
     // One thread per note in v1.
@@ -192,21 +197,9 @@ export async function* streamAIConversation(input: AIChatInput, ctx: any) {
     });
   }
 
-  const userMessage = await prisma.message.create({
-    data: {
-      conversationId: conversation.id,
-      role: 'user',
-      content: input.question,
-      metadata: {
-        scope,
-        noteId: input.noteId ?? null,
-        contextNoteIds: requestedNoteIds,
-      },
-    },
-  });
-
-  yield { conversation, userMessage };
-  if (debug) yield debugEvent('server:user_saved', { messageId: userMessage.id, ms: Date.now() - t0 });
+  // Keep the optimistic turn client-side until generation succeeds. Persisting
+  // user and assistant together prevents orphan user rows after crashes/aborts.
+  yield { conversation };
 
   try {
     const scopedSystemPrompt = [input.systemPrompt, noteSystemContext(contextNotes)].filter(Boolean).join('\n\n');
@@ -333,25 +326,43 @@ export async function* streamAIConversation(input: AIChatInput, ctx: any) {
       });
     }
 
-    const assistantMessage = await prisma.message.create({
-      data: {
-        conversationId: conversation.id,
-        role: 'assistant',
-        content: assistantContent,
-        metadata: {
-          scope,
-          noteId: input.noteId ?? null,
-          contextNoteIds: requestedNoteIds,
-          sources: notes?.map((note: any) => ({ id: note.id, score: note.score ?? null })) ?? [],
-        },
-      },
-    });
-    await prisma.conversation.update({
-      where: { id: conversation.id },
-      data: { updatedAt: new Date() },
-    });
+    if (!assistantContent.trim()) {
+      throw new Error('The AI provider returned an empty response.');
+    }
 
-    yield { assistantMessage, done: true };
+    const [userMessage, assistantMessage] = await prisma.$transaction([
+      prisma.message.create({
+        data: {
+          conversationId: conversation.id,
+          role: 'user',
+          content: input.question,
+          metadata: {
+            scope,
+            noteId: input.noteId ?? null,
+            contextNoteIds: requestedNoteIds,
+          },
+        },
+      }),
+      prisma.message.create({
+        data: {
+          conversationId: conversation.id,
+          role: 'assistant',
+          content: assistantContent,
+          metadata: {
+            scope,
+            noteId: input.noteId ?? null,
+            contextNoteIds: requestedNoteIds,
+            sources: notes?.map((note: any) => ({ id: note.id, score: note.score ?? null })) ?? [],
+          },
+        },
+      }),
+      prisma.conversation.update({
+        where: { id: conversation.id },
+        data: { updatedAt: new Date() },
+      }),
+    ]);
+
+    yield { userMessage, assistantMessage, done: true };
     if (debug) yield debugEvent('server:done', { totalMs: Date.now() - t0, assistantMessageId: assistantMessage.id });
   } catch (error: any) {
     if (debug) {
@@ -361,8 +372,6 @@ export async function* streamAIConversation(input: AIChatInput, ctx: any) {
         name: error?.name,
       });
     }
-    // Avoid stacking orphan user turns that poison the next request's history.
-    await prisma.message.delete({ where: { id: userMessage.id } }).catch(() => undefined);
     throw error;
   }
 }

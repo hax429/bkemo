@@ -27,10 +27,26 @@ import { aiModels } from '@shared/index';
 import { MastraVoice } from '@mastra/core/voice';
 
 export class AiModelFactory {
+  private static vectorWriteTail: Promise<void> = Promise.resolve();
+
+  static async runVectorWrite<T>(operation: () => Promise<T>): Promise<T> {
+    const previous = AiModelFactory.vectorWriteTail;
+    let release!: () => void;
+    AiModelFactory.vectorWriteTail = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+
+    await previous.catch(() => undefined);
+    try {
+      return await operation();
+    } finally {
+      release();
+    }
+  }
+
   static async queryAndDeleteVectorById(targetId: number) {
     try {
-      // Embeddings are optional — when no AI model is configured GetProvider()
-      // throws, so keep it inside the try so deletion never rejects unhandled.
+      // Reuse the initialized vector store; callers serialize this with upserts.
       const { VectorStore } = await AiModelFactory.GetProvider();
       const query = `
           DELETE FROM 'blinko'
@@ -42,19 +58,27 @@ export class AiModelFactory {
         args: [targetId],
       });
 
-      if (result.rows.length === 0) {
-        throw new Error(`id  ${targetId} is not found`);
-      }
-
       return {
         success: true,
-        deletedData: result.rows[0],
+        deletedData: result.rows[0] ?? null,
       };
     } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'unknown error',
-      };
+      console.error(`Failed to delete vectors for note ${targetId}:`, error);
+      throw error;
+    }
+  }
+
+  static async hasIndexedVectors(accountId: number) {
+    try {
+      const { VectorStore } = await AiModelFactory.GetProvider();
+      const result = await VectorStore.turso.execute({
+        sql: `SELECT 1 FROM 'blinko' WHERE metadata->>'accountId' = ? LIMIT 1`,
+        args: [accountId],
+      });
+      return result.rows.length > 0;
+    } catch (error) {
+      console.warn('Embedding index health check failed:', error);
+      return false;
     }
   }
 
@@ -66,15 +90,30 @@ export class AiModelFactory {
     const config = await AiModelFactory.globalConfig();
     const topK = _topK ?? config.embeddingTopK ?? 3;
     const embeddingMinScore = config.embeddingScore ?? 0.4;
-    const { embedding } = await embed({
-      value: query,
-      model: Embeddings,
-    });
+    const [{ embedding }, sharedNotes] = await Promise.all([
+      embed({
+        value: query,
+        model: Embeddings,
+      }),
+      prisma.notes.findMany({
+        where: {
+          isRecycle: false,
+          internalShares: { some: { accountId } },
+        },
+        select: { id: true },
+      }),
+    ]);
+    const sharedNoteIds = sharedNotes.map((note) => note.id);
+    const accountFilter = sharedNoteIds.length > 0
+      ? { $or: [{ accountId }, { id: { $in: sharedNoteIds } }] }
+      : { accountId };
 
     const result = await VectorStore.query({
       indexName: 'blinko',
       queryVector: embedding,
       topK: topK * 10,
+      filter: accountFilter,
+      minScore: embeddingMinScore,
     });
     let filteredResults = result.filter(({ score }) => score >= embeddingMinScore);
     const filteredIds = _.uniqWith(filteredResults.map((i) => Number(i.metadata?.id))).filter((i) => !!i) as number[];
@@ -132,18 +171,25 @@ export class AiModelFactory {
       }).sort((a, b) => b.score - a.score).slice(0, topK) ?? [];
 
     // Cap per-note context — full memo dumps dominate SiliconFlow TTFT.
-    const maxChars = Number(config.embeddingContextChars) > 0
+    const configuredMaxChars = Number(config.embeddingContextChars) > 0
       ? Number(config.embeddingContextChars)
       : 1200;
+    const maxChars = _topK && _topK > (config.embeddingTopK ?? 3)
+      ? Math.min(configuredMaxChars, 400)
+      : configuredMaxChars;
     const aiContext = notes.map((note) => {
       const text = String(note.content || '').trim();
-      if (text.length <= maxChars) return text;
-      return `${text.slice(0, maxChars).trimEnd()}…`;
+      const excerpt = text.length <= maxChars ? text : `${text.slice(0, maxChars).trimEnd()}…`;
+      return `[Note @bk-${note.id}]\n${excerpt}`;
     }).join('\n\n');
     return { notes, aiContext };
   }
 
-  static async rebuildVectorIndex({ vectorStore, isDelete = false }: { vectorStore: LibSQLVector; isDelete?: boolean }) {
+  static async rebuildVectorIndex(args: { vectorStore: LibSQLVector; isDelete?: boolean }) {
+    return AiModelFactory.runVectorWrite(() => AiModelFactory.rebuildVectorIndexUnlocked(args));
+  }
+
+  private static async rebuildVectorIndexUnlocked({ vectorStore, isDelete = false }: { vectorStore: LibSQLVector; isDelete?: boolean }) {
     try {
       if (isDelete) {
         await vectorStore.deleteIndex({ indexName: 'blinko' });
