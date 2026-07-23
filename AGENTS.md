@@ -5,6 +5,8 @@ matches the work before changing the repository:
 
 - [`docs/agents/PROJECT.md`](docs/agents/PROJECT.md) — what bkemo is, current
   product behavior, architecture, data model, and local engineering conventions.
+- [`docs/agents/UI.md`](docs/agents/UI.md) — design tokens, `.bkemo` theme scope,
+  AI shell / dialog patterns, and what to avoid when changing UI.
 - [`docs/agents/DEPLOYMENT.md`](docs/agents/DEPLOYMENT.md) — local test workflow,
   production topology, deployment approval gate, release steps, and verification.
 - [`docs/plans/IOS.md`](docs/plans/IOS.md) — future iOS/macOS native, offline, OTA,

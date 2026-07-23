@@ -97,7 +97,7 @@ export const AiSetupOverview = observer(function AiSetupOverview() {
         <div>
           <div className="bk-ai-setup-kicker">AI configuration</div>
           <h2>Make AI usable before tuning it.</h2>
-          <p>Main chat is required for `/ai`. Embeddings unlock note search, card context, and discovery.</p>
+          <p>Main chat and an embedding model are both required before AI, card chat, or discovery can run.</p>
         </div>
         <div className="h-stack bk-ai-setup-actions">
           <Button size="sm" variant="flat" className="bk-ai-dialog-button is-secondary" onPress={() => aiStore.aiProviders.call().then(() => aiStore.allModels.call())}>
@@ -123,7 +123,7 @@ export const AiSetupOverview = observer(function AiSetupOverview() {
         <SetupItem
           title="Embedding model"
           ok={!!embeddingModel}
-          detail={embeddingModel ? `${embeddingModel.title} powers note retrieval.` : 'Without this, chat still works but cannot search your notes.'}
+          detail={embeddingModel ? `${embeddingModel.title} powers note retrieval.` : 'Required. AI stays blocked until an embedding model is selected and the index is rebuilt.'}
         />
         <SetupItem
           title="Optional models"

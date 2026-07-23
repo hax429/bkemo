@@ -8,7 +8,7 @@ export const conversationRouter = router({
   create: authProcedure
     .input(z.object({
       title: z.string().optional(),
-      scope: z.enum(['global', 'note']).optional(),
+      scope: z.enum(['global', 'note', 'analytics']).optional(),
       noteId: z.number().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
@@ -46,7 +46,7 @@ export const conversationRouter = router({
     .input(z.object({
       page: z.number().default(1),
       size: z.number().default(20),
-      scope: z.enum(['global', 'note']).optional(),
+      scope: z.enum(['global', 'note', 'analytics']).optional(),
       noteId: z.number().optional(),
     }))
     .query(async ({ input, ctx }) => {

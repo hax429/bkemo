@@ -3,11 +3,11 @@ import { Store } from './standard/base';
 import { PromiseCall, PromiseState } from './standard/PromiseState';
 import { api } from '@/lib/trpc';
 import { aiProviders, aiModels, mcpServers } from '@shared/lib/prismaZodType';
-import { DEFAULT_MODEL_TEMPLATES } from '@/components/BlinkoSettings/AiSetting/constants';
 import { RootStore } from './root';
 import { ToastPlugin } from './module/Toast/Toast';
 import i18n from '@/lib/i18n';
 import { defaultUrlTransform } from 'react-markdown';
+import { resolveModelProfile as resolveSharedModelProfile } from '@shared/lib/modelTemplates';
 
 export type McpServer = mcpServers;
 
@@ -145,40 +145,10 @@ export class AiSettingStore implements Store {
     };
 
     inferModelCapabilities = (modelName: string): ModelCapabilities => {
-        const name = modelName.toLowerCase();
-
-        // Try to find exact or partial match in DEFAULT_MODEL_TEMPLATES
-        const template = DEFAULT_MODEL_TEMPLATES.find(t =>
-            name.includes(t.modelKey.toLowerCase()) ||
-            t.modelKey.toLowerCase().includes(name)
-        );
-
-        if (template) {
-            // Return capabilities from template, ensuring all required fields are present
-            return {
-                inference: template.capabilities.inference || false,
-                tools: template.capabilities.tools || false,
-                image: template.capabilities.image || false,
-                imageGeneration: template.capabilities.imageGeneration || false,
-                video: template.capabilities.video || false,
-                audio: template.capabilities.audio || false,
-                embedding: template.capabilities.embedding || false,
-                rerank: template.capabilities.rerank || false
-            };
-        }
-
-        // Fallback: Default capabilities for unknown models
-        return {
-            inference: true,
-            tools: false,
-            image: false,
-            imageGeneration: false,
-            video: false,
-            audio: false,
-            embedding: false,
-            rerank: false
-        };
+        return resolveSharedModelProfile(modelName).capabilities;
     };
+
+    resolveModelProfile = (modelName: string) => resolveSharedModelProfile(modelName);
 
     // Getter methods for different model types
     get inferenceModels(): AiModel[] {

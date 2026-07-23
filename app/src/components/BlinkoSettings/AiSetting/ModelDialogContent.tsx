@@ -1,22 +1,27 @@
 import { observer } from 'mobx-react-lite';
+import type { CSSProperties } from 'react';
 import { Icon } from '@/components/Common/Iconify/icons';
 import { useTranslation } from 'react-i18next';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { RootStore } from '@/store';
 import { AiSettingStore, AiModel, ModelCapabilities, ProviderModel } from '@/store/aiSettingStore';
 import { DialogStore } from '@/store/module/Dialog';
-import { ToastPlugin } from '@/store/module/Toast/Toast';
-import { CAPABILITY_ICONS, CAPABILITY_LABELS, DEFAULT_MODEL_TEMPLATES } from './constants';
+import { CAPABILITY_ICONS, CAPABILITY_LABELS } from './constants';
 import { ProviderIcon, ModelIcon } from '@/components/BlinkoSettings/AiSetting/AIIcon';
+import { loadPrefs } from '@/lib/bkemoSettings';
 import { api } from '@/lib/trpc';
+import { resolveModelProfile } from '@shared/lib/modelTemplates';
 
-const formatTestResults = (result: any, t: (key: string) => string): string => {
-  const details: string[] = [];
-  if (result?.capabilities?.inference?.success) details.push(`Chat: ${result.capabilities.inference.response || ''}`);
-  if (result?.capabilities?.embedding?.success) details.push(`Embedding: ${result.capabilities.embedding.dimensions || 0} dimensions`);
-  if (result?.capabilities?.audio?.success) details.push(`Audio: ${result.capabilities.audio.message || ''}`);
-  return `${t('check-connect-success')} - ${details.join(', ')}`;
-};
+function dialogThemeAttrs() {
+  const prefs = loadPrefs();
+  const preset = prefs.theme === 'light'
+    ? 'light'
+    : (prefs.accent?.toLowerCase() === '#5e6ad2'
+      ? 'developer'
+      : (prefs.accent?.toLowerCase() === '#e2a96b' ? 'coffee' : 'dusk'));
+  const style: CSSProperties = prefs.accent ? { ['--accent' as any]: prefs.accent } : {};
+  return { theme: prefs.theme, density: prefs.density, preset, style };
+}
 
 interface ModelDialogContentProps {
   model?: AiModel;
@@ -51,6 +56,9 @@ export default observer(function ModelDialogContent({ model }: ModelDialogConten
   const aiSettingStore = RootStore.Get(AiSettingStore);
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const [editingModel, setEditingModel] = useState<Partial<AiModel>>(() => initialModel(aiSettingStore, model));
+  const [modelQuery, setModelQuery] = useState('');
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ tone: 'ok' | 'error'; title: string; detail: string } | null>(null);
 
   const selectedProvider = aiSettingStore.aiProviders.value?.find((provider) => provider.id === editingModel.providerId);
 
@@ -61,6 +69,15 @@ export default observer(function ModelDialogContent({ model }: ModelDialogConten
 
   const providerModels = getProviderModels();
 
+  const filteredModels = useMemo(() => {
+    const q = modelQuery.trim().toLowerCase();
+    if (!q) return providerModels;
+    return providerModels.filter((item) => (
+      item.id.toLowerCase().includes(q)
+      || item.name.toLowerCase().includes(q)
+    ));
+  }, [modelQuery, providerModels]);
+
   const fetchProviderModels = async () => {
     if (!selectedProvider) return;
     try {
@@ -70,23 +87,28 @@ export default observer(function ModelDialogContent({ model }: ModelDialogConten
     }
   };
 
-  const applyModelKey = (modelKey: string) => {
-    const providerModel = providerModels.find((item) => item.id === modelKey);
-    const defaultTemplate = DEFAULT_MODEL_TEMPLATES.find((item) => modelKey.toLowerCase().includes(item.modelKey.toLowerCase()));
-    const capabilities = defaultTemplate?.capabilities || aiSettingStore.inferModelCapabilities(modelKey);
-    const config = defaultTemplate?.config || {};
+  const applyModelKey = (modelKey: string, providerModel?: ProviderModel) => {
+    const matched = providerModel || providerModels.find((item) => item.id === modelKey);
+    const profile = resolveModelProfile(matched?.id || modelKey);
+    // Profile heuristics win over stale provider-list defaults.
+    const capabilities = profile.capabilities;
 
     setEditingModel((prev) => ({
       ...prev,
-      modelKey: providerModel?.id ?? modelKey,
-      title: providerModel?.name ?? prev.title ?? defaultTemplate?.title ?? modelKey,
-      capabilities: capabilities as ModelCapabilities,
+      modelKey: matched?.id ?? modelKey,
+      title: matched?.name || profile.title || prev.title || modelKey,
+      capabilities,
       config: {
         ...prev.config,
-        ...config,
+        ...profile.config,
+        embeddingDimensions: profile.config.embeddingDimensions
+          || Number(prev.config?.embeddingDimensions || 0)
+          || 0,
       },
     }));
+    setTestResult(null);
     if (errors.modelKey) setErrors((prev) => ({ ...prev, modelKey: '' }));
+    if (errors.capabilities) setErrors((prev) => ({ ...prev, capabilities: '' }));
   };
 
   const validateForm = (): boolean => {
@@ -103,19 +125,43 @@ export default observer(function ModelDialogContent({ model }: ModelDialogConten
   };
 
   const testModelConnection = async () => {
-    if (!editingModel.modelKey || !selectedProvider || !editingModel.capabilities) return;
-    RootStore.Get(ToastPlugin).promise(
-      api.ai.testConnect.mutate({
+    if (!editingModel.modelKey || !selectedProvider || !editingModel.capabilities || testing) return;
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const result: any = await api.ai.testConnect.mutate({
         providerId: selectedProvider.id,
         modelKey: editingModel.modelKey,
         capabilities: editingModel.capabilities,
-      }),
-      {
-        loading: t('loading'),
-        success: (result: any) => formatTestResults(result, t),
-        error: (error: any) => `${t('check-connect-error')}: ${error.message}`,
-      },
-    );
+      });
+      const dims = Number(result?.embeddingDimensions || result?.capabilities?.embedding?.dimensions || 0);
+      if (dims > 0) {
+        setEditingModel((prev) => ({
+          ...prev,
+          config: {
+            ...prev.config,
+            embeddingDimensions: dims,
+          },
+        }));
+      }
+      const details: string[] = [];
+      if (result?.capabilities?.inference?.success) details.push(`Chat ok${result.capabilities.inference.response ? `: ${result.capabilities.inference.response}` : ''}`);
+      if (result?.capabilities?.embedding?.success) details.push(`Embedding ok · ${dims || result.capabilities.embedding.dimensions || 0} dims`);
+      if (result?.capabilities?.audio?.error) details.push(`Audio: ${result.capabilities.audio.error}`);
+      setTestResult({
+        tone: 'ok',
+        title: 'Connection succeeded',
+        detail: details.join(' · ') || 'Provider accepted the model.',
+      });
+    } catch (error: any) {
+      setTestResult({
+        tone: 'error',
+        title: 'Connection failed',
+        detail: error?.message || 'Unknown error',
+      });
+    } finally {
+      setTesting(false);
+    }
   };
 
   const handleSaveModel = async () => {
@@ -128,8 +174,16 @@ export default observer(function ModelDialogContent({ model }: ModelDialogConten
     RootStore.Get(DialogStore).close();
   };
 
+  const theme = dialogThemeAttrs();
+
   return (
-    <div className="bk-ai-dialog bk-ai-model-dialog">
+    <div
+      className="bkemo bk-ai-dialog bk-ai-model-dialog"
+      data-theme={theme.theme}
+      data-density={theme.density}
+      data-preset={theme.preset}
+      style={theme.style}
+    >
       <button type="button" className="bk-ai-dialog-close" onClick={() => RootStore.Get(DialogStore).close()} aria-label="Close">
         <Icon icon="hugeicons:cancel-01" width="18" height="18" />
       </button>
@@ -157,6 +211,8 @@ export default observer(function ModelDialogContent({ model }: ModelDialogConten
                 value={editingModel.providerId ? String(editingModel.providerId) : ''}
                 onChange={(event) => {
                   setEditingModel((prev) => ({ ...prev, providerId: Number(event.currentTarget.value) }));
+                  setModelQuery('');
+                  setTestResult(null);
                   if (errors.providerId) setErrors((prev) => ({ ...prev, providerId: '' }));
                 }}
               >
@@ -188,7 +244,7 @@ export default observer(function ModelDialogContent({ model }: ModelDialogConten
           <div className="bk-ai-model-picker-head">
             <div>
               <div className="bk-ai-dialog-kicker">{t('model-selection')}</div>
-              <p>Use a provider model list when available, or type the model key manually.</p>
+              <p>Pick from the provider list when available, or type the model key manually.</p>
             </div>
             <button
               type="button"
@@ -218,24 +274,52 @@ export default observer(function ModelDialogContent({ model }: ModelDialogConten
           </label>
 
           {providerModels.length > 0 ? (
-            <div className="bk-ai-model-suggestions">
-              {providerModels.slice(0, 8).map((item) => (
-                <button key={item.id} type="button" onClick={() => applyModelKey(item.id)}>
-                  <ModelIcon modelName={item.id} className="w-4 h-4" />
-                  <span>{item.name}</span>
-                </button>
-              ))}
+            <div className="bk-ai-pick-panel is-inset">
+              <label className="bk-ai-search-field">
+                <Icon icon="hugeicons:search-01" width="15" height="15" className="bk-ai-search-icon" />
+                <input
+                  type="search"
+                  value={modelQuery}
+                  placeholder="Filter models…"
+                  onChange={(event) => setModelQuery(event.currentTarget.value)}
+                />
+              </label>
+
+              <div className="bk-ai-pick-list is-models">
+                {filteredModels.length === 0 ? (
+                  <div className="bk-ai-pick-empty">No models match “{modelQuery.trim()}”.</div>
+                ) : filteredModels.map((item) => {
+                  const selected = editingModel.modelKey === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      className={selected ? 'bk-ai-pick-model-row is-selected' : 'bk-ai-pick-model-row'}
+                      onClick={() => applyModelKey(item.id, item)}
+                    >
+                      <ModelIcon modelName={item.id} className="w-4 h-4" />
+                      <span className="bk-ai-pick-model-row-copy">
+                        <span className="bk-ai-pick-model-row-title">{item.name}</span>
+                        <span className="bk-ai-pick-model-row-key">{item.id}</span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          ) : null}
+          ) : (
+            <div className="bk-ai-pick-empty is-soft">
+              Refresh the model list from this provider, or type a model key above.
+            </div>
+          )}
         </div>
 
         <section className="bk-ai-capability-panel">
           <div className="bk-ai-model-picker-head">
             <div>
               <div className="bk-ai-dialog-kicker">{t('model-capabilities')}</div>
-              <p>{t('model-cap-desc')}</p>
+              <p>Auto-detected from the model id. Adjust if a capability is wrong.</p>
             </div>
-            <Icon icon="hugeicons:alert-circle" width="15" height="15" className="bk-ai-muted-icon" />
           </div>
 
           <div className="bk-ai-capability-grid">
@@ -254,6 +338,7 @@ export default observer(function ModelDialogContent({ model }: ModelDialogConten
                         [key]: !isSelected,
                       },
                     }));
+                    setTestResult(null);
                     if (errors.capabilities) setErrors((prev) => ({ ...prev, capabilities: '' }));
                   }}
                 >
@@ -279,9 +364,9 @@ export default observer(function ModelDialogContent({ model }: ModelDialogConten
             <div className="bk-ai-model-picker-head">
               <div>
                 <div className="bk-ai-dialog-kicker">Embedding dimensions</div>
-                <p>Leave this as 0 unless the provider needs an explicit vector size.</p>
+                <p>Required for rebuild. Auto-filled from known models or Test connection.</p>
               </div>
-              <span className="bk-ai-help-dot" title="Common values: 384, 512, 768, 1024, 1536, 3072.">?</span>
+              <span className="bk-ai-help-dot" title="Common values: 384, 512, 768, 1024, 1536, 2560, 3072, 4096.">?</span>
             </div>
             <label className="bk-native-field">
               <span>Dimensions</span>
@@ -305,6 +390,13 @@ export default observer(function ModelDialogContent({ model }: ModelDialogConten
             </label>
           </section>
         ) : null}
+
+        {testResult ? (
+          <div className={testResult.tone === 'ok' ? 'bk-ai-runtime-notice' : 'bk-ai-runtime-notice is-danger'}>
+            <div>{testResult.title}</div>
+            <p>{testResult.detail}</p>
+          </div>
+        ) : null}
       </div>
 
       <div className="bk-ai-dialog-footer">
@@ -312,10 +404,14 @@ export default observer(function ModelDialogContent({ model }: ModelDialogConten
           type="button"
           className="bk-native-button is-secondary"
           onClick={testModelConnection}
-          disabled={!editingModel.modelKey || !selectedProvider}
+          disabled={!editingModel.modelKey || !selectedProvider || testing}
         >
-          <Icon icon="hugeicons:connect" width="16" height="16" />
-          {t('test-connection')}
+          {testing ? (
+            <Icon icon="line-md:loading-twotone-loop" width="16" height="16" className="animate-spin" />
+          ) : (
+            <Icon icon="hugeicons:connect" width="16" height="16" />
+          )}
+          {testing ? 'Testing…' : t('test-connection')}
         </button>
         <div className="bk-ai-dialog-footer-actions">
           <button type="button" className="bk-native-button is-ghost" onClick={() => RootStore.Get(DialogStore).close()}>

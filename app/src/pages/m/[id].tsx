@@ -16,7 +16,14 @@ import '@/styles/bkemo-theme.css';
 
 const REACTION_PALETTE = ['👍', '❤️', '🎉', '👀', '🔥', '💯'];
 
-type PublicNote = { id: number; content: string; createdAt?: string | Date; tags?: any[]; attachments?: any[] } | null;
+type PublicNote = {
+  id: number;
+  content: string;
+  createdAt?: string | Date;
+  tags?: any[];
+  attachments?: any[];
+  aiHistory?: { role: string; content: string; createdAt?: string | Date }[];
+} | null;
 type Reaction = { emoji: string; count: number; reactedByMe: boolean };
 type Comment = {
   id: number;
@@ -245,6 +252,31 @@ const PublicMemoPage = observer(function PublicMemoPage() {
                 <span style={{ color: 'var(--accent)' }}>✦</span><span style={{ fontWeight: 600 }}>bkemo</span>
               </div>
             </div>
+
+            {Array.isArray(note.aiHistory) && note.aiHistory.length > 0 ? (
+              <div style={{ marginTop: 20, background: 'rgba(8,8,14,0.72)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 16, padding: 18 }}>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '.06em', color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', marginBottom: 12 }}>
+                  AI chat history
+                </div>
+                <div className="v-stack" style={{ gap: 12 }}>
+                  {note.aiHistory.map((message, index) => {
+                    const assistant = message.role === 'assistant';
+                    return (
+                      <article key={`${message.role}-${index}`} style={{ borderTop: index ? '1px solid rgba(255,255,255,0.08)' : undefined, paddingTop: index ? 12 : 0 }}>
+                        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: assistant ? 'var(--accent)' : 'rgba(255,255,255,0.55)', marginBottom: 6 }}>
+                          {assistant ? 'AI' : 'You'}
+                        </div>
+                        {assistant ? (
+                          <div style={{ color: '#fff' }}><MarkdownView content={message.content || ''} /></div>
+                        ) : (
+                          <div style={{ color: 'rgba(255,255,255,0.9)', whiteSpace: 'pre-wrap', fontSize: 14 }}>{message.content}</div>
+                        )}
+                      </article>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
 
             {/* reactions */}
             <div className="h-stack" style={{ gap: 8, marginTop: 16, flexWrap: 'wrap' }}>

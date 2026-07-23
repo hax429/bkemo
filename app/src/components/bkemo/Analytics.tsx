@@ -2,9 +2,11 @@ import { observer } from "mobx-react-lite";
 import type { CSSProperties } from "react";
 import { useEffect, useMemo, useState } from "react";
 import dayjs from "@/lib/dayjs";
-import { api } from "@/lib/trpc";
+import { api, streamApi } from "@/lib/trpc";
+import { aiDebugLog, describeAiError, isAiDebugEnabled } from "@/lib/aiDebug";
 import { RootStore } from "@/store";
 import { BlinkoStore } from "@/store/blinkoStore";
+import { MarkdownView } from "./MarkdownView";
 
 type DailyActivity = { date: string; count: number };
 type CharacterBucket = {
@@ -100,10 +102,14 @@ function ActivityHeatmap({
   activity,
   mode,
   year,
+  onYearChange,
+  maxYear,
 }: {
   activity: DailyActivity[];
   mode: "rolling" | "year";
   year: number;
+  onYearChange?: (year: number) => void;
+  maxYear?: number;
 }) {
   const { cells, monthLabels, max, weekCount } = useMemo(() => {
     const counts = new Map(activity.map((item) => [item.date, item.count]));
@@ -153,9 +159,30 @@ function ActivityHeatmap({
       <div className="bk-analytics-panel-heading">
         <div>
           <h2>
-            {mode === "year"
-              ? `Activity in ${year}`
-              : "Activity over the past 12 months"}
+            {mode === "year" ? "Activity" : "Activity over the past 12 months"}
+            {mode === "year" && onYearChange ? (
+              <span className="bk-analytics-year-nav" aria-label="Activity year">
+                <button
+                  type="button"
+                  aria-label="Previous year"
+                  disabled={year <= 1970}
+                  onClick={() => onYearChange(year - 1)}
+                >
+                  ‹
+                </button>
+                <span>{year}</span>
+                <button
+                  type="button"
+                  aria-label="Next year"
+                  disabled={year >= (maxYear ?? dayjs().year())}
+                  onClick={() => onYearChange(year + 1)}
+                >
+                  ›
+                </button>
+              </span>
+            ) : mode === "year" ? (
+              ` in ${year}`
+            ) : null}
           </h2>
           <p>Daily memo creation</p>
         </div>
@@ -364,32 +391,100 @@ function AIAnalyticsPanel({ blinko }: { blinko: BlinkoStore }) {
   const [kind, setKind] = useState<AIDiscoverKind>("default");
   const [range, setRange] = useState<AIDiscoverRange>("3m");
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<{ content: string; noteIds: number[]; noteCount: number } | null>(null);
+  const [followUpSending, setFollowUpSending] = useState(false);
+  const [followUp, setFollowUp] = useState("");
+  const [result, setResult] = useState<{
+    content: string;
+    noteIds: number[];
+    noteCount: number;
+    conversationId?: number;
+    cappedAt?: number;
+  } | null>(null);
+  const [messages, setMessages] = useState<{ role: string; content: string }[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const run = async (nextKind = kind) => {
     setKind(nextKind);
     setLoading(true);
     setError(null);
+    setFollowUp("");
     try {
-      const data = await api.ai.discover.mutate({ kind: nextKind, range } as any);
-      setResult(data as any);
+      const data = await api.ai.discover.mutate({ kind: nextKind, range } as any) as any;
+      setResult(data);
+      setMessages([
+        { role: "user", content: `Run ${nextKind} discovery for my notes.` },
+        { role: "assistant", content: data.content },
+      ]);
     } catch (cause: any) {
       console.error("[analytics-ai] discovery failed:", cause);
       setError(cause?.message || "AI discovery failed.");
+      setResult(null);
+      setMessages([]);
     } finally {
       setLoading(false);
     }
   };
 
   const save = async () => {
-    if (!result?.content) return;
+    const content = messages.filter((m) => m.role === "assistant").map((m) => m.content).join("\n\n---\n\n");
+    if (!content) return;
     await blinko.upsertNote.call({
-      content: `# AI ${kind === "value" ? "Value" : "Default"} Discovery\n\n${result.content}`,
-      references: result.noteIds,
+      content: `# AI ${kind === "value" ? "Value" : "Default"} Discovery\n\n${content}`,
+      references: result?.noteIds ?? [],
       showToast: true,
       refresh: true,
     } as any);
+  };
+
+  const sendFollowUp = async () => {
+    const question = followUp.trim();
+    if (!question || !result?.conversationId || followUpSending) return;
+    setFollowUpSending(true);
+    setError(null);
+    setFollowUp("");
+    const debug = isAiDebugEnabled();
+    const t0 = Date.now();
+    aiDebugLog("client:send", { scope: "analytics", conversationId: result.conversationId, question });
+    setMessages((prev) => [...prev, { role: "user", content: question }, { role: "assistant", content: "" }]);
+    try {
+      const stream = await streamApi.ai.chat.mutate({
+        conversationId: result.conversationId,
+        question,
+        scope: "analytics",
+        withOnline: false,
+        withRAG: false,
+        ...(debug ? { debug: true } : {}),
+      } as any);
+      let assistantContent = "";
+      for await (const event of stream as any) {
+        if (event?.debug) aiDebugLog(String(event.debug.phase || "server"), event.debug, "server");
+        if (event.delta) {
+          assistantContent += event.delta;
+          setMessages((prev) => {
+            const next = [...prev];
+            next[next.length - 1] = { role: "assistant", content: assistantContent };
+            return next;
+          });
+        }
+        if (event.assistantMessage?.content) {
+          setMessages((prev) => {
+            const next = [...prev];
+            next[next.length - 1] = { role: "assistant", content: event.assistantMessage.content };
+            return next;
+          });
+        }
+      }
+      aiDebugLog("client:done", { scope: "analytics", ms: Date.now() - t0, chars: assistantContent.length });
+    } catch (cause: any) {
+      const info = describeAiError(cause);
+      aiDebugLog(info.aborted ? "client:aborted" : "client:error", { ...info, ms: Date.now() - t0 }, "error", info.message);
+      console.error("[analytics-ai] follow-up failed:", cause);
+      setMessages((prev) => prev.slice(0, -2));
+      setFollowUp(question);
+      setError(cause?.message || "Follow-up failed.");
+    } finally {
+      setFollowUpSending(false);
+    }
   };
 
   return (
@@ -400,15 +495,15 @@ function AIAnalyticsPanel({ blinko }: { blinko: BlinkoStore }) {
           <p>Discover patterns across your bkemos with a reusable prompt pipeline.</p>
         </div>
         <div className="h-stack bk-ai-analytics-actions">
-          <select value={range} onChange={(event) => setRange(event.currentTarget.value as AIDiscoverRange)} disabled={loading}>
+          <select value={range} onChange={(event) => setRange(event.currentTarget.value as AIDiscoverRange)} disabled={loading || followUpSending}>
             <option value="3m">Recent 3 months</option>
             <option value="1y">Recent year</option>
             <option value="all">All notes</option>
           </select>
-          <button type="button" onClick={() => run("value")} disabled={loading}>
+          <button type="button" onClick={() => run("value")} disabled={loading || followUpSending}>
             Value discover
           </button>
-          <button type="button" onClick={() => run("default")} disabled={loading}>
+          <button type="button" onClick={() => run("default")} disabled={loading || followUpSending}>
             Default discover
           </button>
         </div>
@@ -419,11 +514,37 @@ function AIAnalyticsPanel({ blinko }: { blinko: BlinkoStore }) {
         <div className="bk-ai-discovery-result">
           <div className="h-stack bk-ai-discovery-meta">
             <span>{kind === "value" ? "Value discovery" : "Default discovery"}</span>
-            <span>{result.noteCount} notes</span>
+            <span>{result.noteCount} notes{result.cappedAt && result.noteCount >= result.cappedAt ? ` (capped at ${result.cappedAt})` : ""}</span>
             <span className="spacer" />
             <button type="button" onClick={save}>Save as bkemo</button>
           </div>
-          <div className="bk-ai-discovery-text">{result.content}</div>
+          <div className="v-stack bk-ai-discovery-thread">
+            {messages.map((message, index) => (
+              <article key={`${message.role}-${index}`} className={message.role === "assistant" ? "bk-ai-message is-assistant" : "bk-ai-message is-user"}>
+                <div className="bk-ai-message-role">{message.role === "assistant" ? "AI" : "You"}</div>
+                {message.role === "assistant" ? (
+                  <MarkdownView content={message.content || (followUpSending ? "Thinking..." : "")} />
+                ) : (
+                  <div className="bk-ai-user-content">{message.content}</div>
+                )}
+              </article>
+            ))}
+          </div>
+          <div className="h-stack bk-ai-composer">
+            <textarea
+              value={followUp}
+              onChange={(event) => setFollowUp(event.currentTarget.value)}
+              onKeyDown={(event) => {
+                if ((event.metaKey || event.ctrlKey) && event.key === "Enter") sendFollowUp();
+              }}
+              placeholder="Ask a follow-up about this discovery…"
+              rows={2}
+              disabled={followUpSending || !result.conversationId}
+            />
+            <button type="button" onClick={sendFollowUp} disabled={!followUp.trim() || followUpSending || !result.conversationId}>
+              {followUpSending ? "Sending" : "Send"}
+            </button>
+          </div>
         </div>
       ) : !loading ? (
         <div className="bk-ai-discovery-placeholder">Choose a range, then run value or default discovery.</div>
@@ -435,22 +556,28 @@ function AIAnalyticsPanel({ blinko }: { blinko: BlinkoStore }) {
 export const Analytics = observer(function Analytics() {
   const blinko = RootStore.Get(BlinkoStore);
   const currentYear = dayjs().year();
-  const [scope, setScope] = useState<AnalyticsScope>("month");
+  const [scope, setScope] = useState<AnalyticsScope>("all");
   const [selectedMonth, setSelectedMonth] = useState(dayjs().format("YYYY-MM"));
   const [selectedYear, setSelectedYear] = useState(currentYear);
+  const [activityYear, setActivityYear] = useState(currentYear);
   const [activity, setActivity] = useState<DailyActivity[]>([]);
   const [summary, setSummary] = useState<AnalyticsSummary>(EMPTY_SUMMARY);
+  const [distribution, setDistribution] = useState<AnalyticsSummary>(EMPTY_SUMMARY);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    // Keep heatmap year aligned when switching month/year scopes.
+    if (scope === "month") setActivityYear(dayjs(selectedMonth).year());
+    if (scope === "year") setActivityYear(selectedYear);
+  }, [scope, selectedMonth, selectedYear]);
+
+  useEffect(() => {
     let cancelled = false;
-    const activityYear =
-      scope === "month" ? dayjs(selectedMonth).year() : selectedYear;
     api.analytics.dailyNoteCount
       .mutate({
         utcOffsetMinutes: -new Date().getTimezoneOffset(),
-        mode: scope === "all" ? "rolling" : "year",
+        mode: "year",
         year: activityYear,
       })
       .then((data) => {
@@ -463,7 +590,7 @@ export const Analytics = observer(function Analytics() {
     return () => {
       cancelled = true;
     };
-  }, [scope, selectedMonth, selectedYear, blinko.updateTicker]);
+  }, [activityYear, blinko.updateTicker]);
 
   useEffect(() => {
     let cancelled = false;
@@ -494,6 +621,26 @@ export const Analytics = observer(function Analytics() {
     };
   }, [scope, selectedMonth, selectedYear, currentYear, blinko.updateTicker]);
 
+  useEffect(() => {
+    // Tag / character distributions always default to all-time, independent of the toolbar.
+    let cancelled = false;
+    api.analytics.monthlyStats
+      .mutate({
+        month: `${currentYear}-01`,
+        utcOffsetMinutes: -new Date().getTimezoneOffset(),
+        period: "all",
+      })
+      .then((data) => {
+        if (!cancelled) setDistribution(data);
+      })
+      .catch((cause) => {
+        console.error("[analytics] distribution load failed:", cause);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentYear, blinko.updateTicker]);
+
   const periodYear =
     scope === "month" ? dayjs(selectedMonth).year() : selectedYear;
   const monthDays = dayjs(selectedMonth).daysInMonth();
@@ -517,20 +664,20 @@ export const Analytics = observer(function Analytics() {
       : scope === "year"
         ? String(selectedYear)
         : "All active memos";
-  const periodDescription =
-    scope === "month"
-      ? "this month"
-      : scope === "year"
-        ? `in ${selectedYear}`
-        : "across all time";
-  const activityYear =
-    scope === "month" ? dayjs(selectedMonth).year() : selectedYear;
   const updateMonth = (value: string) =>
     setSelectedMonth(value || dayjs().format("YYYY-MM"));
   const updateYear = (value: string) => {
     const parsed = Number(value);
     if (Number.isInteger(parsed) && parsed >= 1970 && parsed <= currentYear) {
       setSelectedYear(parsed);
+    }
+  };
+  const bumpActivityYear = (nextYear: number) => {
+    const clamped = Math.min(currentYear, Math.max(1970, nextYear));
+    setActivityYear(clamped);
+    if (scope === "year") setSelectedYear(clamped);
+    if (scope === "month") {
+      setSelectedMonth(dayjs(selectedMonth).year(clamped).format("YYYY-MM"));
     }
   };
 
@@ -628,24 +775,26 @@ export const Analytics = observer(function Analytics() {
 
         <ActivityHeatmap
           activity={activity}
-          mode={scope === "all" ? "rolling" : "year"}
+          mode="year"
           year={activityYear}
+          maxYear={currentYear}
+          onYearChange={bumpActivityYear}
         />
-
-        <AIAnalyticsPanel blinko={blinko} />
 
         <div className="bk-analytics-distributions">
           <TagDistribution
-            tags={summary.tagStats ?? []}
-            periodDescription={periodDescription}
+            tags={distribution.tagStats ?? []}
+            periodDescription="across all time"
           />
           <CharacterDistribution
-            buckets={summary.characterStats}
-            total={summary.noteCount}
-            average={summary.averageCharacters}
-            periodDescription={periodDescription}
+            buckets={distribution.characterStats}
+            total={distribution.noteCount}
+            average={distribution.averageCharacters}
+            periodDescription="across all time"
           />
         </div>
+
+        <AIAnalyticsPanel blinko={blinko} />
 
         <div className="bk-analytics-timezone">
           Dates use your local timezone.

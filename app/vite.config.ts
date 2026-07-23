@@ -29,58 +29,58 @@ export default defineConfig({
         registerType: 'autoUpdate',
         includeAssets: ['icons/Square*.png'],
         manifest: {
-          name: 'Blinko',
-          short_name: 'Blinko',
+          name: 'bkemo',
+          short_name: 'bkemo',
           icons: [
             {
-              src: '/icons/Square30x30Logo.png',
+              src: '/icons/Square30x30Logo.png?v=cursor-b',
               sizes: '30x30',
               type: 'image/png'
             },
             {
-              src: '/icons/Square44x44Logo.png',
+              src: '/icons/Square44x44Logo.png?v=cursor-b',
               sizes: '44x44',
               type: 'image/png'
             },
             {
-              src: '/icons/Square71x71Logo.png',
+              src: '/icons/Square71x71Logo.png?v=cursor-b',
               sizes: '71x71',
               type: 'image/png'
             },
             {
-              src: '/icons/Square89x89Logo.png',
+              src: '/icons/Square89x89Logo.png?v=cursor-b',
               sizes: '89x89',
               type: 'image/png'
             },
             {
-              src: '/icons/Square107x107Logo.png',
+              src: '/icons/Square107x107Logo.png?v=cursor-b',
               sizes: '107x107',
               type: 'image/png'
             },
             {
-              src: '/icons/Square142x142Logo.png',
+              src: '/icons/Square142x142Logo.png?v=cursor-b',
               sizes: '142x142',
               type: 'image/png'
             },
             {
-              src: '/icons/Square150x150Logo.png',
+              src: '/icons/Square150x150Logo.png?v=cursor-b',
               sizes: '150x150',
               type: 'image/png'
             },
             {
-              src: '/icons/Square284x284Logo.png',
+              src: '/icons/Square284x284Logo.png?v=cursor-b',
               sizes: '284x284',
               type: 'image/png'
             },
             {
-              src: '/icons/Square310x310Logo.png',
+              src: '/icons/Square310x310Logo.png?v=cursor-b',
               sizes: '310x310',
               type: 'image/png',
               purpose: 'any maskable'
             }
           ],
-          theme_color: '#FFFFFF',
-          background_color: '#FFFFFF',
+          theme_color: '#14121a',
+          background_color: '#14121a',
           start_url: '/',
           display: 'standalone',
           orientation: 'portrait'

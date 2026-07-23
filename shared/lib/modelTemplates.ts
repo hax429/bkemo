@@ -76,6 +76,10 @@ export const DEFAULT_MODEL_TEMPLATES: ModelTemplate[] = [
   { modelKey: 'mistral-7b-instruct', title: 'Mistral 7B Instruct', capabilities: { inference: true } },
 
   // Qwen Models
+  { modelKey: 'qwen3-embedding-8b', title: 'Qwen3 Embedding 8B', capabilities: { embedding: true }, config: { embeddingDimensions: 4096 } },
+  { modelKey: 'qwen3-embedding-4b', title: 'Qwen3 Embedding 4B', capabilities: { embedding: true }, config: { embeddingDimensions: 2560 } },
+  { modelKey: 'qwen3-embedding-0.6b', title: 'Qwen3 Embedding 0.6B', capabilities: { embedding: true }, config: { embeddingDimensions: 1024 } },
+  { modelKey: 'qwen3-reranker', title: 'Qwen3 Reranker', capabilities: { rerank: true } },
   { modelKey: 'qwen2.5-72b-instruct', title: 'Qwen 2.5 72B Instruct', capabilities: { inference: true, tools: true } },
   { modelKey: 'qwen2.5-32b-instruct', title: 'Qwen 2.5 32B Instruct', capabilities: { inference: true, tools: true } },
   { modelKey: 'qwen2.5-14b-instruct', title: 'Qwen 2.5 14B Instruct', capabilities: { inference: true, tools: true } },
@@ -84,6 +88,14 @@ export const DEFAULT_MODEL_TEMPLATES: ModelTemplate[] = [
   { modelKey: 'qwen2-7b-instruct', title: 'Qwen 2 7B Instruct', capabilities: { inference: true, tools: true } },
   { modelKey: 'qwen-vl-plus', title: 'Qwen VL Plus', capabilities: { inference: true, image: true } },
   { modelKey: 'qwen-vl-max', title: 'Qwen VL Max', capabilities: { inference: true, image: true } },
+  { modelKey: 'qwen2.5-vl', title: 'Qwen 2.5 VL', capabilities: { inference: true, image: true, tools: true } },
+  { modelKey: 'qwen3-vl', title: 'Qwen3 VL', capabilities: { inference: true, image: true, tools: true } },
+
+  // SiliconFlow / BGE embeddings
+  { modelKey: 'bge-m3', title: 'BGE-M3', capabilities: { embedding: true }, config: { embeddingDimensions: 1024 } },
+  { modelKey: 'bge-large-en-v1.5', title: 'BGE Large EN', capabilities: { embedding: true }, config: { embeddingDimensions: 1024 } },
+  { modelKey: 'bge-large-zh-v1.5', title: 'BGE Large ZH', capabilities: { embedding: true }, config: { embeddingDimensions: 1024 } },
+  { modelKey: 'bce-embedding-base_v1', title: 'BCE Embedding Base', capabilities: { embedding: true }, config: { embeddingDimensions: 768 } },
 
   // MiniMax Models
   { modelKey: 'MiniMax-M2.7', title: 'MiniMax M2.7', capabilities: { inference: true, tools: true } },
@@ -91,9 +103,13 @@ export const DEFAULT_MODEL_TEMPLATES: ModelTemplate[] = [
   { modelKey: 'MiniMax-M2.5-highspeed', title: 'MiniMax M2.5 Highspeed', capabilities: { inference: true, tools: true } },
 
   // DeepSeek Models
+  { modelKey: 'deepseek-v4-pro', title: 'DeepSeek V4 Pro', capabilities: { inference: true, tools: true } },
+  { modelKey: 'deepseek-v4-flash', title: 'DeepSeek V4 Flash', capabilities: { inference: true, tools: true } },
+  { modelKey: 'deepseek-v3', title: 'DeepSeek V3', capabilities: { inference: true, tools: true } },
   { modelKey: 'deepseek-chat', title: 'DeepSeek Chat', capabilities: { inference: true, tools: true } },
   { modelKey: 'deepseek-coder', title: 'DeepSeek Coder', capabilities: { inference: true, tools: true } },
   { modelKey: 'deepseek-v2.5', title: 'DeepSeek V2.5', capabilities: { inference: true, tools: true } },
+  { modelKey: 'deepseek-r1', title: 'DeepSeek R1', capabilities: { inference: true, tools: true } },
 
   // Yi Models
   { modelKey: 'yi-large', title: 'Yi Large', capabilities: { inference: true, tools: true } },
@@ -169,36 +185,173 @@ export const DEFAULT_MODEL_TEMPLATES: ModelTemplate[] = [
   { modelKey: 'rerank-lite-1', title: 'Rerank Lite 1', capabilities: { rerank: true } }
 ];
 
-// Helper function to infer model capabilities from model name
-export function inferModelCapabilities(modelName: string): ModelCapabilities {
-  const name = modelName.toLowerCase();
-  const template = DEFAULT_MODEL_TEMPLATES.find(t =>
-    name.includes(t.modelKey.toLowerCase()) ||
-    t.modelKey.toLowerCase().includes(name)
-  );
+const EMPTY_CAPABILITIES: ModelCapabilities = {
+  inference: false,
+  tools: false,
+  image: false,
+  imageGeneration: false,
+  video: false,
+  audio: false,
+  embedding: false,
+  rerank: false,
+};
 
-  if (template) {
+function normalizeModelName(modelName: string) {
+  return modelName.trim().toLowerCase();
+}
+
+function modelBaseName(modelName: string) {
+  const name = normalizeModelName(modelName);
+  return name.includes('/') ? name.split('/').pop() || name : name;
+}
+
+function capabilitiesFromPartial(partial: Partial<ModelCapabilities> = {}): ModelCapabilities {
+  return {
+    inference: !!partial.inference,
+    tools: !!partial.tools,
+    image: !!partial.image,
+    imageGeneration: !!partial.imageGeneration,
+    video: !!partial.video,
+    audio: !!partial.audio,
+    embedding: !!partial.embedding,
+    rerank: !!partial.rerank,
+  };
+}
+
+/** Prefer the longest concrete template match; avoid weak reverse includes. */
+export function findModelTemplate(modelName: string): ModelTemplate | undefined {
+  const name = normalizeModelName(modelName);
+  const base = modelBaseName(modelName);
+  const matches = DEFAULT_MODEL_TEMPLATES.filter((template) => {
+    const key = template.modelKey.toLowerCase();
+    return name === key
+      || name.endsWith(`/${key}`)
+      || name.includes(key)
+      || base === key
+      || base.includes(key);
+  });
+  matches.sort((a, b) => b.modelKey.length - a.modelKey.length);
+  return matches[0];
+}
+
+export function inferEmbeddingDimensions(modelName: string): number | undefined {
+  const name = normalizeModelName(modelName);
+  const templateDims = findModelTemplate(modelName)?.config?.embeddingDimensions;
+  if (templateDims) return templateDims;
+
+  if (name.includes('qwen3-embedding-8b') || name.includes('qwen3-embedding:8b')) return 4096;
+  if (name.includes('qwen3-embedding-4b') || name.includes('qwen3-embedding:4b')) return 2560;
+  if (name.includes('qwen3-embedding-0.6b') || name.includes('qwen3-embedding:0.6b')) return 1024;
+  if (name.includes('text-embedding-3-large')) return 3072;
+  if (name.includes('text-embedding-3-small') || name.includes('text-embedding-ada')) return 1536;
+  if (name.includes('bge-m3') || name.includes('voyage-3') || name.includes('bge-large') || name.includes('mxbai-embed-large')) return 1024;
+  if (name.includes('voyage-3-lite')) return 512;
+  if (name.includes('bge') || name.includes('nomic-embed') || name.includes('bce-embedding') || name.includes('text-embedding-004')) return 768;
+  if (name.includes('all-minilm')) return 384;
+  return undefined;
+}
+
+function heuristicCapabilities(modelName: string): ModelCapabilities | null {
+  const name = normalizeModelName(modelName);
+  const base = modelBaseName(modelName);
+
+  if (
+    name.includes('embedding')
+    || name.includes('embed-')
+    || /(^|\/|:)(bge|e5|gte|bce-embedding|nomic-embed|mxbai-embed)/.test(name)
+    || base.startsWith('text-embedding')
+  ) {
+    return { ...EMPTY_CAPABILITIES, embedding: true };
+  }
+
+  if (name.includes('rerank')) {
+    return { ...EMPTY_CAPABILITIES, rerank: true };
+  }
+
+  if (
+    name.includes('dall-e')
+    || name.includes('stable-diffusion')
+    || name.includes('flux')
+    || name.includes('image-generation')
+    || /(^|\/)(sdxl|kolors)/.test(name)
+  ) {
+    return { ...EMPTY_CAPABILITIES, imageGeneration: true };
+  }
+
+  if (
+    name.includes('tts')
+    || name.includes('whisper')
+    || name.includes('speech')
+    || name.includes('audio')
+  ) {
+    return { ...EMPTY_CAPABILITIES, audio: true };
+  }
+
+  if (
+    name.includes('-vl')
+    || name.includes('vision')
+    || name.includes('llava')
+    || name.includes('gpt-4o')
+    || name.includes('gemini-1.5')
+    || name.includes('gemini-2')
+  ) {
     return {
-      inference: template.capabilities.inference || false,
-      tools: template.capabilities.tools || false,
-      image: template.capabilities.image || false,
-      imageGeneration: template.capabilities.imageGeneration || false,
-      video: template.capabilities.video || false,
-      audio: template.capabilities.audio || false,
-      embedding: template.capabilities.embedding || false,
-      rerank: template.capabilities.rerank || false
+      ...EMPTY_CAPABILITIES,
+      inference: true,
+      tools: true,
+      image: true,
+      video: name.includes('gemini'),
+      audio: name.includes('gemini'),
     };
   }
 
-  // Default: unknown models assumed to have inference capability
+  if (
+    name.includes('deepseek')
+    || name.includes('qwen')
+    || name.includes('claude')
+    || name.includes('gpt-')
+    || name.includes('o1')
+    || name.includes('o3')
+    || name.includes('o4')
+    || name.includes('llama')
+    || name.includes('mistral')
+    || name.includes('gemma')
+    || name.includes('minimax')
+    || name.includes('yi-')
+    || name.includes('command')
+  ) {
+    return {
+      ...EMPTY_CAPABILITIES,
+      inference: true,
+      tools: !name.includes('instant') && !name.includes('tiny'),
+    };
+  }
+
+  return null;
+}
+
+export function resolveModelProfile(modelName: string): {
+  capabilities: ModelCapabilities;
+  config: { embeddingDimensions?: number };
+  title?: string;
+} {
+  const heuristic = heuristicCapabilities(modelName);
+  const template = findModelTemplate(modelName);
+  const capabilities = heuristic || (template
+    ? capabilitiesFromPartial(template.capabilities)
+    : { ...EMPTY_CAPABILITIES, inference: true });
+  const embeddingDimensions = capabilities.embedding
+    ? (template?.config?.embeddingDimensions || inferEmbeddingDimensions(modelName))
+    : undefined;
+
   return {
-    inference: true,
-    tools: false,
-    image: false,
-    imageGeneration: false,
-    video: false,
-    audio: false,
-    embedding: false,
-    rerank: false
+    capabilities,
+    config: embeddingDimensions ? { embeddingDimensions } : {},
+    title: template?.title,
   };
+}
+
+/** Infer model capabilities from model name / provider id. */
+export function inferModelCapabilities(modelName: string): ModelCapabilities {
+  return resolveModelProfile(modelName).capabilities;
 }

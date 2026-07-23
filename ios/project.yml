@@ -1,0 +1,74 @@
+name: bkemo
+options:
+  bundleIdPrefix: me.hax429.bk
+  deploymentTarget:
+    iOS: "17.0"
+  developmentTeam: 5L7AP54366
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+    DEVELOPMENT_TEAM: 5L7AP54366
+    CODE_SIGN_STYLE: Automatic
+packages:
+  BkemoShared:
+    path: Shared
+targets:
+  bkemo:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: bkemo
+    info:
+      path: bkemo/Info.plist
+    entitlements:
+      path: bkemo/bkemo.entitlements
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: me.hax429.bk
+        PRODUCT_NAME: bkemo
+        INFOPLIST_FILE: bkemo/Info.plist
+        CODE_SIGN_ENTITLEMENTS: bkemo/bkemo.entitlements
+    dependencies:
+      - package: BkemoShared
+    infoPlist: bkemo/Info.plist
+  ShareExtension:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: ShareExtension
+    info:
+      path: ShareExtension/Info.plist
+    entitlements:
+      path: ShareExtension/ShareExtension.entitlements
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: me.hax429.bk.ShareExtension
+        PRODUCT_NAME: bkemoShare
+        INFOPLIST_FILE: ShareExtension/Info.plist
+        CODE_SIGN_ENTITLEMENTS: ShareExtension/ShareExtension.entitlements
+    dependencies:
+      - package: BkemoShared
+      - target: bkemo
+  Widget:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: Widget
+    info:
+      path: Widget/Info.plist
+    entitlements:
+      path: Widget/Widget.entitlements
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: me.hax429.bk.Widget
+        PRODUCT_NAME: bkemoWidget
+        INFOPLIST_FILE: Widget/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Widget/Widget.entitlements
+    dependencies:
+      - package: BkemoShared
+      - target: bkemo

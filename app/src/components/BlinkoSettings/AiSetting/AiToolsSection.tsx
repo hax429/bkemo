@@ -10,6 +10,12 @@ import { api } from '@/lib/trpc';
 import { Item } from '../Item';
 import { useMediaQuery } from 'usehooks-ts';
 
+/**
+ * Tavily / web tools settings.
+ * Hidden from Settings → AI for now; keep this module ready so global AI chat
+ * can re-enable `withOnline` when the section is restored. Note/card chat must
+ * never use Tavily.
+ */
 export const AiToolsSection = observer(() => {
   const { t } = useTranslation();
   const blinko = RootStore.Get(BlinkoStore);

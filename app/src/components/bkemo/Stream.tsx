@@ -671,11 +671,15 @@ export const Stream = observer(function Stream({ onOpen, onNew, onExpand, tag }:
   };
   const trash = async (ids: number[]) => { await blinko.trashNote.call({ ids }); removeLocal(ids); };
 
-  const share = async (n: Note) => {
+  const share = async (n: Note, includeAiHistory = false) => {
     try {
-      const res: any = await blinko.shareNote.call({ id: n.id!, isCancel: false });
+      const res: any = await blinko.shareNote.call({ id: n.id!, isCancel: false, includeAiHistory });
       if (res?.shareEncryptedUrl) {
         (n as any).shareEncryptedUrl = res.shareEncryptedUrl;
+        (n as any).metadata = {
+          ...((n as any).metadata && typeof (n as any).metadata === 'object' ? (n as any).metadata : {}),
+          shareIncludeAiHistory: includeAiHistory,
+        };
         blinko.updateTicker++;
         const url = `${window.location.origin}/m/${res.shareEncryptedUrl}`;
         navigator.clipboard?.writeText(url);
@@ -689,6 +693,11 @@ export const Stream = observer(function Stream({ onOpen, onNew, onExpand, tag }:
     try {
       await blinko.shareNote.call({ id: n.id!, isCancel: true });
       (n as any).shareEncryptedUrl = null;
+      if ((n as any).metadata && typeof (n as any).metadata === 'object') {
+        const next = { ...(n as any).metadata };
+        delete next.shareIncludeAiHistory;
+        (n as any).metadata = next;
+      }
       blinko.updateTicker++;
     } catch (e) {
       console.error('[stream] unshare failed:', e);
@@ -698,6 +707,7 @@ export const Stream = observer(function Stream({ onOpen, onNew, onExpand, tag }:
   const menuItems = (n: Note): MenuItem[] => {
     const isShared = !!(n as any).shareEncryptedUrl;
     const shareUrl = isShared ? `${window.location.origin}/m/${(n as any).shareEncryptedUrl}` : '';
+    const aiShared = !!(n as any).metadata?.shareIncludeAiHistory;
 
     return [
       { label: 'Edit', icon: '✎', onClick: () => onOpen?.(n) },
@@ -706,23 +716,37 @@ export const Stream = observer(function Stream({ onOpen, onNew, onExpand, tag }:
       { label: 'Copy text', icon: '⧉', onClick: () => navigator.clipboard?.writeText(n.content ?? '') },
       { label: 'Select', icon: '☑', onClick: () => toggleSelect(n.id!) },
       { type: 'divider' },
-      isShared ? {
-        label: 'Copy link',
-        icon: '⧉',
-        onClick: () => {
-          navigator.clipboard?.writeText(shareUrl);
-        }
-      } : {
-        label: 'Share',
-        icon: '↗',
-        onClick: () => share(n)
-      },
-      ...(isShared ? [{
-        label: 'Unshare',
-        icon: '✕',
-        danger: true,
-        onClick: () => unshare(n)
-      }] : []),
+      ...(isShared ? ([
+        {
+          label: 'Copy link',
+          icon: '⧉',
+          onClick: () => {
+            navigator.clipboard?.writeText(shareUrl);
+          }
+        },
+        {
+          label: aiShared ? 'Share without AI chat' : 'Include AI chat in share',
+          icon: '✦',
+          onClick: () => share(n, !aiShared),
+        },
+        {
+          label: 'Unshare',
+          icon: '✕',
+          danger: true,
+          onClick: () => unshare(n)
+        },
+      ] as MenuItem[]) : ([
+        {
+          label: 'Share',
+          icon: '↗',
+          onClick: () => share(n, false)
+        },
+        {
+          label: 'Share with AI chat',
+          icon: '✦',
+          onClick: () => share(n, true)
+        },
+      ] as MenuItem[])),
       { type: 'divider' },
       { label: 'Archive', icon: '▦', onClick: () => archive([n.id!]) },
       { label: 'Trash', icon: '⌫', danger: true, onClick: () => trash([n.id!]) },

@@ -631,6 +631,11 @@ export const noteRouter = router({
                 .nullable()
                 .optional(),
               reactions: z.array(z.any()).optional(),
+              aiHistory: z.array(z.object({
+                role: z.string(),
+                content: z.string(),
+                createdAt: z.date().optional(),
+              })).optional(),
               _count: z.object({
                 comments: z.number(),
                 histories: z.number(),
@@ -712,9 +717,36 @@ export const noteRouter = router({
           throw new Error('Password error');
         }
       }
+
+      const meta = (note.metadata && typeof note.metadata === 'object' && !Array.isArray(note.metadata))
+        ? note.metadata as Record<string, unknown>
+        : {};
+      let aiHistory: { role: string; content: string; createdAt?: Date }[] | undefined;
+      if (meta.shareIncludeAiHistory === true) {
+        const conversation = await prisma.conversation.findFirst({
+          where: {
+            noteId: note.id,
+            scope: 'note',
+            accountId: note.accountId ?? undefined,
+          },
+          orderBy: { updatedAt: 'desc' },
+          include: {
+            messages: {
+              where: { role: { in: ['user', 'assistant'] } },
+              orderBy: { createdAt: 'asc' },
+              select: { role: true, content: true, createdAt: true },
+            },
+          },
+        });
+        aiHistory = conversation?.messages ?? [];
+      }
+
       return {
         hasPassword: !!note.sharePassword,
-        data: note,
+        data: {
+          ...note,
+          ...(aiHistory ? { aiHistory } : {}),
+        },
       };
     }),
   detail: authProcedure
@@ -1307,10 +1339,8 @@ export const noteRouter = router({
         }
 
         if (config?.embeddingModelId) {
+          // Index note text only — images and file attachments are excluded from embeddings.
           AiService.embeddingUpsert({ id: note.id, content: note.content, type: 'update', createTime: note.createdAt!, updatedAt: note.updatedAt });
-          for (const attachment of attachments) {
-            AiService.embeddingInsertAttachments({ id: note.id, updatedAt: note.updatedAt, filePath: attachment.path });
-          }
         }
 
         SendWebhook({ ...note, attachments }, isRecycle ? 'delete' : 'update', ctx);
@@ -1348,10 +1378,8 @@ export const noteRouter = router({
           }
 
           if (config?.embeddingModelId) {
+            // Index note text only — images and file attachments are excluded from embeddings.
             AiService.embeddingUpsert({ id: note.id, content: note.content, type: 'insert', createTime: note.createdAt!, updatedAt: note.updatedAt });
-            for (const attachment of attachments) {
-              AiService.embeddingInsertAttachments({ id: note.id, updatedAt: note.updatedAt, filePath: attachment.path });
-            }
           }
 
           // Process audio attachments if voice model is configured
@@ -1436,11 +1464,13 @@ export const noteRouter = router({
         isCancel: z.boolean().default(false),
         password: z.string().optional(),
         expireAt: z.date().optional(),
+        /** When true, public share includes this note's AI chat history. Default false. */
+        includeAiHistory: z.boolean().optional(),
       }),
     )
     .output(notesSchema)
     .mutation(async function ({ input, ctx }) {
-      const { id, isCancel, password, expireAt } = input;
+      const { id, isCancel, password, expireAt, includeAiHistory } = input;
 
       const generateShareId = async () => {
         return `${await getBkemoSiteId()}-${randomBytes(8).toString('base64url')}`;
@@ -1457,7 +1487,12 @@ export const noteRouter = router({
         throw new Error('Note not found');
       }
 
+      const prevMeta = (note.metadata && typeof note.metadata === 'object' && !Array.isArray(note.metadata))
+        ? note.metadata as Record<string, unknown>
+        : {};
+
       if (isCancel) {
+        const { shareIncludeAiHistory: _drop, ...restMeta } = prevMeta;
         return await prisma.notes.update({
           where: { id },
           data: {
@@ -1465,6 +1500,7 @@ export const noteRouter = router({
             sharePassword: '',
             shareExpiryDate: null,
             shareEncryptedUrl: null,
+            metadata: restMeta,
           },
         });
       } else {
@@ -1472,6 +1508,7 @@ export const noteRouter = router({
         while (await prisma.notes.findFirst({ where: { shareEncryptedUrl: shareId, id: { not: id } }, select: { id: true } })) {
           shareId = await generateShareId();
         }
+        const nextIncludeAi = includeAiHistory ?? Boolean(prevMeta.shareIncludeAiHistory);
         return await prisma.notes.update({
           where: { id },
           data: {
@@ -1479,6 +1516,10 @@ export const noteRouter = router({
             shareEncryptedUrl: shareId,
             sharePassword: password,
             shareExpiryDate: expireAt,
+            metadata: {
+              ...prevMeta,
+              shareIncludeAiHistory: nextIncludeAi,
+            },
           },
         });
       }

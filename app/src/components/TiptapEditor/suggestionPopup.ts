@@ -1,9 +1,25 @@
 /**
- * Minimal floating popup renderer for @tiptap/suggestion — no tippy dependency.
- * Renders a positioned list with keyboard (↑/↓/Enter/Esc) + mouse selection,
- * styled with the bkemo design tokens. Used by the slash menu and #tag autocomplete.
+ * Minimal floating popup renderer for @tiptap/suggestion — no tippy / HeroUI.
+ * Portaled outside the app root, so it must carry `.bkemo` theme attrs (see UI.md).
  */
+import { loadPrefs } from '@/lib/bkemoSettings';
+
 export type SuggestItem = { id: string; label: string; hint?: string };
+
+function themeAttrs() {
+  const prefs = loadPrefs();
+  const preset = prefs.theme === 'light'
+    ? 'light'
+    : (prefs.accent?.toLowerCase() === '#5e6ad2'
+      ? 'developer'
+      : (prefs.accent?.toLowerCase() === '#e2a96b' ? 'coffee' : 'dusk'));
+  return {
+    theme: prefs.theme,
+    density: prefs.density,
+    preset,
+    accent: prefs.accent,
+  };
+}
 
 export function makeSuggestionRender(opts?: { emptyText?: string }) {
   let el: HTMLDivElement | null = null;
@@ -14,7 +30,7 @@ export function makeSuggestionRender(opts?: { emptyText?: string }) {
 
   const highlight = () => {
     rows.forEach((row, i) => {
-      row.style.background = i === selected ? 'var(--hover)' : 'transparent';
+      row.classList.toggle('is-active', i === selected);
     });
   };
 
@@ -26,22 +42,24 @@ export function makeSuggestionRender(opts?: { emptyText?: string }) {
     rows = [];
     if (items.length === 0) {
       const empty = document.createElement('div');
+      empty.className = 'bk-suggest-empty';
       empty.textContent = opts?.emptyText ?? 'No matches';
-      empty.style.cssText = 'padding:8px 10px;color:var(--fg-3);font-size:12px;font-family:var(--font-mono)';
       el.appendChild(empty);
       return;
     }
     items.forEach((it, i) => {
-      const row = document.createElement('div');
-      row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:4px;cursor:pointer;font-size:13px;color:var(--fg)';
+      const row = document.createElement('button');
+      row.type = 'button';
+      row.className = 'bk-suggest-row';
+      row.setAttribute('role', 'option');
       const label = document.createElement('span');
+      label.className = 'bk-suggest-label';
       label.textContent = it.label;
-      label.style.flex = '1';
       row.appendChild(label);
       if (it.hint) {
         const hint = document.createElement('span');
+        hint.className = 'bk-suggest-hint';
         hint.textContent = it.hint;
-        hint.style.cssText = 'color:var(--fg-3);font-size:11px;font-family:var(--font-mono)';
         row.appendChild(hint);
       }
       // mousedown (not click) fires before the editor blurs; preventDefault keeps focus.
@@ -55,11 +73,22 @@ export function makeSuggestionRender(opts?: { emptyText?: string }) {
 
   const position = (rect: DOMRect | null) => {
     if (!el || !rect) return;
-    // keep within viewport-ish: flip above if near the bottom
     const below = rect.bottom + 6;
     const maxTop = window.innerHeight - 300;
     el.style.left = `${Math.min(rect.left, window.innerWidth - 340)}px`;
     el.style.top = `${below > maxTop ? Math.max(8, rect.top - 290) : below}px`;
+  };
+
+  const mount = () => {
+    const theme = themeAttrs();
+    el = document.createElement('div');
+    el.className = 'bkemo bk-suggest-menu';
+    el.setAttribute('role', 'listbox');
+    el.dataset.theme = theme.theme;
+    el.dataset.density = theme.density;
+    el.dataset.preset = theme.preset;
+    if (theme.accent) el.style.setProperty('--accent', theme.accent);
+    document.body.appendChild(el);
   };
 
   return {
@@ -67,10 +96,7 @@ export function makeSuggestionRender(opts?: { emptyText?: string }) {
       items = props.items;
       selected = 0;
       command = (item) => props.command(item);
-      el = document.createElement('div');
-      el.className = 'bkemo';
-      el.style.cssText = 'position:fixed;z-index:9999;min-width:200px;max-width:320px;max-height:280px;overflow:auto;padding:4px;background:var(--bg);border:1px solid var(--border-2);border-radius:var(--radius-lg);box-shadow:0 12px 32px rgba(0,0,0,0.4)';
-      document.body.appendChild(el);
+      mount();
       buildList();
       position(props.clientRect?.());
     },
@@ -78,6 +104,7 @@ export function makeSuggestionRender(opts?: { emptyText?: string }) {
       items = props.items;
       selected = Math.min(selected, Math.max(0, items.length - 1));
       command = (item) => props.command(item);
+      if (!el) mount();
       buildList();
       position(props.clientRect?.());
     },

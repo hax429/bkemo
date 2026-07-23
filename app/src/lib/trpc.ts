@@ -17,6 +17,27 @@ const headers = () => {
 };
 
 
+/** Batch/mutation timeout (uploads). Streaming AI chats use a longer budget. */
+const TRPC_BATCH_TIMEOUT_MS = 5 * 60 * 1000;
+const TRPC_STREAM_TIMEOUT_MS = 15 * 60 * 1000;
+
+function timedFetch(timeoutMs: number) {
+  return (url: RequestInfo | URL, options?: RequestInit) => {
+    const timeout = AbortSignal.timeout(timeoutMs);
+    const incoming = options?.signal;
+    let signal: AbortSignal = timeout;
+    if (incoming) {
+      if (typeof AbortSignal.any === 'function') {
+        signal = AbortSignal.any([timeout, incoming]);
+      } else {
+        // Fallback: prefer timeout; callers rarely pass their own signal here.
+        signal = timeout;
+      }
+    }
+    return fetch(url, { ...options, signal });
+  };
+}
+
 const getLinks = (useStream = false) => {
   try {
     if (useStream) {
@@ -24,13 +45,8 @@ const getLinks = (useStream = false) => {
         url: getBlinkoEndpoint('/api/trpc'),
         transformer: superjson,
         headers,
-        // Increase timeout for large file uploads (5 minutes)
-        fetch(url, options) {
-          return fetch(url, {
-            ...options,
-            signal: AbortSignal.timeout(5 * 60 * 1000) // 5 minutes
-          });
-        }
+        // AI chat streams can idle during provider TTFT; 5m was aborting as BodyStreamBuffer.
+        fetch: timedFetch(TRPC_STREAM_TIMEOUT_MS),
       });
     }
 
@@ -42,26 +58,14 @@ const getLinks = (useStream = false) => {
         url: getBlinkoEndpoint('/api/trpc'),
         transformer: superjson,
         headers,
-        // Increase timeout for large file uploads (5 minutes)
-        fetch(url, options) {
-          return fetch(url, {
-            ...options,
-            signal: AbortSignal.timeout(5 * 60 * 1000) // 5 minutes
-          });
-        }
+        fetch: timedFetch(TRPC_BATCH_TIMEOUT_MS),
       }),
       // when condition is false, use batching
       false: httpBatchLink({
         url: getBlinkoEndpoint('/api/trpc'),
         transformer: superjson,
         headers,
-        // Increase timeout for large file uploads (5 minutes)
-        fetch(url, options) {
-          return fetch(url, {
-            ...options,
-            signal: AbortSignal.timeout(5 * 60 * 1000) // 5 minutes
-          });
-        }
+        fetch: timedFetch(TRPC_BATCH_TIMEOUT_MS),
       }),
     });
   } catch (error) {
@@ -74,26 +78,14 @@ const getLinks = (useStream = false) => {
         url: ('/api/trpc'),
         transformer: superjson,
         headers,
-        // Increase timeout for large file uploads (5 minutes)
-        fetch(url, options) {
-          return fetch(url, {
-            ...options,
-            signal: AbortSignal.timeout(5 * 60 * 1000) // 5 minutes
-          });
-        }
+        fetch: timedFetch(TRPC_BATCH_TIMEOUT_MS),
       }),
       // when condition is false, use batching
       false: httpBatchLink({
         url: ('/api/trpc'),
         transformer: superjson,
         headers,
-        // Increase timeout for large file uploads (5 minutes)
-        fetch(url, options) {
-          return fetch(url, {
-            ...options,
-            signal: AbortSignal.timeout(5 * 60 * 1000) // 5 minutes
-          });
-        }
+        fetch: timedFetch(TRPC_BATCH_TIMEOUT_MS),
       }),
     });;
   }

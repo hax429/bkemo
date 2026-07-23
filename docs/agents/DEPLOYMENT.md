@@ -22,7 +22,9 @@ edit -> local server -> focused checks -> user acceptance
 |---|---|---|
 | Local | `/Users/hax429/Developer/bkemo` | Development and acceptance testing |
 | Local app | `http://localhost:1111` | Full web/backend process |
-| Local database | PostgreSQL on port `5433` | Development data |
+| Database | Neon PostgreSQL | Preferred development and production data |
+| Attachments | Cloudflare R2 | Preferred object storage (`objectStorage=s3`) |
+| Local bootstrap DB | PostgreSQL on port `5433` | Fallback only before Neon attach |
 | Source | `github.com/hax429/bkemo`, normally `main` | Code delivered to production |
 | Production host | SSH alias `Oracle` | Ubuntu server |
 | Production checkout | `/home/ubuntu/services/notes/bkemo` | Source-built live checkout |
@@ -30,39 +32,44 @@ edit -> local server -> focused checks -> user acceptance
 | Public edge | Cloudflare and nginx | Cloudflare proxies to nginx, which terminates TLS and forwards `bk.hax429.me` to `localhost:1111` |
 | Public service | `https://bk.hax429.me` | Web application and API endpoint used by native clients |
 
-Production is a source deployment, not a bkemo Docker image. PostgreSQL and
-runtime data are managed separately from the Git checkout. The active checkout
-uses `.blinko` for uploads, plugins, vectors, and database dumps; on the current
-host it may resolve through a symlink, so inspect the target before maintenance.
+Production is a source deployment, not a bkemo Docker image. Neon and R2 hold
+application data and attachments; the checkout still uses `.blinko` for plugins,
+vectors, dumps, and any remaining local files. On the current host that path may
+resolve through a symlink, so inspect the target before maintenance.
 
 ## 1. Develop locally
 
 Start the full stack:
 
 ```bash
-./run-dev.sh
+./scripts/run-dev.sh
 ```
 
-Other supported modes:
+Other supported modes (local bootstrap database only; never for attached Neon):
 
 ```bash
-./run-dev.sh --reset   # destructive: recreate the local development database
-./run-dev.sh --stop    # stop local PostgreSQL
+./scripts/run-dev.sh --reset   # destructive: recreate the local bootstrap database
+./scripts/run-dev.sh --stop    # stop local PostgreSQL
 ```
 
-`run-dev.sh` intentionally remains in the foreground. If the user needs the
-server to persist beyond an agent command session, use a detached `screen`
-session and verify the HTTP endpoint independently:
+When Neon is already attached through the development-only workflow, the
+launcher skips local Postgres, runs `prisma migrate deploy` against the direct
+Neon endpoint, and keeps existing accounts. Configure Cloudflare R2 in
+Settings → Storage, then use Verify active setup.
+
+`./scripts/run-dev.sh` intentionally remains in the foreground. If the user
+needs the server to persist beyond an agent command session, use a detached
+`screen` session and verify the HTTP endpoint independently:
 
 ```bash
 screen -ls
-screen -dmS bkemo-dev ./run-dev.sh
+screen -dmS bkemo-dev ./scripts/run-dev.sh
 curl -sS -o /dev/null -w 'HTTP %{http_code}\n' http://localhost:1111/
 ```
 
-PostgreSQL uses shared memory. If it fails in a sandbox with a `shmat(...):
-Operation not permitted` error, rerun with the required host permission; do not
-rewrite the launcher to work around the sandbox.
+Local bootstrap PostgreSQL uses shared memory. If it fails in a sandbox with a
+`shmat(...): Operation not permitted` error, rerun with the required host
+permission; do not rewrite the launcher to work around the sandbox.
 
 ## 2. Verify the change
 
@@ -198,8 +205,10 @@ verified. Native clients continue to use `https://bk.hax429.me` for API data.
 
 For a new systemd host, the required shape is:
 
-1. Install Bun 1.2.8, Node 20 or newer, PostgreSQL, and nginx.
-2. Clone `hax429/bkemo` and create a production `.env` with `DATABASE_URL`,
+1. Install Bun 1.2.8, Node 20 or newer, and nginx. Prefer Neon for
+   `DATABASE_URL` and Cloudflare R2 for attachments (configured in app storage
+   settings after first boot).
+2. Clone `hax429/bkemo` and create a production `.env` with Neon `DATABASE_URL`,
    `NEXTAUTH_SECRET`, `NEXTAUTH_URL`, `TRUST_PROXY=1`, and secure-cookie settings.
 3. Run `bun install`, Prisma generation/migrations, `bun run build:web`, and
    `bun run build:seed`.

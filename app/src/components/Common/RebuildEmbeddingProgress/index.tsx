@@ -1,267 +1,253 @@
-import i18n from '@/lib/i18n'
-import { api } from '@/lib/trpc'
-import { type ProgressResult } from '@shared/lib/types'
-import { RootStore } from '@/store'
-import { BlinkoStore } from '@/store/blinkoStore'
-import { ToastPlugin } from '@/store/module/Toast/Toast'
-import { observer } from 'mobx-react-lite'
-import { useEffect } from 'react'
-import { useTranslation } from 'react-i18next'
-import { Icon } from '@/components/Common/Iconify/icons'
-import { Progress } from "@heroui/react"
-import { DialogStandaloneStore } from '@/store/module/DialogStandalone'
+import i18n from '@/lib/i18n';
+import { api } from '@/lib/trpc';
+import { type ProgressResult } from '@shared/lib/types';
+import { RootStore } from '@/store';
+import { BlinkoStore } from '@/store/blinkoStore';
+import { observer } from 'mobx-react-lite';
+import { useEffect, useState, type CSSProperties } from 'react';
+import { useTranslation } from 'react-i18next';
+import { Icon } from '@/components/Common/Iconify/icons';
+import { DialogStore } from '@/store/module/Dialog';
+import { loadPrefs } from '@/lib/bkemoSettings';
+
+function dialogThemeAttrs() {
+  const prefs = loadPrefs();
+  const preset = prefs.theme === 'light'
+    ? 'light'
+    : (prefs.accent?.toLowerCase() === '#5e6ad2'
+      ? 'developer'
+      : (prefs.accent?.toLowerCase() === '#e2a96b' ? 'coffee' : 'dusk'));
+  const style: CSSProperties = prefs.accent ? { ['--accent' as any]: prefs.accent } : {};
+  return { theme: prefs.theme, density: prefs.density, preset, style };
+}
+
+function statusLabel(status: string, t: (key: string) => string) {
+  if (status === 'running') return t('processing');
+  if (status === 'success') return t('completed');
+  if (status === 'error') return t('error');
+  return '';
+}
 
 export const ImportProgress = observer(({ force }: { force: boolean }) => {
-  const { t } = useTranslation()
-  const blinko = RootStore.Get(BlinkoStore)
-  const store = RootStore.Local(() => ({
-    progress: 0,
-    total: 0,
-    message: [] as ProgressResult[],
-    status: '',
-    isPolling: false,
-    pollingInterval: null as NodeJS.Timeout | null,
+  const { t } = useTranslation();
+  const blinko = RootStore.Get(BlinkoStore);
+  const theme = dialogThemeAttrs();
+  const [progress, setProgress] = useState(0);
+  const [total, setTotal] = useState(0);
+  const [status, setStatus] = useState('');
+  const [message, setMessage] = useState<ProgressResult[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
-    get value() {
-      const v = Math.round((store.progress / store.total) * 100)
-      return isNaN(v) ? 0 : v
-    },
-    get isSuccess() {
-      return store.status === 'success'
-    },
-    get isError() {
-      return store.status === 'error'
-    },
-
-    startPolling() {
-      if (store.isPolling) return;
-
-      store.isPolling = true;
-      store.fetchProgress();
-
-      store.pollingInterval = setInterval(() => {
-        store.fetchProgress();
-      }, 2000);
-    },
-
-    stopPolling() {
-      if (store.pollingInterval) {
-        clearInterval(store.pollingInterval);
-        store.pollingInterval = null;
-      }
-      store.isPolling = false;
-    },
-
-    async fetchProgress() {
-      try {
-        const result = await api.ai.rebuildEmbeddingProgress.query();
-        if (result) {
-          store.progress = result.current || 0;
-          store.total = result.total || 0;
-
-          if (!result.isRunning && store.progress > 0) {
-            store.status = 'success';
-            store.stopPolling();
-          } else if (result.isRunning) {
-            store.status = 'running';
-          }
-
-          if (result.results && result.results.length > 0) {
-            const newMessages = result.results.map((item: any) => ({
-              type: item.type as any,
-              content: item.content,
-              error: item.error
-            }));
-
-            if (store.message.length === 0) {
-              store.message = newMessages.reverse();
-            } else {
-              const existingContents = new Set(store.message.map(m => `${m.type}:${m.content}`));
-              const newUniqueMessages = newMessages.filter(
-                m => !existingContents.has(`${m.type}:${m.content}`)
-              );
-
-              if (newUniqueMessages.length > 0) {
-                store.message = [...newUniqueMessages.reverse(), ...store.message];
-              }
-            }
-          }
-
-          blinko.updateTicker++;
-        }
-      } catch (err) {
-        console.error("Error fetching rebuild progress:", err);
-        RootStore.Get(ToastPlugin).error(err?.message || "Failed to fetch progress");
-      }
-    },
-
-    async handleStart() {
-      try {
-        await api.ai.rebuildEmbeddingStart.mutate({ force });
-
-        store.startPolling();
-
-        store.message.unshift({
-          type: 'info',
-          content: t('rebuild-started'),
-        });
-
-        blinko.updateTicker++;
-      } catch (err) {
-        RootStore.Get(ToastPlugin).error(err?.message || "Failed to start rebuild task");
-      }
-    },
-
-    async stopTask() {
-      try {
-        await api.ai.rebuildEmbeddingStop.mutate();
-
-        const result = await api.ai.rebuildEmbeddingProgress.query();
-        if (result) {
-          store.progress = result.current || 0;
-          store.total = result.total || 0;
-          store.status = 'success';
-        }
-
-        store.message.unshift({
-          type: 'info',
-          content: t('rebuild-stopped-by-user'),
-        });
-
-        blinko.updateTicker++;
-        store.stopPolling();
-        RootStore.Get(DialogStandaloneStore).close()
-      } catch (err) {
-        RootStore.Get(ToastPlugin).error(err?.message || "Failed to stop rebuild task");
-      }
-    }
-  }))
+  const percent = total > 0 ? Math.min(100, Math.round((progress / total) * 100)) : 0;
+  const isSuccess = status === 'success';
+  const isError = status === 'error';
+  const isRunning = status === 'running';
 
   useEffect(() => {
-    store.handleStart();
+    let cancelled = false;
+    let timer: ReturnType<typeof setInterval> | null = null;
+
+    const mergeMessages = (incoming: ProgressResult[]) => {
+      setMessage((prev) => {
+        if (prev.length === 0) return [...incoming].reverse();
+        const existing = new Set(prev.map((item) => `${item.type}:${item.content}`));
+        const unique = incoming.filter((item) => !existing.has(`${item.type}:${item.content}`));
+        return unique.length ? [...unique.reverse(), ...prev] : prev;
+      });
+    };
+
+    const fetchProgress = async () => {
+      try {
+        const result = await api.ai.rebuildEmbeddingProgress.query();
+        if (cancelled || !result) return;
+        setProgress(result.current || 0);
+        setTotal(result.total || 0);
+        if (!result.isRunning && (result.current || 0) > 0) {
+          setStatus('success');
+          if (timer) {
+            clearInterval(timer);
+            timer = null;
+          }
+        } else if (result.isRunning) {
+          setStatus('running');
+        }
+        if (result.results?.length) {
+          mergeMessages(result.results.map((item: any) => ({
+            type: item.type,
+            content: item.content,
+            error: item.error,
+          })));
+        }
+        blinko.updateTicker++;
+      } catch (err: any) {
+        if (!cancelled) setError(err?.message || 'Failed to fetch progress');
+      }
+    };
+
+    const start = async () => {
+      try {
+        await api.ai.rebuildEmbeddingStart.mutate({ force });
+        if (cancelled) return;
+        setStatus('running');
+        setMessage([{ type: 'info', content: t('rebuild-started') }]);
+        await fetchProgress();
+        timer = setInterval(fetchProgress, 2000);
+        blinko.updateTicker++;
+      } catch (err: any) {
+        if (!cancelled) {
+          setStatus('error');
+          setError(err?.message || 'Failed to start rebuild task');
+        }
+      }
+    };
+
+    // If a rebuild is already running, only poll; otherwise start one.
+    api.ai.rebuildEmbeddingProgress.query()
+      .then(async (result) => {
+        if (cancelled) return;
+        if (result?.isRunning) {
+          setStatus('running');
+          await fetchProgress();
+          timer = setInterval(fetchProgress, 2000);
+        } else {
+          await start();
+        }
+      })
+      .catch(async () => {
+        if (!cancelled) await start();
+      });
 
     return () => {
-      store.stopPolling();
-    }
-  }, []);
+      cancelled = true;
+      if (timer) clearInterval(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [force]);
 
-  const getStatusIcon = (type: string) => {
-    switch (type) {
-      case 'success':
-        return <Icon icon="mingcute:check-circle-fill" className="text-green-500" width={16} height={16} />;
-      case 'error':
-        return <Icon icon="mingcute:close-circle-fill" className="text-red-500" width={16} height={16} />;
-      case 'skip':
-        return <Icon icon="mingcute:refresh-3-line" className="text-yellow-500" width={16} height={16} />;
-      case 'info':
-        return <Icon icon="mingcute:information-fill" className="text-blue-500" width={16} height={16} />;
-      default:
-        return <Icon icon="mingcute:dot-fill" className="text-gray-400" width={16} height={16} />;
+  const stopTask = async () => {
+    try {
+      await api.ai.rebuildEmbeddingStop.mutate();
+      const result = await api.ai.rebuildEmbeddingProgress.query();
+      if (result) {
+        setProgress(result.current || 0);
+        setTotal(result.total || 0);
+      }
+      setStatus('success');
+      setMessage((prev) => [{ type: 'info', content: t('rebuild-stopped-by-user') }, ...prev]);
+      blinko.updateTicker++;
+      RootStore.Get(DialogStore).close();
+    } catch (err: any) {
+      setError(err?.message || 'Failed to stop rebuild task');
     }
   };
 
-  return <div className="space-y-4">
-    <div className="space-y-4">
-      <div className="space-y-3">
-        <Progress
-          classNames={{
-            base: "w-full",
-            track: "border border-default",
-            indicator: "bg-linear-to-r from-pink-500 to-yellow-500",
-            label: "tracking-wider font-medium text-default-600",
-            value: "text-foreground/60",
-          }}
-          label={<span>
-            <span className="font-medium">{store.progress}</span> / <span className="font-medium">{store.total}</span> items
-          </span>}
-          radius="none"
-          showValueLabel={true}
-          size="sm"
-          value={store.value}
-        />
+  return (
+    <div
+      className="bkemo bk-ai-dialog bk-ai-rebuild-dialog"
+      data-theme={theme.theme}
+      data-density={theme.density}
+      data-preset={theme.preset}
+      style={theme.style}
+    >
+      <button
+        type="button"
+        className="bk-ai-dialog-close"
+        onClick={() => RootStore.Get(DialogStore).close()}
+        aria-label="Close"
+      >
+        <Icon icon="hugeicons:cancel-01" width="18" height="18" />
+      </button>
 
-        <div className="flex justify-between items-center text-xs text-gray-500 dark:text-gray-400">
-          <span></span>
-          <span>
-            {store.status === 'running' ? t('processing') :
-              store.isSuccess ? t('completed') :
-                store.isError ? t('error') : ''}
-          </span>
+      <div className="bk-ai-dialog-hero">
+        <div>
+          <div className="bk-ai-dialog-kicker">Embeddings</div>
+          <h2>{t('rebuilding-embedding-progress')}</h2>
+          <p>Note text only. Images and file attachments are skipped.</p>
+        </div>
+        <span className={`bk-ai-rebuild-status is-${status || 'idle'}`}>
+          {statusLabel(status, t) || '…'}
+        </span>
+      </div>
+
+      <div className="bk-ai-dialog-body">
+        <div className="bk-ai-rebuild-meter">
+          <div className="h-stack bk-ai-rebuild-meter-meta">
+            <span>
+              <strong>{progress}</strong> / {total} notes
+            </span>
+            <span>{percent}%</span>
+          </div>
+          <div className="bk-ai-rebuild-track" aria-hidden>
+            <div className="bk-ai-rebuild-fill" style={{ width: `${percent}%` }} />
+          </div>
+        </div>
+
+        {error ? (
+          <div className="bk-ai-runtime-notice is-danger">
+            <div>{t('error')}</div>
+            <p>{error}</p>
+          </div>
+        ) : null}
+
+        <div className="bk-scroll bk-ai-rebuild-log">
+          {message.length === 0 ? (
+            <div className="bk-ai-pick-empty is-soft">
+              <Icon icon="line-md:loading-twotone-loop" width="18" height="18" className="animate-spin" />
+              <span>{t('loading')}…</span>
+            </div>
+          ) : message.map((item, index) => (
+            <article
+              key={`${item.type}-${item.content}-${index}`}
+              className={`bk-ai-rebuild-row is-${item.type || 'info'}`}
+            >
+              <span className="bk-ai-rebuild-row-icon">
+                {item.type === 'success' ? '✓' : item.type === 'error' ? '✕' : item.type === 'skip' ? '–' : 'i'}
+              </span>
+              <div className="bk-ai-rebuild-row-copy">
+                <div className="bk-ai-rebuild-row-title">{item?.content}</div>
+                {item.error ? (
+                  <div className="bk-ai-rebuild-row-error">
+                    {String(item.error as unknown as string)}
+                  </div>
+                ) : null}
+              </div>
+            </article>
+          ))}
         </div>
       </div>
 
-      <div className="flex justify-end items-center">{/* 移除了 justify-between，只保留右对齐 */}
-
-        {store.status === 'running' && (
-          <button
-            onClick={store.stopTask}
-            className="flex items-center gap-2 px-4 py-2 bg-red-50 hover:bg-red-100 dark:bg-red-950/50 dark:hover:bg-red-950/70 text-red-600 dark:text-red-400 rounded-md transition-all duration-200 text-sm font-medium"
-            title={t('stop-task')}
-          >
-            <Icon icon="mingcute:stop-circle-fill" width={16} height={16} />
+      <div className="bk-ai-dialog-footer">
+        {isRunning ? (
+          <button type="button" className="bk-native-button is-secondary" onClick={stopTask}>
+            <Icon icon="mingcute:stop-circle-fill" width="16" height="16" />
             {t('stop-task')}
           </button>
+        ) : (
+          <span className="bk-ai-rebuild-footer-note">
+            {isSuccess ? t('completed') : isError ? t('error') : ''}
+          </span>
         )}
-
-        {store.isSuccess && (
-          <div className="flex items-center gap-2 px-4 py-2 bg-green-50 dark:bg-green-950/50 text-green-600 dark:text-green-400 rounded-full text-sm font-medium">
-            <Icon icon="mingcute:check-circle-fill" width={16} height={16} />
-            {t('completed')}
-          </div>
-        )}
-
-        {store.isError && (
-          <div className="flex items-center gap-2 px-4 py-2 bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-400 rounded-full text-sm font-medium">
-            <Icon icon="mingcute:close-circle-fill" width={16} height={16} />
-            {t('error')}
-          </div>
-        )}
+        <div className="bk-ai-dialog-footer-actions">
+          <button
+            type="button"
+            className="bk-native-button is-primary"
+            onClick={() => RootStore.Get(DialogStore).close()}
+          >
+            {isRunning ? 'Hide' : 'Done'}
+          </button>
+        </div>
       </div>
     </div>
-
-    <div className='flex flex-col max-h-[400px] overflow-y-auto mt-4 space-y-2 pr-2 scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600 scrollbar-track-transparent'>
-      {store.message.map((item, index) => (
-        <div key={index} className={`flex gap-3 p-4 rounded-lg items-start transition-all duration-200 ${item.type === 'error' ? 'bg-red-50 dark:bg-red-950/20' :
-            item.type === 'success' ? 'bg-green-50 dark:bg-green-950/20' :
-              item.type === 'info' ? 'bg-blue-50 dark:bg-blue-950/20' :
-                'bg-gray-50 dark:bg-gray-800/50'
-          }`}>
-          <div className="flex-shrink-0 mt-0.5">
-            {getStatusIcon(item.type)}
-          </div>
-          <div className='flex flex-col flex-1 min-w-0'>
-            <div className={`text-sm font-medium ${item.type === 'error' ? 'text-red-700 dark:text-red-300' :
-                item.type === 'success' ? 'text-green-700 dark:text-green-300' :
-                  item.type === 'info' ? 'text-blue-700 dark:text-blue-300' :
-                    'text-gray-700 dark:text-gray-300'
-              }`}>
-              {item?.content}
-            </div>
-            {item.error as unknown as string && (
-              <div className="mt-2 p-3 bg-red-100 dark:bg-red-900/30 rounded-lg text-xs text-red-600 dark:text-red-400">
-                <div className="font-medium mb-1">{t('error-details')}:</div>
-                <div className="break-words">{String(item.error as unknown as string)}</div>
-              </div>
-            )}
-          </div>
-        </div>
-      ))}
-
-      {store.message.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-8 text-gray-400">
-          <Icon icon="line-md:loading-twotone-loop" width={32} height={32} className="mb-2" />
-          <div>{t('loading')}...</div>
-        </div>
-      )}
-    </div>
-  </div>
-})
+  );
+});
 
 export const ShowRebuildEmbeddingProgressDialog = async (force = false) => {
-  RootStore.Get(DialogStandaloneStore).setData({
-    title: i18n.t('rebuilding-embedding-progress'),
-    content: <ImportProgress force={force} />,
+  RootStore.Get(DialogStore).setData({
     isOpen: true,
-    size: 'lg',
-  })
-}
+    size: '2xl',
+    noPadding: true,
+    onlyContent: true,
+    className: 'bk-ai-modal',
+    content: <ImportProgress force={force} />,
+  });
+};

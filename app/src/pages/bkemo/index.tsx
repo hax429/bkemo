@@ -26,10 +26,12 @@ import { Graph } from '@/components/bkemo/Graph';
 import { FilesScreen } from '@/components/bkemo/FilesScreen';
 import { Analytics } from '@/components/bkemo/Analytics';
 import { AIScreen } from '@/components/bkemo/AIScreen';
+import { AIDebugPanel } from '@/components/bkemo/ai/AIDebugPanel';
 import { NoteModal } from '@/components/bkemo/NoteModal';
 import { SearchOverlay } from '@/components/bkemo/SearchOverlay';
 import { UserStore } from '@/store/user';
 import { pathForRoute, pathForSettingsSection, routeFromPath, settingsSectionFromPath } from '@/lib/bkemoRoutes';
+import { isAiDebugAvailable } from '@/lib/aiDebug';
 
 function ComingSoon({ title }: { title: string }) {
   return (
@@ -215,6 +217,7 @@ const BkemoPage = observer(function BkemoPage() {
       </div>
       {editing && <NoteModal note={editing} onClose={() => { setEditing(null); if (/^\/n\/\d+$/.test(location.pathname)) navigate('/', { replace: true }); }} />}
       {showSearch && <SearchOverlay onOpen={setEditing} onClose={() => setShowSearch(false)} />}
+      {isAiDebugAvailable() ? <AIDebugPanel /> : null}
     </BkemoLayout>
   );
 });

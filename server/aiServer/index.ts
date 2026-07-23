@@ -244,6 +244,7 @@ export class AiService {
     withOnline = false,
     systemPrompt,
     ctx,
+    collectDebug = false,
   }: {
     question: string;
     conversations: CoreMessage[];
@@ -252,39 +253,65 @@ export class AiService {
     withOnline?: boolean;
     systemPrompt?: string;
     ctx: Context;
+    collectDebug?: boolean;
   }) {
     try {
       console.log('completions');
-    
-      conversations.push({
-        role: 'system',
-        content: `Current user name: ${ctx.name}\n`,
+      const debug: Record<string, unknown> = {};
+      const t0 = Date.now();
+
+      // SiliconFlow (and similar OpenAI-compatible gateways) require every system
+      // message before the first user/assistant turn. Never append system after history.
+      const systemChunks: string[] = [`Current user name: ${ctx.name}\n`];
+      if (systemPrompt) systemChunks.push(systemPrompt);
+
+      // RAG embedding/search and agent construction are independent — overlap them.
+      const tAgent0 = Date.now();
+      const agentPromise = AiModelFactory.BaseChatAgent({ withTools, withOnlineSearch: withOnline }).then((agent) => {
+        if (collectDebug) debug.agentMs = Date.now() - tAgent0;
+        return agent;
       });
-      if (systemPrompt) {
-        conversations.push({
-          role: 'system',
-          content: systemPrompt,
-        });
-      }
+
       let ragNote: any[] = [];
-      if (withRAG) {
-        let { notes, aiContext } = await AiModelFactory.queryVector(question, Number(ctx.id));
-        ragNote = notes;
-        conversations.push({
-          role: 'system',
-          content: `This is the note content ${ragNote.map((i) => i.content).join('\n')} ${aiContext}`,
-        });
+      const ragPromise = withRAG
+        ? (async () => {
+            const tRag0 = Date.now();
+            const { notes, aiContext } = await AiModelFactory.queryVector(question, Number(ctx.id));
+            if (collectDebug) debug.ragMs = Date.now() - tRag0;
+            return { notes, aiContext };
+          })()
+        : Promise.resolve(null);
+
+      const [agent, rag] = await Promise.all([agentPromise, ragPromise]);
+      if (rag) {
+        ragNote = rag.notes;
+        // Prefer the already-truncated aiContext over dumping full memo bodies.
+        systemChunks.push(`Relevant notes:\n${rag.aiContext}`);
       }
-      conversations.push({
-        role: 'user',
-        content: question,
-      });
-      console.log(conversations, 'conversations');
+
+      const historySystems = conversations
+        .filter((message) => message.role === 'system')
+        .map((message) => (typeof message.content === 'string' ? message.content : ''))
+        .filter(Boolean);
+      const historyTurns = conversations.filter((message) => message.role !== 'system');
+      const systemContent = [...historySystems, ...systemChunks].filter(Boolean).join('\n\n');
+      const messages: CoreMessage[] = [
+        ...(systemContent ? [{ role: 'system' as const, content: systemContent }] : []),
+        ...historyTurns,
+        { role: 'user', content: question },
+      ];
+
+      console.log(messages, 'conversations');
       const runtimeContext = new RuntimeContext();
       runtimeContext.set('accountId', Number(ctx.id));
-      const agent = await AiModelFactory.BaseChatAgent({ withTools, withOnlineSearch: withOnline });
-      const result = await agent.stream(conversations, { runtimeContext });
-      return { result, notes: ragNote };
+      const tStream0 = Date.now();
+      const result = await agent.stream(messages, { runtimeContext });
+      if (collectDebug) {
+        debug.streamOpenMs = Date.now() - tStream0;
+        debug.setupMs = Date.now() - t0;
+        debug.messageCount = messages.length;
+      }
+      return { result, notes: ragNote, debug: collectDebug ? debug : undefined };
     } catch (error) {
       console.log(error);
       throw new Error(error);

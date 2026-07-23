@@ -131,8 +131,16 @@ export class AiModelFactory {
         return { ...i, score: filteredResults.find((t) => Number(t.metadata?.id) == i.id)?.score ?? 0 };
       }).sort((a, b) => b.score - a.score).slice(0, topK) ?? [];
 
-    let aiContext = notes.map((i) => i.content + '\n') || '';
-    return { notes, aiContext: aiContext };
+    // Cap per-note context — full memo dumps dominate SiliconFlow TTFT.
+    const maxChars = Number(config.embeddingContextChars) > 0
+      ? Number(config.embeddingContextChars)
+      : 1200;
+    const aiContext = notes.map((note) => {
+      const text = String(note.content || '').trim();
+      if (text.length <= maxChars) return text;
+      return `${text.slice(0, maxChars).trimEnd()}…`;
+    }).join('\n\n');
+    return { notes, aiContext };
   }
 
   static async rebuildVectorIndex({ vectorStore, isDelete = false }: { vectorStore: LibSQLVector; isDelete?: boolean }) {
@@ -152,46 +160,83 @@ export class AiModelFactory {
     }
 
     const model = embeddingModel.modelKey.toLowerCase();
-    let userConfigDimensions = (embeddingModel.config as any)?.embeddingDimensions || 0;
-    let dimensions: number = 0;
+    let userConfigDimensions = Number((embeddingModel.config as any)?.embeddingDimensions || 0);
+    let dimensions = 0;
     switch (true) {
+      case model.includes('qwen3-embedding-8b') || model.includes('qwen3-embedding:8b'):
+        dimensions = 4096;
+        break;
+      case model.includes('qwen3-embedding-4b') || model.includes('qwen3-embedding:4b'):
+        dimensions = 2560;
+        break;
+      case model.includes('qwen3-embedding-0.6b') || model.includes('qwen3-embedding:0.6b'):
+        dimensions = 1024;
+        break;
       case model.includes('text-embedding-3-small'):
         dimensions = 1536;
         break;
       case model.includes('text-embedding-3-large'):
         dimensions = 3072;
         break;
-      case model.includes('cohere/embed-english-v3') || model.includes('bge-m3') || model.includes('voyage') || model.includes('bge-large'):
+      case model.includes('voyage-3-lite'):
+        dimensions = 512;
+        break;
+      case model.includes('cohere/embed-english-v3') || model.includes('bge-m3') || model.includes('voyage') || model.includes('bge-large') || model.includes('mxbai-embed-large'):
         dimensions = 1024;
         break;
       case model.includes('cohere'):
         dimensions = 4096;
         break;
-      case model.includes('voyage-3-lite'):
-        dimensions = 512;
-        break;
-      case model.includes('bge') || model.includes('bert') || model.includes('bce-embedding-base'):
+      case model.includes('bge') || model.includes('bert') || model.includes('bce-embedding') || model.includes('nomic-embed-text') || model.includes('text-embedding-004'):
         dimensions = 768;
         break;
       case model.includes('all-minilm'):
         dimensions = 384;
         break;
-      case model.includes('mxbai-embed-large'):
-        dimensions = 1024;
-        break;
-      case model.includes('nomic-embed-text'):
-        dimensions = 768;
-        break;
-      case model.includes('bge-large-en'):
-        dimensions = 1024;
-        break;
       default:
-        if (userConfigDimensions == 0 || userConfigDimensions == undefined || !userConfigDimensions) {
-          throw new Error('Must set the embedding dimension in ai Settings > Embed Settings > Advanced Settings');
-        }
+        dimensions = 0;
     }
-    if (userConfigDimensions != 0 && userConfigDimensions != undefined) {
+    if (userConfigDimensions > 0) {
       dimensions = userConfigDimensions;
+    }
+
+    // Last resort: probe the live embedding model for vector length.
+    if (!dimensions) {
+      try {
+        const { EmbeddingProvider } = await import('./providers');
+        const embeddingProvider = new EmbeddingProvider();
+        const probeModel = await embeddingProvider.getEmbeddingModel({
+          provider: embeddingModel.provider.provider,
+          apiKey: embeddingModel.provider.apiKey,
+          baseURL: embeddingModel.provider.baseURL,
+          modelKey: embeddingModel.modelKey,
+          apiVersion: (embeddingModel.provider.config as any)?.apiVersion,
+        });
+        const probe = await embed({
+          model: probeModel as any,
+          value: 'dimension probe',
+        });
+        dimensions = probe.embedding?.length || 0;
+        if (dimensions > 0) {
+          await prisma.aiModels.update({
+            where: { id: embeddingModel.id },
+            data: {
+              config: {
+                ...((embeddingModel.config as any) || {}),
+                embeddingDimensions: dimensions,
+              },
+            },
+          });
+        }
+      } catch (error) {
+        console.error('Failed to probe embedding dimensions:', error);
+      }
+    }
+
+    if (!dimensions) {
+      throw new Error(
+        `Unknown embedding dimensions for "${embeddingModel.modelKey}". Open Settings → AI → edit the embedding model, set Dimensions (or run Test connection), then Force Rebuild again.`,
+      );
     }
     await vectorStore.createIndex({ indexName: 'blinko', dimension: dimensions, metric: 'cosine' });
   }
@@ -494,11 +539,11 @@ export class AiModelFactory {
   static SummarizeAgent = AiModelFactory.#createAgentFactory(
     'Blinko Summary Agent',
     `You are a conversation title summarizer. Rules:
-      1. Summarize the content 
-      2. Return the title only
-      3. Generate titles based on the user's language
-      4. Do not return any punctuation marks in the result
-      5. Keep it short and concise`,
+      1. Summarize the conversation into a short sidebar title
+      2. Return the title only — no quotes, labels, or explanation
+      3. Use the user's language
+      4. No punctuation marks
+      5. At most 6 words`,
     'BlinkoSummary',
   );
 

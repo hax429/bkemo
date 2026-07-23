@@ -46,7 +46,8 @@ capture windows and shared settings still import them.
 | bkemo product UI | `app/src/pages/bkemo/`, `app/src/components/bkemo/` | Main route, navigation, screens, memo/task interaction |
 | Native clients | `app/src-tauri/`, `app/tauri-plugin-blinko/` | Tauri v2, Rust, Swift/Kotlin integrations |
 | API and jobs | `server/` | Express, tRPC, REST/OpenAPI, auth, AI, background jobs |
-| Persistence | `prisma/` | PostgreSQL schema and migrations |
+| Persistence | `prisma/` | Neon PostgreSQL schema and migrations |
+| Attachments | Settings → Storage (`objectStorage`) | Cloudflare R2 (S3-compatible) or local `.blinko/files` |
 | Shared contracts | `shared/`, `blinko-types/` | Cross-package types and utilities |
 
 Important implementation anchors:
@@ -79,21 +80,28 @@ Important implementation anchors:
 
 ## Local development
 
-The repository expects Bun 1.2.8 or newer, Node 20 or newer, and PostgreSQL.
-The full local stack runs on `http://localhost:1111`; local PostgreSQL uses port
-5433.
+The repository expects Bun 1.2.8 or newer and Node 20 or newer. The preferred
+development data plane is Neon PostgreSQL plus Cloudflare R2 for attachments.
+The full local app process runs on `http://localhost:1111`.
 
 ```bash
 bun install
 bun run prisma:generate
-./run-dev.sh
+./scripts/run-dev.sh
 ```
 
-`run-dev.sh` is a foreground launcher. For a server that must survive an agent
-command session, first check `screen -ls`, then use:
+`./scripts/run-dev.sh` is a foreground launcher. When `.env` points at an
+approved Neon development branch (`.bkemo/dev-existing-neon-attach.json`), it
+uses that database and skips local Postgres. Otherwise it bootstraps local
+PostgreSQL on port `5433` so you can attach Neon and configure R2 from
+Settings → Storage (`BKEMO_DEV_ALLOW_EXISTING_NEON=true`, then Verify active
+setup). `--reset` and `--stop` apply only to that local bootstrap database.
+
+For a server that must survive an agent command session, first check
+`screen -ls`, then use:
 
 ```bash
-screen -dmS bkemo-dev ./run-dev.sh
+screen -dmS bkemo-dev ./scripts/run-dev.sh
 curl -sS -o /dev/null -w 'HTTP %{http_code}\n' http://localhost:1111/
 ```
 

@@ -13,7 +13,7 @@ import { fetchWithProxy } from '@server/lib/proxy';
 import { inferModelCapabilities } from '@shared/lib/modelTemplates';
 import { requireOwnedConversation, requireReadableNote } from '@server/lib/noteAccess';
 import { getAiConfigStatus } from '@server/lib/aiConfigStatus';
-import { requireEmbeddingModel, requireMainChatModel, streamAIConversation } from '@server/lib/aiConversation';
+import { requireAiReady, requireEmbeddingModel, requireMainChatModel, streamAIConversation } from '@server/lib/aiConversation';
 import { runAIDiscovery } from '@server/lib/aiDiscovery';
 
 export const aiRouter = router({
@@ -91,7 +91,7 @@ export const aiRouter = router({
     .mutation(async function* ({ input, ctx }) {
       try {
         const { question, conversations, withTools = false, withOnline = false, withRAG = true, systemPrompt } = input
-        const status = await requireMainChatModel();
+        await requireAiReady();
         let _conversations = conversations as CoreMessage[]
         const { result: responseStream, notes } = await AiService.completions({
           question,
@@ -99,7 +99,7 @@ export const aiRouter = router({
           ctx,
           withTools,
           withOnline,
-          withRAG: withRAG && status.embeddingModelReady,
+          withRAG,
           systemPrompt
         })
         yield { notes }
@@ -119,12 +119,14 @@ export const aiRouter = router({
     .input(z.object({
       conversationId: z.number().optional(),
       question: z.string().min(1),
-      scope: z.enum(['global', 'note']).default('global'),
+      scope: z.enum(['global', 'note', 'analytics']).default('global'),
       noteId: z.number().optional(),
       contextNoteIds: z.array(z.number()).default([]),
       withOnline: z.boolean().optional(),
       withRAG: z.boolean().optional(),
       systemPrompt: z.string().optional(),
+      // Client may request loop traces; server only honors this outside production.
+      debug: z.boolean().optional(),
     }))
     .mutation(async function* ({ input, ctx }) {
       yield* streamAIConversation(input, ctx);
@@ -198,9 +200,15 @@ export const aiRouter = router({
         null, 2
       );
       const result = await agent.generate(conversationString)
+      const title = String(result?.text || '')
+        .replace(/[\r\n]+/g, ' ')
+        .replace(/^[\s"'“”‘’]+|[\s"'“”‘’]+$/g, '')
+        .replace(/[。.!！？?]+$/g, '')
+        .trim()
+        .slice(0, 60);
       const conversation = await prisma.conversation.update({
         where: { id: conversationId },
-        data: { title: result?.text }
+        data: { title: title || 'New chat' }
       })
       return conversation
     }),
@@ -345,35 +353,14 @@ export const aiRouter = router({
           capabilities
         };
 
-        // Test based on model capabilities
+        // Test based on model capabilities. Prefer embedding/audio-only paths so
+        // embedding models are never probed with a chat completion.
         let testResults: any = {};
-
-        // Test inference capability (chat)
-        if (capabilities.inference) {
-          try {
-            const { LLMProvider } = await import('@server/aiServer/providers');
-            const llmProvider = new LLMProvider();
-            const languageModel = await llmProvider.getLanguageModel({
-              provider: provider.provider,
-              apiKey: provider.apiKey,
-              baseURL: provider.baseURL,
-              modelKey,
-              apiVersion: (provider.config as any)?.apiVersion
-            });
-
-            // Test simple generation
-            const { generateText } = await import('ai');
-            const result = await generateText({
-              model: languageModel,
-              prompt: 'Say "Hello" to test connection'
-            });
-            testResults.inference = { success: true, response: result.text };
-          } catch (error) {
-            testResults.inference = { success: false, error: error.message };
-          }
+        const testable = Boolean(capabilities.inference || capabilities.embedding || capabilities.audio);
+        if (!testable) {
+          throw new Error('Select at least one testable capability (Chat, Embedding, or Audio).');
         }
 
-        // Test embedding capability
         if (capabilities.embedding) {
           try {
             const { EmbeddingProvider } = await import('@server/aiServer/providers');
@@ -392,23 +379,61 @@ export const aiRouter = router({
               value: 'test embedding'
             });
             testResults.embedding = { success: true, dimensions: result.embedding?.length || 0 };
-          } catch (error) {
-            testResults.embedding = { success: false, error: error.message };
+          } catch (error: any) {
+            testResults.embedding = { success: false, error: error?.message || String(error) };
           }
         }
 
-        // Test audio capability (speech recognition)
+        // Skip chat probing when this model is marked embedding-only.
+        if (capabilities.inference && !capabilities.embedding) {
+          try {
+            const { LLMProvider } = await import('@server/aiServer/providers');
+            const llmProvider = new LLMProvider();
+            const languageModel = await llmProvider.getLanguageModel({
+              provider: provider.provider,
+              apiKey: provider.apiKey,
+              baseURL: provider.baseURL,
+              modelKey,
+              apiVersion: (provider.config as any)?.apiVersion
+            });
+
+            const { generateText } = await import('ai');
+            const result = await generateText({
+              model: languageModel,
+              prompt: 'Say "Hello" to test connection'
+            });
+            testResults.inference = { success: true, response: result.text };
+          } catch (error: any) {
+            testResults.inference = { success: false, error: error?.message || String(error) };
+          }
+        } else if (capabilities.inference && capabilities.embedding) {
+          testResults.inference = {
+            success: false,
+            error: 'Skipped chat test because embedding is selected. Clear Embedding to test chat.',
+          };
+        }
+
         if (capabilities.audio) {
-          throw new Error("audio cannot test")
+          testResults.audio = {
+            success: false,
+            error: 'Audio models cannot be tested from this dialog yet.',
+          };
         }
 
         const overallSuccess = Object.values(testResults).some((result: any) => result.success);
+        if (!overallSuccess) {
+          const details = Object.entries(testResults)
+            .map(([key, value]: [string, any]) => `${key}: ${value?.error || 'failed'}`)
+            .join('; ');
+          throw new Error(details || 'Connection test failed');
+        }
 
         return {
-          success: overallSuccess,
+          success: true,
           capabilities: testResults,
           provider: provider.title,
-          model: modelKey
+          model: modelKey,
+          embeddingDimensions: testResults.embedding?.dimensions || 0,
         };
       } catch (error) {
         console.error("Connection test failed:", error);

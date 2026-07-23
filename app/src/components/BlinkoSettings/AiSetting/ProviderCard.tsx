@@ -12,31 +12,18 @@ import { useMediaQuery } from 'usehooks-ts';
 import { CAPABILITY_ICONS, CAPABILITY_LABELS, PROVIDER_TEMPLATES } from './constants';
 import { showTipsDialog } from '@/components/Common/TipsDialog';
 import { DialogStandaloneStore } from '@/store/module/DialogStandalone';
-import { ToastPlugin } from '@/store/module/Toast/Toast';
-import { api } from '@/lib/trpc';
 import { AiProvider, AiSettingStore, ModelCapabilities } from '@/store/aiSettingStore';
 
-// Utility function to format test connection results
-const formatTestResults = (result: any, t: (key: string) => string): string => {
-  const details: string[] = [];
-
-  if (result?.capabilities?.inference?.success) {
-    const response = result.capabilities.inference.response || '';
-    details.push(`${response}`);
-  }
-
-  if (result?.capabilities?.embedding?.success) {
-    const dimensions = result.capabilities.embedding.dimensions || 0;
-    details.push(`${dimensions} dimensions`);
-  }
-
-  if (result?.capabilities?.audio?.success) {
-    const message = result.capabilities.audio.message || '';
-    details.push(`${message}`);
-  }
-
-  return `${t('check-connect-success')} - ${details.join(', ')}`;
-};
+function openModelDialog(model: any, size: 'full' | '3xl' = '3xl') {
+  RootStore.Get(DialogStore).setData({
+    isOpen: true,
+    size,
+    noPadding: true,
+    onlyContent: true,
+    className: 'bk-ai-modal',
+    content: <ModelDialogContent model={model} />,
+  });
+}
 
 
 interface ProviderCardProps {
@@ -284,21 +271,9 @@ export default observer(function ProviderCard({ provider }: ProviderCardProps) {
                               variant="flat"
                               className="bk-ai-icon-button"
                               isIconOnly
+                              title={t('test-connection')}
                               startContent={<Icon icon="hugeicons:connect" width="12" height="12" />}
-                              onPress={() => {
-                                RootStore.Get(ToastPlugin).promise(
-                                  api.ai.testConnect.mutate({
-                                    providerId: model.providerId,
-                                    modelKey: model.modelKey,
-                                    capabilities: model.capabilities
-                                  }),
-                                  {
-                                    loading: t('loading'),
-                                    success: (result: any) => formatTestResults(result, t),
-                                    error: (error: any) => `${t('check-connect-error')}: ${error.message}`,
-                                  }
-                                );
-                              }}
+                              onPress={() => openModelDialog(model, 'full')}
                             />
                             <Button
                               size="sm"
@@ -306,16 +281,7 @@ export default observer(function ProviderCard({ provider }: ProviderCardProps) {
                               className="bk-ai-icon-button"
                               isIconOnly
                               startContent={<Icon icon="hugeicons:settings-02" width="12" height="12" />}
-                              onPress={() => {
-                                RootStore.Get(DialogStore).setData({
-                                  isOpen: true,
-                                  size: 'full',
-                                  noPadding: true,
-                                  onlyContent: true,
-                                  className: 'bk-ai-modal',
-                                  content: <ModelDialogContent model={model} />,
-                                });
-                              }}
+                              onPress={() => openModelDialog(model, 'full')}
                             />
                             <Button
                               size="sm"
@@ -358,21 +324,9 @@ export default observer(function ProviderCard({ provider }: ProviderCardProps) {
                             variant="flat"
                             className="bk-ai-icon-button"
                             isIconOnly
+                            title={t('test-connection')}
                             startContent={<Icon icon="hugeicons:connect" width="12" height="12" />}
-                            onPress={() => {
-                              RootStore.Get(ToastPlugin).promise(
-                                api.ai.testConnect.mutate({
-                                  providerId: model.providerId,
-                                  modelKey: model.modelKey,
-                                  capabilities: model.capabilities
-                                }),
-                                {
-                                  loading: t('loading'),
-                                  success: (result: any) => formatTestResults(result, t),
-                                  error: (error: any) => `${t('check-connect-error')}: ${error.message}`,
-                                }
-                              );
-                            }}
+                            onPress={() => openModelDialog(model, '3xl')}
                           />
                           <Button
                             size="sm"
@@ -380,16 +334,7 @@ export default observer(function ProviderCard({ provider }: ProviderCardProps) {
                             className="bk-ai-icon-button"
                             isIconOnly
                             startContent={<Icon icon="hugeicons:settings-02" width="12" height="12" />}
-                            onPress={() => {
-                              RootStore.Get(DialogStore).setData({
-                                isOpen: true,
-                                size: '3xl',
-                                noPadding: true,
-                                onlyContent: true,
-                                className: 'bk-ai-modal',
-                                content: <ModelDialogContent model={model} />,
-                              });
-                            }}
+                            onPress={() => openModelDialog(model, '3xl')}
                           />
                           <Button
                             size="sm"

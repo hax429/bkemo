@@ -1,6 +1,4 @@
 import { observer } from 'mobx-react-lite';
-import { Slider, Button } from '@heroui/react';
-import { Icon } from '@/components/Common/Iconify/icons';
 import { CollapsibleCard } from '../../Common/CollapsibleCard';
 import { useTranslation } from 'react-i18next';
 import { useState, useEffect, useRef } from 'react';
@@ -8,9 +6,6 @@ import { RootStore } from '@/store';
 import { BlinkoStore } from '@/store/blinkoStore';
 import { PromiseCall } from '@/store/standard/PromiseState';
 import { api } from '@/lib/trpc';
-import { Item, ItemWithTooltip } from '../Item';
-import TagSelector from '@/components/Common/TagSelector';
-import { useMediaQuery } from 'usehooks-ts';
 import { showTipsDialog } from '@/components/Common/TipsDialog';
 import { ShowRebuildEmbeddingProgressDialog } from '@/components/Common/RebuildEmbeddingProgress';
 import { AiSettingStore } from '@/store/aiSettingStore';
@@ -19,36 +14,30 @@ export const EmbeddingSettingsSection = observer(function EmbeddingSettingsSecti
   const { t } = useTranslation();
   const blinko = RootStore.Get(BlinkoStore);
   const aiStore = RootStore.Get(AiSettingStore);
-  const isPc = useMediaQuery('(min-width: 768px)');
   const hasLoadedModels = !!aiStore.allModels.value;
   const selectedEmbeddingModel = aiStore.embeddingModels.find((model) => model.id === blinko.config.value?.embeddingModelId);
   const embeddingReady = !hasLoadedModels || !!selectedEmbeddingModel;
+  const tags = blinko.tagList.value?.falttenTags || [];
 
   const [localState, setLocalState] = useState({
     embeddingTopK: blinko.config.value?.embeddingTopK ?? 5,
     embeddingScore: blinko.config.value?.embeddingScore ?? 0.6,
-    excludeEmbeddingTagId: blinko.config.value?.excludeEmbeddingTagId
+    excludeEmbeddingTagId: blinko.config.value?.excludeEmbeddingTagId as number | null | undefined,
   });
 
-  // Rebuild embedding state
   const [rebuildProgress, setRebuildProgress] = useState<{ percentage: number; isRunning: boolean } | null>(null);
-  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchRebuildProgress = async () => {
     try {
       const data = await api.ai.rebuildEmbeddingProgress.query();
-      if (data) {
-        setRebuildProgress({
-          percentage: data.percentage,
-          isRunning: data.isRunning,
-        });
-
-        if (data.isRunning && !pollingIntervalRef.current) {
-          startPolling();
-        } else if (!data.isRunning && pollingIntervalRef.current) {
-          stopPolling();
-        }
-      }
+      if (!data) return;
+      setRebuildProgress({
+        percentage: data.percentage,
+        isRunning: data.isRunning,
+      });
+      if (data.isRunning && !pollingIntervalRef.current) startPolling();
+      else if (!data.isRunning && pollingIntervalRef.current) stopPolling();
     } catch (error) {
       console.error('Error fetching rebuild progress:', error);
     }
@@ -60,23 +49,38 @@ export const EmbeddingSettingsSection = observer(function EmbeddingSettingsSecti
   };
 
   const stopPolling = () => {
-    if (pollingIntervalRef.current) {
-      clearInterval(pollingIntervalRef.current);
-      pollingIntervalRef.current = null;
-    }
+    if (!pollingIntervalRef.current) return;
+    clearInterval(pollingIntervalRef.current);
+    pollingIntervalRef.current = null;
   };
 
   useEffect(() => {
     blinko.config.call();
     aiStore.allModels.call();
+    blinko.tagList.call();
     fetchRebuildProgress();
     return () => stopPolling();
   }, []);
 
+  useEffect(() => {
+    if (!blinko.config.value) return;
+    setLocalState({
+      embeddingTopK: blinko.config.value.embeddingTopK ?? 5,
+      embeddingScore: blinko.config.value.embeddingScore ?? 0.6,
+      excludeEmbeddingTagId: blinko.config.value.excludeEmbeddingTagId,
+    });
+  }, [
+    blinko.config.value?.embeddingTopK,
+    blinko.config.value?.embeddingScore,
+    blinko.config.value?.excludeEmbeddingTagId,
+  ]);
+
+  const persist = (key: string, value: number | null) => {
+    PromiseCall(api.config.update.mutate({ key, value }), { autoAlert: false });
+  };
 
   const handleRebuildClick = async () => {
     try {
-      // Check the latest status from database
       if (!embeddingReady) {
         showTipsDialog({
           title: 'Embedding model required',
@@ -86,193 +90,121 @@ export const EmbeddingSettingsSection = observer(function EmbeddingSettingsSecti
       }
 
       const latestProgress = await api.ai.rebuildEmbeddingProgress.query();
-
       if (latestProgress?.isRunning) {
-        // Task is already running, show progress dialog
-        setRebuildProgress({
-          percentage: latestProgress.percentage,
-          isRunning: true,
-        });
+        setRebuildProgress({ percentage: latestProgress.percentage, isRunning: true });
         ShowRebuildEmbeddingProgressDialog(true);
         startPolling();
-      } else {
-        // No task running, show confirmation dialog for new rebuild
-        showTipsDialog({
-          title: t('force-rebuild-embedding-index'),
-          content: t('if-you-have-a-lot-of-notes-you-may-consume-a-certain-number-of-tokens'),
-          onConfirm: async () => {
-            ShowRebuildEmbeddingProgressDialog(true);
-            await api.ai.rebuildEmbeddingStart.mutate({ force: true, incremental: false });
-            setRebuildProgress({
-              percentage: 0,
-              isRunning: true,
-            });
-            startPolling();
-          },
-        });
+        return;
       }
+
+      showTipsDialog({
+        title: t('force-rebuild-embedding-index'),
+        content: t('if-you-have-a-lot-of-notes-you-may-consume-a-certain-number-of-tokens'),
+        onConfirm: async () => {
+          ShowRebuildEmbeddingProgressDialog(true);
+          setRebuildProgress({ percentage: 0, isRunning: true });
+          startPolling();
+        },
+      });
     } catch (error) {
       console.error('Failed to check rebuild status:', error);
     }
   };
 
-
   return (
     <CollapsibleCard icon="mingcute:vector-line" title="Embedding Management" className="bk-ai-card bk-ai-compact-card">
-      <div className="space-y-4">
+      <div className="v-stack bk-ai-settings-block">
         {!embeddingReady ? (
           <div className="bk-ai-section-warning">
-            Embedding is not configured. AI chat can still answer, but note retrieval, card context, and discovery should stay disabled until you choose an embedding model.
+            Embedding is not configured. Choose an embedding-capable model under Default Models, then rebuild the index. AI stays blocked until this is ready.
+            For SiliconFlow, <code>BAAI/bge-m3</code> is a strong default; <code>Qwen/Qwen3-Embedding-4B</code> is a higher-quality alternative.
           </div>
         ) : null}
-        <Item
-          type={isPc ? 'row' : 'col'}
-          leftContent={
-            <ItemWithTooltip
-              content={<>Top K</>}
-              toolTipContent={
-                <div className="md:w-[300px] flex flex-col gap-2">
-                  <div>{t('top-k-description')}</div>
-                </div>
-              }
-            />
-          }
-          rightContent={
-            <div className="flex md:w-[300px] w-full ml-auto justify-start">
-              <Slider
-                onChangeEnd={(value) => {
-                  PromiseCall(
-                    api.config.update.mutate({
-                      key: 'embeddingTopK',
-                      value: localState.embeddingTopK,
-                    }),
-                    { autoAlert: false },
-                  );
-                }}
-                onChange={(value) => {
-                  const newValue = Number(value);
-                  setLocalState(prev => ({ ...prev, embeddingTopK: newValue }));
-                }}
-                value={localState.embeddingTopK}
-                size="md"
+
+        <div className="bk-ai-form-grid">
+          <label className="bk-native-field">
+            <span>Top K · {localState.embeddingTopK}</span>
+            <div className="bk-ai-range-wrap">
+              <input
+                type="range"
+                min={1}
+                max={50}
                 step={1}
-                color="foreground"
-                label={'value'}
-                showSteps={false}
-                maxValue={50}
-                minValue={1}
-                defaultValue={5}
-                className="w-full"
+                value={localState.embeddingTopK}
+                onChange={(event) => {
+                  const embeddingTopK = Number(event.currentTarget.value);
+                  setLocalState((prev) => ({ ...prev, embeddingTopK }));
+                }}
+                onMouseUp={() => persist('embeddingTopK', localState.embeddingTopK)}
+                onTouchEnd={() => persist('embeddingTopK', localState.embeddingTopK)}
+                onBlur={() => persist('embeddingTopK', localState.embeddingTopK)}
               />
             </div>
-          }
-        />
+            <em className="bk-ai-field-help">How many notes to retrieve for each question.</em>
+          </label>
 
-        <Item
-          type={isPc ? 'row' : 'col'}
-          leftContent={
-            <ItemWithTooltip
-              content={<>Score</>}
-              toolTipContent={
-                <div className="md:w-[300px] flex flex-col gap-2">
-                  <div>{t('embedding-score-description')}</div>
-                </div>
-              }
-            />
-          }
-          rightContent={
-            <div className="flex md:w-[300px] w-full ml-auto justify-start">
-              <Slider
-                onChangeEnd={(value) => {
-                  PromiseCall(
-                    api.config.update.mutate({
-                      key: 'embeddingScore',
-                      value: localState.embeddingScore,
-                    }),
-                    { autoAlert: false },
-                  );
-                }}
-                onChange={(value) => {
-                  const newValue = Number(value);
-                  setLocalState(prev => ({ ...prev, embeddingScore: newValue }));
-                }}
-                value={localState.embeddingScore}
-                size="md"
+          <label className="bk-native-field">
+            <span>Score · {localState.embeddingScore.toFixed(2)}</span>
+            <div className="bk-ai-range-wrap">
+              <input
+                type="range"
+                min={0.2}
+                max={1}
                 step={0.01}
-                color="foreground"
-                label={'value'}
-                showSteps={false}
-                maxValue={1.0}
-                minValue={0.2}
-                defaultValue={0.6}
-                className="w-full"
+                value={localState.embeddingScore}
+                onChange={(event) => {
+                  const embeddingScore = Number(event.currentTarget.value);
+                  setLocalState((prev) => ({ ...prev, embeddingScore }));
+                }}
+                onMouseUp={() => persist('embeddingScore', localState.embeddingScore)}
+                onTouchEnd={() => persist('embeddingScore', localState.embeddingScore)}
+                onBlur={() => persist('embeddingScore', localState.embeddingScore)}
               />
             </div>
-          }
-        />
+            <em className="bk-ai-field-help">Minimum similarity for retrieved notes.</em>
+          </label>
+        </div>
 
-        <Item
-          type={isPc ? 'row' : 'col'}
-          leftContent={
-            <div className="flex flex-col gap-1">
-              <ItemWithTooltip
-                content={<>{t('exclude-tag-from-embedding')}</>}
-                toolTipContent={t('exclude-tag-from-embedding-tip')}
-              />
-              <div className="text-desc text-xs">{t('exclude-tag-from-embedding-desc')}</div>
-            </div>
-          }
-          rightContent={
-            <TagSelector
-              selectedTag={localState.excludeEmbeddingTagId?.toString() || null}
-              onSelectionChange={(key) => {
-                const newValue = key ? Number(key) : null;
-                setLocalState(prev => ({ ...prev, excludeEmbeddingTagId: newValue }));
-                PromiseCall(
-                  api.config.update.mutate({
-                    key: 'excludeEmbeddingTagId',
-                    value: newValue,
-                  }),
-                  { autoAlert: false },
-                );
+        <label className="bk-native-field">
+          <span>Exclude tagged content</span>
+          <div className="bk-native-input-wrap">
+            <select
+              value={localState.excludeEmbeddingTagId ? String(localState.excludeEmbeddingTagId) : ''}
+              onChange={(event) => {
+                const next = event.currentTarget.value ? Number(event.currentTarget.value) : null;
+                setLocalState((prev) => ({ ...prev, excludeEmbeddingTagId: next }));
+                persist('excludeEmbeddingTagId', next);
               }}
-            />
-          }
-        />
-
-        {/* Rebuild Embedding Section */}
-        <Item
-          type={isPc ? 'row' : 'col'}
-          leftContent={
-            <div className="flex flex-col gap-1">
-              <ItemWithTooltip
-                content={<>{t('rebuild-embedding-index')}</>}
-                toolTipContent={t('if-you-have-a-lot-of-notes-you-may-consume-a-certain-number-of-tokens')}
-              />
-              <div className="text-desc text-xs">{t('notes-imported-by-other-means-may-not-have-embedded-vectors')}</div>
-            </div>
-          }
-          rightContent={
-            <Button
-              color="danger"
-              variant="flat"
-              startContent={
-                rebuildProgress?.isRunning ? (
-                  <div className="flex items-center gap-1">
-                    <Icon icon="line-md:loading-twotone-loop" width="16" height="16" />
-                    {rebuildProgress?.percentage || 0}%
-                  </div>
-                ) : (
-                  <Icon icon="mingcute:refresh-4-ai-line" width="16" height="16" />
-                )
-              }
-              onPress={handleRebuildClick}
-              isDisabled={!embeddingReady}
             >
-              {rebuildProgress?.isRunning ? t('rebuild-in-progress') : t('force-rebuild')}
-            </Button>
-          }
-        />
+              <option value="">No excluded tag</option>
+              {tags.map((tag: any) => (
+                <option key={tag.id} value={tag.id}>
+                  #{tag.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <em className="bk-ai-field-help">Notes with this tag stay out of the embedding index.</em>
+        </label>
+
+        <div className="h-stack bk-ai-rebuild-row-settings">
+          <div className="v-stack" style={{ gap: 4, minWidth: 0, flex: 1 }}>
+            <div className="bk-ai-dialog-kicker">Rebuild index</div>
+            <p className="bk-ai-settings-copy">
+              Rebuilds note text only. Images and file attachments are skipped.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="bk-native-button is-secondary"
+            onClick={handleRebuildClick}
+            disabled={!embeddingReady}
+          >
+            {rebuildProgress?.isRunning
+              ? `${t('rebuild-in-progress')} ${rebuildProgress.percentage || 0}%`
+              : t('force-rebuild')}
+          </button>
+        </div>
       </div>
     </CollapsibleCard>
   );

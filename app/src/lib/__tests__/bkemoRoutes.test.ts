@@ -27,5 +27,7 @@ describe('bkemo canonical root routes', () => {
     expect(settingsSectionFromPath('/settings/appearance')).toBe('appear');
     expect(settingsSectionFromPath('/settings/import')).toBe('import');
     expect(settingsSectionFromPath('/settings/export')).toBe('export');
+    expect(pathForSettingsSection('developer')).toBe('/settings/developer');
+    expect(settingsSectionFromPath('/settings/developer')).toBe('developer');
   });
 });

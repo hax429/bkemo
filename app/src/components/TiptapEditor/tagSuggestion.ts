@@ -24,7 +24,8 @@ export const TagSuggestion = Extension.create<TagSuggestionOptions>({
         startOfLine: false,
         allowSpaces: false,
         command: ({ editor, range, props }) => {
-          editor.chain().focus().deleteRange(range).insertContent(`#${(props as any).label} `).run();
+          const label = String((props as any).label || '').replace(/^#/, '');
+          editor.chain().focus().deleteRange(range).insertContent(`#${label} `).run();
         },
         items: ({ query }) => {
           const q = query.toLowerCase();
@@ -34,7 +35,7 @@ export const TagSuggestion = Extension.create<TagSuggestionOptions>({
           if (query && !tags.some((t) => t.toLowerCase() === q)) {
             matched.unshift(query);
           }
-          return matched.map((t) => ({ id: t, label: t, hint: tags.includes(t) ? undefined : 'new' }));
+          return matched.map((t) => ({ id: t, label: `#${t}`, hint: tags.includes(t) ? undefined : 'new' }));
         },
         render: () => makeSuggestionRender({ emptyText: 'Type a tag…' }),
       }),

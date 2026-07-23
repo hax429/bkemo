@@ -20,10 +20,12 @@ import { AboutSetting } from '@/components/BlinkoSettings/AboutSetting';
 import { DataTransfer } from './DataTransfer';
 import { StorageScreen } from './StorageScreen';
 import { ACCENT_SWATCHES, MOBILE_TOOL_OPTIONS, PRESET_THEMES, type BkemoPreset, type BkemoPrefs, type BkemoTheme, type BkemoDensity } from '@/lib/bkemoSettings';
+import { isAiDebugAvailable } from '@/lib/aiDebug';
 import { isInTauri } from '@/lib/tauriHelper';
 import { ensureNotificationPermission, clearTaskNotifications } from '@/lib/taskNotifications';
 import type { BkemoRoute } from './Sidebar';
 import { useMediaQuery } from 'usehooks-ts';
+import { DeveloperAiDebugSettings } from './ai/AIDebugPanel';
 
 const mono: React.CSSProperties = { fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '.06em', color: 'var(--fg-3)', textTransform: 'uppercase' };
 
@@ -38,6 +40,7 @@ const GROUP_OF: Record<string, 'you' | 'system' | 'data'> = {
   ai: 'system',
   task: 'system',
   storage: 'system',
+  developer: 'system',
   data: 'data',
   about: 'data',
 };
@@ -514,6 +517,14 @@ export const SettingsScreen = observer(function SettingsScreen({ prefs, onChange
       { key: 'task', title: 'Schedule Task', icon: 'tabler:list-check', requireAdmin: true, component: <TaskSetting /> },
       { key: 'storage', title: 'Storage', icon: 'tabler:database', requireAdmin: true, component: <StorageScreen /> },
     ] : []),
+    // Vite DEV only — never listed in production builds.
+    ...(isAiDebugAvailable() ? [{
+      key: 'developer',
+      title: 'Developer',
+      icon: 'tabler:bug',
+      requireAdmin: false,
+      component: <DeveloperAiDebugSettings />,
+    }] : []),
     { key: 'data', title: 'Data Transfer', icon: 'tabler:file-export', requireAdmin: false, component: <DataTransfer tab={transferTab} onTab={(tab) => onSectionChange(tab)} /> },
     { key: 'about', title: 'About', icon: 'tabler:info-circle', requireAdmin: false, component: <AboutSetting /> },
   ];

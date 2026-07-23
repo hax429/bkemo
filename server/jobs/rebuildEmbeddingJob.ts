@@ -241,28 +241,8 @@ export class RebuildEmbeddingJob extends BaseScheduleJob {
               }
             }
 
-            if (note?.attachments) {
-              for (const attachment of note.attachments) {
-                const isImage = (filePath: string): boolean => {
-                  if (!filePath) return false;
-                  const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.svg'];
-                  return imageExtensions.some(ext => filePath.toLowerCase().endsWith(ext));
-                };
-
-                if (isImage(attachment?.path)) {
-                  results.push({ type: 'skip', content: attachment?.path, error: 'image is not supported', timestamp: new Date().toISOString() });
-                  continue;
-                }
-
-                const attachmentResult = await this.processAttachmentWithRetry(note, attachment, 3);
-                if (attachmentResult.success) {
-                  results.push({ type: 'success', content: decodeURIComponent(attachment?.path), timestamp: new Date().toISOString() });
-                  noteProcessed = true;
-                } else {
-                  results.push({ type: 'error', content: decodeURIComponent(attachment?.path), error: attachmentResult.error, timestamp: new Date().toISOString() });
-                }
-              }
-            }
+            // Images and file attachments are excluded from embedding.
+            // Note body text is the only indexed content.
 
             if (noteProcessed) {
               processedIds.add(note.id);
