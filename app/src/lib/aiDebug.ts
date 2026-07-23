@@ -140,11 +140,16 @@ export function describeAiError(cause: unknown) {
     || /aborted|BodyStreamBuffer|AbortError/i.test(message);
   // streamApi uses AbortSignal.timeout(15m); older builds used 5m (≈300000ms).
   const timeoutLike = aborted && /BodyStreamBuffer|The operation was aborted/i.test(message);
+  // Proxies/CDNs often return an HTML error page; JSON parsers then throw this.
+  const htmlInsteadOfJson = /Unexpected token\s+'<'|is not valid JSON|<html/i.test(message);
   return {
     name,
-    message,
+    message: htmlInsteadOfJson
+      ? 'AI request got an HTML error page instead of JSON (auth/proxy/gateway). Refresh and try again; if it persists, check Settings → AI and that you are signed in.'
+      : message,
     aborted,
     timeoutLike,
+    htmlInsteadOfJson,
     code: err?.data?.code ?? err?.code,
     cause: err?.cause ? String(err.cause?.message || err.cause) : undefined,
   };

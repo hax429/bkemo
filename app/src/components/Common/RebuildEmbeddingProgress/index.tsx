@@ -56,10 +56,19 @@ export const ImportProgress = observer(({ force }: { force: boolean }) => {
       });
     };
 
+    const friendlyPollError = (err: any) => {
+      const raw = String(err?.message || err || '');
+      if (/Unexpected token\s+'<'|is not valid JSON|<!DOCTYPE|<html/i.test(raw)) {
+        return 'Server is busy embedding notes (progress API returned HTML). Keep this open — polling will resume when the server breathes.';
+      }
+      return raw || 'Failed to fetch progress';
+    };
+
     const fetchProgress = async () => {
       try {
         const result = await api.ai.rebuildEmbeddingProgress.query();
         if (cancelled || !result) return;
+        setError(null);
         setProgress(result.current || 0);
         setTotal(result.total || 0);
         if (!result.isRunning && (result.current || 0) > 0) {
@@ -80,7 +89,8 @@ export const ImportProgress = observer(({ force }: { force: boolean }) => {
         }
         blinko.updateTicker++;
       } catch (err: any) {
-        if (!cancelled) setError(err?.message || 'Failed to fetch progress');
+        // Transient while rebuild saturates the process — keep polling, don't flip to fatal error.
+        if (!cancelled) setError(friendlyPollError(err));
       }
     };
 
@@ -95,6 +105,14 @@ export const ImportProgress = observer(({ force }: { force: boolean }) => {
         blinko.updateTicker++;
       } catch (err: any) {
         if (!cancelled) {
+          const raw = String(err?.message || '');
+          // Start can time out as HTML while the job already enqueued — keep polling.
+          if (/Unexpected token\s+'<'|is not valid JSON|<!DOCTYPE|<html/i.test(raw)) {
+            setStatus('running');
+            setError('Rebuild may already be running; the start response timed out. Polling progress…');
+            timer = setInterval(fetchProgress, 2000);
+            return;
+          }
           setStatus('error');
           setError(err?.message || 'Failed to start rebuild task');
         }

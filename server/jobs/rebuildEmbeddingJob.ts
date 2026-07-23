@@ -270,6 +270,10 @@ export class RebuildEmbeddingJob extends BaseScheduleJob {
             console.error(`[${new Date().toISOString()}] error processing note ${note.id}:`, error);
             results.push({ type: 'error', content: note.content.slice(0, 30), error: error?.toString(), timestamp: new Date().toISOString() });
           }
+
+          // Yield so HTTP/tRPC (progress polls) can run during long rebuilds.
+          // Without this, Bun stays busy and nginx returns HTML → client JSON parse errors.
+          await new Promise((resolve) => setTimeout(resolve, 25));
         }
       }
 

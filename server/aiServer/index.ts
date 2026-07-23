@@ -285,8 +285,20 @@ export class AiService {
       const [agent, rag] = await Promise.all([agentPromise, ragPromise]);
       if (rag) {
         ragNote = rag.notes;
-        // Prefer the already-truncated aiContext over dumping full memo bodies.
-        systemChunks.push(`Relevant notes:\n${rag.aiContext}`);
+        if (ragNote.length > 0 && String(rag.aiContext || '').trim()) {
+          // Prefer the already-truncated aiContext over dumping full memo bodies.
+          systemChunks.push(
+            `You have access to the user's personal notes below. Prefer them over general knowledge.\n\nRelevant notes:\n${rag.aiContext}`,
+          );
+        } else {
+          // Empty index / no matches — avoid models claiming they can never access notes.
+          systemChunks.push(
+            'No relevant notes were retrieved from the user\'s embedding index for this question. ' +
+              'Do not claim you lack the ability to access personal notes. Say clearly that no matching notes were found, ' +
+              'and suggest rebuilding the embedding index in Settings → AI if this keeps happening.',
+          );
+        }
+        if (collectDebug) debug.ragNotes = ragNote.length;
       }
 
       const historySystems = conversations

@@ -387,7 +387,7 @@ function useAIThread({
       setError(
         info.aborted
           ? 'AI stream was aborted before a full reply arrived. Check the AI debug channel if enabled.'
-          : (cause?.message || 'AI response failed.'),
+          : (info.message || 'AI response failed.'),
       );
     } finally {
       setSending(false);
