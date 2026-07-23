@@ -13,6 +13,7 @@
 		1B39F0174CBBA8B84BEAA29B /* OpenBkemoIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFB44DBDCAF84262417002BF /* OpenBkemoIntent.swift */; };
 		24C216022576E0A7FE39F6A5 /* BkemoShared in Frameworks */ = {isa = PBXBuildFile; productRef = A522452645EFF2D9D39D6AE3 /* BkemoShared */; };
 		28893B7B6F09D9FD0CF23D29 /* SyncMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC9E54D614F2704924B9DE52 /* SyncMonitor.swift */; };
+		2A1F0C9E4B7D81A03E55C201 /* CaptureFeedback.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C8E4D2A9F01B67E44A0D113 /* CaptureFeedback.swift */; };
 		306972EAFA69969BCC417309 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25774BCF16489116DC59BAD1 /* SettingsView.swift */; };
 		30A6CA44B6D1B9B7DB2BA6DE /* MemoDetailSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2FB19649D321D9BB18CAFAB4 /* MemoDetailSheet.swift */; };
 		4BCE7694169BEC3408A93C0A /* PriorityToggle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 209D3385C1D164942E4A7C9B /* PriorityToggle.swift */; };
@@ -66,30 +67,31 @@
 		052BCA6EE9E182729054F880 /* ShareExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ShareExtension.entitlements; sourceTree = "<group>"; };
 		0DD3C15243AE6DE35A16B678 /* BiometricGate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BiometricGate.swift; sourceTree = "<group>"; };
 		12FD583A3E8B00D2FB9C468B /* ListStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListStore.swift; sourceTree = "<group>"; };
+		1C8E4D2A9F01B67E44A0D113 /* CaptureFeedback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureFeedback.swift; sourceTree = "<group>"; };
 		209D3385C1D164942E4A7C9B /* PriorityToggle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PriorityToggle.swift; sourceTree = "<group>"; };
 		25774BCF16489116DC59BAD1 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		2B9D5085D1DD342F146A91A7 /* ShareView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareView.swift; sourceTree = "<group>"; };
 		2FB19649D321D9BB18CAFAB4 /* MemoDetailSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoDetailSheet.swift; sourceTree = "<group>"; };
 		32F42D725FBD17597B50E07C /* ModelContainerSetup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelContainerSetup.swift; sourceTree = "<group>"; };
-		333F05E91B24DC94EAA6FE70 /* Shared */ = {isa = PBXFileReference; lastKnownFileType = folder; name = Shared; path = Shared; sourceTree = SOURCE_ROOT; };
+		333F05E91B24DC94EAA6FE70 /* Shared */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Shared; sourceTree = SOURCE_ROOT; };
 		3C1A86A1C177D17A92E6CA92 /* MemoReconcilerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoReconcilerTests.swift; sourceTree = "<group>"; };
 		3F9F399CFE2225D978AD08AB /* RecentListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentListView.swift; sourceTree = "<group>"; };
 		4F82042D05E0FE6D96100484 /* ShareViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
 		4FA66218012EE05E463A1CD7 /* MemoWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoWidget.swift; sourceTree = "<group>"; };
-		53790401FE41771C01F73CF7 /* bkemoTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = bkemoTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		53790401FE41771C01F73CF7 /* bkemoTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = bkemoTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		610C29329A039BC8E3740CA2 /* TypeToggle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TypeToggle.swift; sourceTree = "<group>"; };
-		642772A91184A1CA2C190EB4 /* bkemoShare.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = bkemoShare.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		642772A91184A1CA2C190EB4 /* bkemoShare.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = bkemoShare.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		6D4442CB7C2D10F41D009761 /* MemoRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoRow.swift; sourceTree = "<group>"; };
 		74537B5A5577131492C302C8 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		7FD73E033854F7A45429CC6F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		8D39CCC35E519BBBF53FFA3B /* SyncEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncEngine.swift; sourceTree = "<group>"; };
 		8E4A9F06D4B690FCCD1F1DED /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		A1DDCABE768C3ABB15509090 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
-		A3807A82D33C1C447035B3ED /* bkemoWidget.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = bkemoWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		A3807A82D33C1C447035B3ED /* bkemoWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = bkemoWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		A57B631A9EA9E529586C25E0 /* bkemoApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = bkemoApp.swift; sourceTree = "<group>"; };
 		AC9E54D614F2704924B9DE52 /* SyncMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncMonitor.swift; sourceTree = "<group>"; };
 		AEBC36FCC57E19C844D46ACC /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
-		BCF5B1796117328021367301 /* bkemo.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = bkemo.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		BCF5B1796117328021367301 /* bkemo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = bkemo.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		BF2A642905A03E92845E0CFE /* BiometricGateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BiometricGateTests.swift; sourceTree = "<group>"; };
 		BFB44DBDCAF84262417002BF /* OpenBkemoIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenBkemoIntent.swift; sourceTree = "<group>"; };
 		C818C6D8E369ADA6B1B54A04 /* MemoItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoItem.swift; sourceTree = "<group>"; };
@@ -232,6 +234,7 @@
 		D2371AF0A4C2280B48B4CA6C /* App */ = {
 			isa = PBXGroup;
 			children = (
+				1C8E4D2A9F01B67E44A0D113 /* CaptureFeedback.swift */,
 				A1DDCABE768C3ABB15509090 /* RootView.swift */,
 				AC9E54D614F2704924B9DE52 /* SyncMonitor.swift */,
 			);
@@ -368,19 +371,15 @@
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
 					37476011B9A30B03755EF3A7 = {
-						DevelopmentTeam = 5L7AP54366;
 						ProvisioningStyle = Automatic;
 					};
 					BAB221679586EAC1EE587017 = {
-						DevelopmentTeam = 5L7AP54366;
 						ProvisioningStyle = Automatic;
 					};
 					CB1293B23FA73147F80B7A14 = {
-						DevelopmentTeam = 5L7AP54366;
 						ProvisioningStyle = Automatic;
 					};
 					E8C3D861485884FB30A72376 = {
-						DevelopmentTeam = 5L7AP54366;
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -455,6 +454,7 @@
 			files = (
 				99A11276AB79D46F9522EFAE /* AuthManager.swift in Sources */,
 				02E40FC857D932E6620FCEEE /* BiometricGate.swift in Sources */,
+				2A1F0C9E4B7D81A03E55C201 /* CaptureFeedback.swift in Sources */,
 				DA73CBE27B2CD94266E263C7 /* ComposerView.swift in Sources */,
 				BE1EE3EBFB11C52ECA2E3813 /* ListStore.swift in Sources */,
 				30A6CA44B6D1B9B7DB2BA6DE /* MemoDetailSheet.swift in Sources */,
@@ -500,6 +500,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGNING_ALLOWED = NO;
+				DEVELOPMENT_TEAM = XUR3432T6M;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -518,7 +519,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = Widget/Widget.entitlements;
-				DEVELOPMENT_TEAM = 5L7AP54366;
+				DEVELOPMENT_TEAM = XUR3432T6M;
 				INFOPLIST_FILE = Widget/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -537,7 +538,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = ShareExtension/ShareExtension.entitlements;
-				DEVELOPMENT_TEAM = 5L7AP54366;
+				DEVELOPMENT_TEAM = XUR3432T6M;
 				INFOPLIST_FILE = ShareExtension/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -556,7 +557,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = ShareExtension/ShareExtension.entitlements;
-				DEVELOPMENT_TEAM = 5L7AP54366;
+				DEVELOPMENT_TEAM = XUR3432T6M;
 				INFOPLIST_FILE = ShareExtension/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -577,7 +578,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = bkemo/bkemo.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = 5L7AP54366;
+				DEVELOPMENT_TEAM = XUR3432T6M;
 				INFOPLIST_FILE = bkemo/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -665,7 +666,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = Widget/Widget.entitlements;
-				DEVELOPMENT_TEAM = 5L7AP54366;
+				DEVELOPMENT_TEAM = XUR3432T6M;
 				INFOPLIST_FILE = Widget/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -685,6 +686,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGNING_ALLOWED = NO;
+				DEVELOPMENT_TEAM = XUR3432T6M;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -705,7 +707,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = bkemo/bkemo.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = 5L7AP54366;
+				DEVELOPMENT_TEAM = XUR3432T6M;
 				INFOPLIST_FILE = bkemo/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;

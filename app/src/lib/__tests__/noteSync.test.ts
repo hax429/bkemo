@@ -50,7 +50,7 @@ describe('cross-device note sync', () => {
     const apply = vi.fn().mockResolvedValue(undefined);
     const fetchImpl = vi.fn(() => new Promise<Response>(() => {})) as any;
 
-    const stop = createNoteSyncController({
+    const controller = createNoteSyncController({
       accountId: '42',
       token: 'token',
       streamUrl: '/api/v1/note/events',
@@ -67,6 +67,6 @@ describe('cross-device note sync', () => {
     });
     expect(onBootstrap).toHaveBeenCalledOnce();
     expect(apply).toHaveBeenCalledOnce();
-    stop();
+    controller.dispose();
   });
 });

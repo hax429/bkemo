@@ -29,6 +29,8 @@ final class SyncEngine: ObservableObject {
         )
         guard let pending = try? context.fetch(descriptor), !pending.isEmpty else { return }
         for memo in pending {
+            let localId = memo.localId
+            let source = memo.source
             do {
                 let body = BkemoClient.UpsertBody(
                     content: memo.content,
@@ -43,6 +45,12 @@ final class SyncEngine: ObservableObject {
                 memo.syncState = "synced"
                 memo.syncError = nil
                 try context.save()
+                if source == MemoSource.manual {
+                    CaptureFeedback.shared.noteSynced(localId: localId)
+                } else {
+                    // Share / widget captures were not tracked by the composer.
+                    CaptureFeedback.shared.noteSyncedBurst()
+                }
             } catch APIError.unauthorized {
                 AuthManager.shared.handleUnauthorized()
                 return
@@ -56,9 +64,20 @@ final class SyncEngine: ObservableObject {
                 memo.syncState = "error"
                 memo.syncError = error.localizedDescription
                 try? context.save()
+                CaptureFeedback.shared.showFailed("Sync failed")
             }
         }
         AppGroup.defaults.set(Date().timeIntervalSince1970, forKey: AppGroup.lastSyncKey)
+    }
+
+    func retry(item: MemoItem) async {
+        guard let lid = item.localId else { return }
+        let descriptor = FetchDescriptor<LocalMemo>(predicate: #Predicate { $0.localId == lid })
+        guard let row = try? context.fetch(descriptor).first else { return }
+        row.syncState = "pending"
+        row.syncError = nil
+        try? context.save()
+        await replayPending()
     }
 
     @discardableResult

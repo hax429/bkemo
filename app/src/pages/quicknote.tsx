@@ -295,6 +295,7 @@ const QuickNotePage = observer(() => {
         placeholder={`${t('quicknote.title') || 'Quick memo'} · / for commands, ⌘↵ to save`}
         autofocus
         onSubmit={send}
+        onDropFiles={(files) => { void att.addFiles(files); }}
         onChange={(markdown) => {
           setDraft(markdown);
           if (markdown) localStorage.setItem(QUICKNOTE_DRAFT_KEY, markdown);

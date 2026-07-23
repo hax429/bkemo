@@ -63,6 +63,9 @@ pub fn run() {
         builder
             .invoke_handler(tauri::generate_handler![
                 toggle_editor_window,
+                set_main_always_on_top,
+                is_main_always_on_top,
+                start_attachment_drag,
                 register_hotkey,
                 unregister_hotkey,
                 get_registered_shortcuts,

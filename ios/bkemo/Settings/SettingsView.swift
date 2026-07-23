@@ -4,13 +4,14 @@ import BkemoShared
 struct SettingsView: View {
     @ObservedObject var gate = BiometricGate.shared
     @EnvironmentObject private var appearance: AppearanceStore
+    @Environment(\.dismiss) private var dismiss
     @State private var biometric = BiometricGate.preferenceEnabled(
         storedValue: AppGroup.defaults.object(forKey: AppGroup.biometricKey)
     )
 
     var body: some View {
         NavigationStack {
-            Form {
+            List {
                 Section {
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 5), spacing: 14) {
                         ForEach(AppearanceStore.swatches, id: \.self) { hex in
@@ -34,19 +35,16 @@ struct SettingsView: View {
                             .accessibilityLabel("Accent \(hex)")
                         }
                     }
-                    .padding(.vertical, 6)
+                    .padding(.vertical, 8)
 
-                    if let message = appearance.syncError {
-                        Label(message, systemImage: "icloud.slash")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Label("Synced with your bkemo account", systemImage: "checkmark.icloud")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
+                    Label(
+                        appearance.syncError ?? "Synced with your bkemo account",
+                        systemImage: appearance.syncError == nil ? "checkmark.icloud" : "icloud.slash"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 } header: {
-                    Text("Accent color")
+                    sectionKicker("Accent")
                 } footer: {
                     Text("Used for actions and selections. Priority colors stay gold and red.")
                 }
@@ -55,19 +53,38 @@ struct SettingsView: View {
                     Toggle("Biometric lock", isOn: $biometric)
                         .onChange(of: biometric) { _, on in gate.setEnabled(on) }
                 } header: {
-                    Text("Security")
+                    sectionKicker("Security")
                 } footer: {
                     Text("Optional device-local identity verification. Face ID or Touch ID is handled by iOS; bkemo never receives or stores biometric data.")
                 }
-				Section {
-                    Button("Sign out", role: .destructive) {
+
+                Section {
+                    Button(role: .destructive) {
                         AuthManager.shared.logout()
+                    } label: {
+                        Text("Sign out")
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                } header: { Text("Account") }
+                } header: {
+                    sectionKicker("Account")
+                }
             }
+            .listStyle(.insetGrouped)
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { dismiss() }
+                        .fontWeight(.semibold)
+                }
+            }
             .task { await appearance.refresh() }
         }
+    }
+
+    private func sectionKicker(_ text: String) -> some View {
+        Text(text.uppercased())
+            .font(.system(size: 10.5, weight: .medium, design: .monospaced))
+            .tracking(0.9)
     }
 }

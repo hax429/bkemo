@@ -23,6 +23,12 @@ import { toUpsertAttachment } from '@/lib/attachments';
 import { useAttachments, PendingAttachments } from './useAttachments';
 import { AttachmentList } from './AttachmentList';
 import { noteMatchesProject } from '@/lib/noteCacheFilters';
+import { queryNotesFromCache } from '@/lib/noteCache';
+import { Icon } from '@/components/Common/Iconify/icons';
+import { invoke } from '@tauri-apps/api/core';
+import { isDesktop, isInTauri } from '@/lib/tauriHelper';
+
+const MAIN_WINDOW_PIN_KEY = 'bkemo.mainWindowPinned';
 
 function dayLabel(d: Dayjs): string {
   const today = dayjs().startOf('day');
@@ -181,6 +187,7 @@ const Composer = observer(function Composer({ onExpand }: { onExpand?: (draft: N
         placeholder="Throw a thought in here…  ( -[] makes a task · due:today / due:06/25/26 sets a date )"
         onChange={onEditorChange}
         onSubmit={send}
+        onDropFiles={(files) => { void att.addFiles(files); }}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
         getTags={() => blinko.tagList.value?.pathTags ?? []}
@@ -582,6 +589,9 @@ export const Stream = observer(function Stream({ onOpen, onNew, onExpand, tag }:
   const [hasMore, setHasMore] = useState(false);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [menu, setMenu] = useState<{ x: number; y: number; note: Note } | null>(null);
+  const [windowPinned, setWindowPinned] = useState(() => {
+    try { return localStorage.getItem(MAIN_WINDOW_PIN_KEY) === '1'; } catch { return false; }
+  });
   const scrollRef = useRef<HTMLDivElement>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
 
@@ -591,15 +601,46 @@ export const Stream = observer(function Stream({ onOpen, onNew, onExpand, tag }:
   const cols = Math.max(1, isMobile ? cfg.smallCols : isTablet ? cfg.mediumCols : cfg.largeCols);
   const maxW = cfg.maxHomePageWidth > 0 ? cfg.maxHomePageWidth : (cols > 1 ? Math.min(1200, 520 * cols) : 760);
   const showComposer = !(cfg.hidePcEditor && !isMobile);
+  const showWindowPin = isInTauri() && isDesktop();
+
+  useEffect(() => {
+    if (!showWindowPin) return;
+    void invoke('set_main_always_on_top', { pinned: windowPinned }).catch((e) => {
+      console.warn('[stream] pin window failed:', e);
+    });
+  }, [showWindowPin, windowPinned]);
+
+  const toggleWindowPin = () => {
+    setWindowPinned((prev) => {
+      const next = !prev;
+      try { localStorage.setItem(MAIN_WINDOW_PIN_KEY, next ? '1' : '0'); } catch { /* ignore */ }
+      return next;
+    });
+  };
 
   // Home and project streams paginate the same top-level unit. Pinned children
   // are a deliberate exception: they also get one independent, labelled card.
   const size = PageSize.value || 30;
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    setTotal(null);
     const projectFilter = tag ? { projectTag: tag } : {};
+    const listFilter = {
+      type: -1,
+      isRecycle: false,
+      isArchived: false,
+      parentNoteId: null as null,
+      page: 1,
+      size,
+      ...projectFilter,
+    };
+
+    // Paint Dexie cache immediately so Home never blanks while the network catches up.
+    void queryNotesFromCache(listFilter).then((cached) => {
+      if (cancelled || cached.length === 0) return;
+      setAllNotes((prev) => (prev.length === 0 ? cached : prev));
+      setLoading(false);
+    });
+
     Promise.all([
       blinko.queryNotes({ type: -1, isRecycle: false, isArchived: false, parentNoteId: null, ...projectFilter }, 1, size),
       blinko.queryNotes({ type: -1, isRecycle: false, isArchived: false, hasParent: true, isTop: true, ...projectFilter }, 1, 200),
@@ -792,6 +833,30 @@ export const Stream = observer(function Stream({ onOpen, onNew, onExpand, tag }:
         <span style={{ color: 'var(--fg-3)' }}>/</span>
         <span style={{ color: 'var(--fg-2)', fontSize: 13 }}>{tag ? 'Project' : 'Stream'}</span>
         <span className="spacer" />
+        {showWindowPin && (
+          <button
+            type="button"
+            onClick={toggleWindowPin}
+            title={windowPinned ? 'Unpin window from front' : 'Pin window to front'}
+            aria-label={windowPinned ? 'Unpin window from front' : 'Pin window to front'}
+            aria-pressed={windowPinned}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 26,
+              height: 26,
+              border: 'none',
+              borderRadius: 6,
+              background: windowPinned ? 'var(--hover)' : 'transparent',
+              color: windowPinned ? 'var(--accent)' : 'var(--fg-3)',
+              cursor: 'pointer',
+              flexShrink: 0,
+            }}
+          >
+            <Icon icon="lets-icons:pin" width={15} height={15} />
+          </button>
+        )}
         <span style={{ color: 'var(--fg-3)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>
           {blinko.isOnline && total != null ? `${topNotes.length} of ${total} memos` : `${topNotes.length} cached memos`}
           {visiblePinnedSubtasks.length > 0 ? ` · ${visiblePinnedSubtasks.length} pinned subtask${visiblePinnedSubtasks.length === 1 ? '' : 's'}` : ''}

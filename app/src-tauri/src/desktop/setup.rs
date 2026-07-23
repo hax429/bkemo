@@ -5,8 +5,8 @@ use tauri_plugin_global_shortcut::{ShortcutEvent, ShortcutState};
 
 use crate::desktop::{
     restore_main_window_state, setup_system_tray, setup_window_state_monitoring,
-    set_dock_visible, toggle_quickai_window, toggle_quicknote_window, toggle_quicktool_window,
-    HotkeyConfig,
+    set_dock_visible, toggle_editor_window, toggle_quickai_window, toggle_quicknote_window,
+    toggle_quicktool_window, HotkeyConfig,
 };
 #[cfg(target_os = "macos")]
 use crate::desktop::setup_application_menu;
@@ -190,6 +190,11 @@ pub fn create_global_shortcut_handler() -> impl Fn(&AppHandle<tauri::Wry>, &taur
                         println!("Triggered quicktool window via shortcut: {}", shortcut_str);
                         return;
                     },
+                    "toggle-main" => {
+                        let _ = toggle_editor_window(app.clone());
+                        println!("Triggered main window toggle via shortcut: {}", shortcut_str);
+                        return;
+                    },
                     "text-selection" => {
                         println!("🚀 Triggering text selection via direct shortcut: {}", shortcut_str);
                         crate::desktop::handle_text_selection(app);
@@ -222,6 +227,11 @@ pub fn create_global_shortcut_handler() -> impl Fn(&AppHandle<tauri::Wry>, &taur
                         "quicktool" => {
                             let _ = toggle_quicktool_window(app.clone());
                             println!("Triggered quicktool window via matched shortcut: {} -> {}", shortcut_str, registered_shortcut);
+                            return;
+                        },
+                        "toggle-main" => {
+                            let _ = toggle_editor_window(app.clone());
+                            println!("Triggered main window toggle via matched shortcut: {} -> {}", shortcut_str, registered_shortcut);
                             return;
                         },
                         "text-selection" => {

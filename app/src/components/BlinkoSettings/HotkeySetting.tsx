@@ -450,8 +450,8 @@ export const HotkeySetting = observer(() => {
           <Item
             leftContent={
               <ItemWithTooltip
-                content="Autostart"
-                toolTipContent="Start Blinko automatically on system boot"
+                content="Start at Login"
+                toolTipContent="Launch bkemo automatically when you sign in to this Mac. The window starts hidden to the tray; use ⌃Q or ⌃W to show it."
               />
             }
             rightContent={

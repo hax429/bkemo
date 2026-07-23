@@ -56,7 +56,10 @@ function writeCursor(accountId: string, cursor: number) {
  * Foreground-only live sync. SSE is the fast signal; the durable cursor poll is
  * authoritative and catches disconnects, server restarts, and suspended apps.
  */
-export function createNoteSyncController(options: NoteSyncControllerOptions): () => void {
+export function createNoteSyncController(options: NoteSyncControllerOptions): {
+  dispose: () => void;
+  syncNow: () => Promise<void>;
+} {
   const fetchImpl = options.fetchImpl ?? fetch;
   const pollMs = options.pollMs ?? 10_000;
   let stopped = false;
@@ -159,14 +162,17 @@ export function createNoteSyncController(options: NoteSyncControllerOptions): ()
   const unsubscribeOnline = options.subscribeOnline?.(resume);
   resume();
 
-  return () => {
-    stopped = true;
-    clearInterval(poll);
-    if (reconnectTimer) clearTimeout(reconnectTimer);
-    streamAbort?.abort();
-    unsubscribeOnline?.();
-    window.removeEventListener('focus', resume);
-    window.removeEventListener('online', onOnline);
-    document.removeEventListener('visibilitychange', onVisibility);
+  return {
+    dispose: () => {
+      stopped = true;
+      clearInterval(poll);
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      streamAbort?.abort();
+      unsubscribeOnline?.();
+      window.removeEventListener('focus', resume);
+      window.removeEventListener('online', onOnline);
+      document.removeEventListener('visibilitychange', onVisibility);
+    },
+    syncNow: () => sync(),
   };
 }

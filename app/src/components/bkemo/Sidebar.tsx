@@ -117,8 +117,33 @@ export const Sidebar = observer(function Sidebar({ activeRoute, onNav, onNewMemo
 
   return (
     <div style={{ width: 248, height: '100%', flexShrink: 0, position: 'relative', background: 'color-mix(in srgb, var(--bg) 60%, #000 6%)', borderRight: '1px solid var(--border)' }}>
-      {isInTauri() && isMacOS() && <div data-tauri-drag-region style={{ height: 28 }} />}
-      <div className="v-stack bk-scroll" style={{ height: isInTauri() && isMacOS() ? 'calc(100% - 28px)' : '100%', overflow: 'auto', padding: '12px 8px 12px', gap: 2 }}>
+      {isInTauri() && isMacOS() && (
+        <div
+          data-tauri-drag-region
+          style={{
+            height: 36,
+            display: 'flex',
+            alignItems: 'flex-end',
+            padding: '0 12px 6px 78px',
+            boxSizing: 'border-box',
+          }}
+        >
+          <span
+            data-tauri-drag-region
+            style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 11,
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+              color: 'var(--fg-3)',
+              userSelect: 'none',
+            }}
+          >
+            bkemo
+          </span>
+        </div>
+      )}
+      <div className="v-stack bk-scroll" style={{ height: isInTauri() && isMacOS() ? 'calc(100% - 36px)' : '100%', overflow: 'auto', padding: '12px 8px 12px', gap: 2 }}>
         {/* workspace trigger */}
         <div style={{ position: 'relative' }}>
           <div

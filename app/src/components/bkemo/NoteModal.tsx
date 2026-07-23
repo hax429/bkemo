@@ -355,6 +355,7 @@ export const NoteModal = observer(function NoteModal({ note, onClose, startFulls
             value={note.content ?? ''}
             autofocus
             onSubmit={save}
+            onDropFiles={(files) => { void att.addFiles(files); }}
             onChange={(md) => {
               setUpdateTicker((v) => v + 1);
               setContentLen(md.length);

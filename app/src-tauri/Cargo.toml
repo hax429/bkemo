@@ -56,6 +56,8 @@ mouse_position = "0.1"
 enigo = "0.3"
 rdev = "0.3"
 sys-locale = "0.3"
+drag = "2.1"
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync", "fs"] }
 
  
 

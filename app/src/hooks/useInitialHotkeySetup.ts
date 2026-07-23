@@ -1,11 +1,14 @@
 import { useEffect } from 'react';
 import { isInTauri, isDesktop } from '@/lib/tauriHelper';
 import { invoke } from '@tauri-apps/api/core';
+import { enable, isEnabled } from '@tauri-apps/plugin-autostart';
 import { RootStore } from '@/store';
 import { BlinkoStore } from '@/store/blinkoStore';
 import { DEFAULT_HOTKEY_CONFIG } from '@shared/lib/types';
 
 export const QUICKNOTE_HOTKEY_ERROR_KEY = 'bkemo.quicknoteHotkeyError';
+const AUTOSTART_DEFAULT_KEY = 'bkemo.autostartDefaulted';
+const TOGGLE_MAIN_HOTKEY = 'Control+Q';
 
 export const useInitialHotkeySetup = () => {
   useEffect(() => {
@@ -29,6 +32,17 @@ export const useInitialHotkeySetup = () => {
         await invoke('set_tray_visible', {
           visible: finalConfig.systemTrayEnabled || !finalConfig.enabled
         });
+
+        // Default start-at-login on first desktop launch (user can disable in Settings).
+        try {
+          if (!localStorage.getItem(AUTOSTART_DEFAULT_KEY)) {
+            const already = await isEnabled();
+            if (!already) await enable();
+            localStorage.setItem(AUTOSTART_DEFAULT_KEY, '1');
+          }
+        } catch (error) {
+          console.warn('Failed to enable default autostart:', error);
+        }
         
         // Register quicknote shortcut if enabled
         if (finalConfig.enabled) {
@@ -59,6 +73,17 @@ export const useInitialHotkeySetup = () => {
           } catch (error) {
             console.warn('Failed to register initial quickai shortcut:', error);
           }
+        }
+
+        // Global show/hide for the main window (separate from Quick Note).
+        try {
+          await invoke('register_hotkey', {
+            shortcut: TOGGLE_MAIN_HOTKEY,
+            command: 'toggle-main',
+          });
+          console.log('Initial registration - toggle main shortcut:', TOGGLE_MAIN_HOTKEY);
+        } catch (error) {
+          console.warn('Failed to register toggle-main shortcut:', error);
         }
         
         // Setup text selection monitoring if enabled

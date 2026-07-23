@@ -3,6 +3,7 @@ import StarterKit from '@tiptap/starter-kit';
 import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
 import Image from '@tiptap/extension-image';
+import Underline from '@tiptap/extension-underline';
 import Placeholder from '@tiptap/extension-placeholder';
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
 import { createLowlight, common } from 'lowlight';
@@ -13,6 +14,7 @@ import { SlashCommand } from './slashCommand';
 import { TagSuggestion } from './tagSuggestion';
 import { NoteLinkSuggestion, type NoteLinkItem } from './noteLinkSuggestion';
 import { isModifierEnter } from '@/lib/quicknoteSubmit';
+import { setActiveTiptapEditor, getActiveTiptapEditor } from '@/lib/tiptapFormat';
 import 'highlight.js/styles/atom-one-dark.css';
 import './tiptap.css';
 
@@ -46,8 +48,11 @@ type Props = {
   onChange?: (markdown: string) => void;
   /** Cmd/Ctrl+Enter handler (e.g. send memo). */
   onSubmit?: (markdown: string) => void;
-  /** Upload an image file, returning a URL to embed. */
-  onUploadImage?: (file: File) => Promise<string>;
+  /**
+   * Dropped/pasted files become attachments via the parent (never inline images).
+   * Prefer this over embedding files in the markdown body.
+   */
+  onDropFiles?: (files: File[]) => void;
   /** Existing tag paths (no leading #) for the "#" autocomplete. */
   getTags?: () => string[];
   /** Search existing memos/todos for the "[[" link autocomplete. */
@@ -62,7 +67,7 @@ type Props = {
  * offline cache stay markdown strings — no storage model change.
  */
 export const TiptapEditor = forwardRef<TiptapEditorHandle, Props>(function TiptapEditor(
-  { value = '', placeholder = 'New memo…', editable = true, autofocus = false, className, onChange, onSubmit, onUploadImage, getTags, getNotes, onFocus, onBlur },
+  { value = '', placeholder = 'New memo…', editable = true, autofocus = false, className, onChange, onSubmit, onDropFiles, getTags, getNotes, onFocus, onBlur },
   ref,
 ) {
   const editor = useEditor({
@@ -74,6 +79,7 @@ export const TiptapEditor = forwardRef<TiptapEditorHandle, Props>(function Tipta
         // Replaced by CodeBlockLowlight below for ```lang syntax highlighting.
         codeBlock: false,
       }),
+      Underline,
       CodeBlockLowlight.configure({ lowlight }),
       TaskList,
       TaskItem.configure({ nested: true }),
@@ -94,7 +100,8 @@ export const TiptapEditor = forwardRef<TiptapEditorHandle, Props>(function Tipta
     onUpdate: ({ editor }) => {
       onChange?.(getMd(editor));
     },
-    onFocus: () => {
+    onFocus: ({ editor: focused }) => {
+      setActiveTiptapEditor(focused);
       onFocus?.();
     },
     onBlur: () => {
@@ -130,29 +137,30 @@ export const TiptapEditor = forwardRef<TiptapEditorHandle, Props>(function Tipta
         return false;
       },
       handlePaste: (_view, event) => {
-        if (!onUploadImage) return false;
+        if (!onDropFiles) return false;
         const files = Array.from(event.clipboardData?.files ?? []);
-        const image = files.find((f) => f.type.startsWith('image/'));
-        if (!image) return false;
+        if (files.length === 0) return false;
         event.preventDefault();
-        onUploadImage(image)
-          .then((url) => editor?.chain().focus().setImage({ src: url }).run())
-          .catch((e) => console.error('[tiptap] image upload failed:', e));
+        onDropFiles(files);
         return true;
       },
       handleDrop: (_view, event) => {
-        if (!onUploadImage) return false;
+        if (!onDropFiles) return false;
         const files = Array.from(event.dataTransfer?.files ?? []);
-        const image = files.find((f) => f.type.startsWith('image/'));
-        if (!image) return false;
+        if (files.length === 0) return false;
         event.preventDefault();
-        onUploadImage(image)
-          .then((url) => editor?.chain().focus().setImage({ src: url }).run())
-          .catch((e) => console.error('[tiptap] image upload failed:', e));
+        event.stopPropagation();
+        onDropFiles(files);
         return true;
       },
     },
   });
+
+  useEffect(() => {
+    return () => {
+      if (editor && getActiveTiptapEditor() === editor) setActiveTiptapEditor(null);
+    };
+  }, [editor]);
 
   // Keep editor editable state in sync.
   useEffect(() => {

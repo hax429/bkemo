@@ -85,6 +85,27 @@ fn toggle_window<R: Runtime>(app: &AppHandle<R>, window_label: &str) -> Result<(
 }
 
 #[tauri::command]
+pub fn set_main_always_on_top<R: tauri::Runtime>(app: AppHandle<R>, pinned: bool) -> Result<(), String> {
+    let window = app
+        .get_webview_window("main")
+        .ok_or_else(|| "Main window not found".to_string())?;
+    window
+        .set_always_on_top(pinned)
+        .map_err(|e| format!("Failed to set always-on-top: {}", e))?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn is_main_always_on_top<R: tauri::Runtime>(app: AppHandle<R>) -> Result<bool, String> {
+    let window = app
+        .get_webview_window("main")
+        .ok_or_else(|| "Main window not found".to_string())?;
+    window
+        .is_always_on_top()
+        .map_err(|e| format!("Failed to read always-on-top: {}", e))
+}
+
+#[tauri::command]
 pub fn toggle_editor_window<R: tauri::Runtime>(app: AppHandle<R>) -> Result<(), String> {
     match app.get_webview_window("main") {
         Some(window) => {

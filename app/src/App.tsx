@@ -28,6 +28,7 @@ import { applyNoteSyncPayload, createNoteSyncController } from "@/lib/noteSync";
 import { getBlinkoEndpoint } from "@/lib/blinkoEndpoint";
 import { BaseStore } from "@/store/baseStore";
 import { api } from "@/lib/trpc";
+import { runTiptapFormat, type FormatCommand } from "@/lib/tiptapFormat";
 
 const SignInPage = lazy(() => import('./pages/signin'));
 const SignUpPage = lazy(() => import('./pages/signup'));
@@ -154,7 +155,7 @@ function AppRoutes() {
   useEffect(() => {
     if (windowType !== 'main' || !userStore.id || !userStore.token) return;
     const baseStore = RootStore.Get(BaseStore);
-    return createNoteSyncController({
+    const controller = createNoteSyncController({
       accountId: userStore.id,
       token: userStore.token,
       streamUrl: getBlinkoEndpoint('/api/v1/note/events'),
@@ -174,6 +175,12 @@ function AppRoutes() {
       onBootstrap: () => { blinkoStore.updateTicker++; },
       pollMs: 10_000,
     });
+    const onSyncNow = () => { void controller.syncNow(); };
+    eventBus.on('bkemo:sync-now', onSyncNow);
+    return () => {
+      eventBus.off('bkemo:sync-now', onSyncNow);
+      controller.dispose();
+    };
   }, [blinkoStore, userStore.id, userStore.token, windowType]);
 
   // Initialize quick-note hotkey handler inside Router context (main window, desktop only)
@@ -239,28 +246,46 @@ function AppRoutes() {
   }, [navigate, windowType]);
 
   useEffect(() => {
-    if (!isInTauri() || windowType !== 'main') return;
+    if (!isInTauri()) return;
 
     let disposed = false;
     const unlisteners: Array<() => void> = [];
-    void Promise.all([
-      listen('native-new-note', () => {
-        navigate('/', { replace: true });
-        setTimeout(() => eventBus.emit('bkemo:quick-capture', {}), 0);
-      }),
-      listen('native-search', () => {
-        setTimeout(() => eventBus.emit('bkemo:search'), 0);
-      }),
-    ]).then((listeners) => {
-      if (disposed) listeners.forEach(unlisten => unlisten());
-      else unlisteners.push(...listeners);
+    const formatListener = (command: FormatCommand) => () => { runTiptapFormat(command); };
+    const listeners: Promise<() => void>[] = [
+      listen('native-print', () => { window.print(); }),
+      listen('native-format-bold', formatListener('bold')),
+      listen('native-format-italic', formatListener('italic')),
+      listen('native-format-underline', formatListener('underline')),
+      listen('native-format-strike', formatListener('strike')),
+      listen('native-format-code', formatListener('code')),
+      listen('native-format-link', formatListener('link')),
+    ];
+    if (windowType === 'main') {
+      listeners.push(
+        listen('native-new-note', () => {
+          navigate('/', { replace: true });
+          setTimeout(() => eventBus.emit('bkemo:quick-capture', {}), 0);
+        }),
+        listen('native-search', () => {
+          setTimeout(() => eventBus.emit('bkemo:search'), 0);
+        }),
+        listen('native-sync', () => {
+          void blinkoStore.syncOfflineNotes();
+          eventBus.emit('bkemo:sync-now');
+          blinkoStore.updateTicker++;
+        }),
+      );
+    }
+    void Promise.all(listeners).then((fns) => {
+      if (disposed) fns.forEach(unlisten => unlisten());
+      else unlisteners.push(...fns);
     }).catch(error => console.error('Failed to register native menu listeners:', error));
 
     return () => {
       disposed = true;
       unlisteners.forEach(unlisten => unlisten());
     };
-  }, [navigate, windowType]);
+  }, [blinkoStore, navigate, windowType]);
 
   if (!nativeSessionReady) return <LoadingPage />;
 

@@ -5,32 +5,28 @@ struct MemoRow: View {
     let onToggleDone: () -> Void
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
+        HStack(alignment: .top, spacing: 12) {
             if item.isTodo {
                 Button(action: onToggleDone) {
-                    if item.isCompleted {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundStyle(.tint)
-                            .font(.system(size: 17))
-                    } else {
-                        Image(systemName: "circle")
-                            .foregroundStyle(.secondary)
-                            .font(.system(size: 17))
-                    }
+                    Image(systemName: item.isCompleted ? "checkmark.circle.fill" : "circle")
+                        .foregroundStyle(item.isCompleted ? Color.accentColor : .secondary)
+                        .font(.system(size: 18))
                 }
                 .buttonStyle(.plain)
             } else {
-                Image(systemName: "circle.fill").font(.system(size: 6)).foregroundStyle(.secondary)
-                    .padding(.top, 6)
+                Image(systemName: "circle.fill")
+                    .font(.system(size: 5.5))
+                    .foregroundStyle(.tertiary)
+                    .padding(.top, 7)
             }
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 5) {
                 Text(item.content.split(separator: "\n").first.map(String.init) ?? item.content)
                     .lineLimit(2)
                     .font(.system(size: 15.5))
                     .strikethrough(item.isCompleted, color: .secondary)
                     .foregroundStyle(item.isCompleted ? .secondary : .primary)
-                HStack(spacing: 6) {
+                HStack(spacing: 7) {
                     if item.isImportant { priorityDot(.yellow) }
                     if item.isUrgent { priorityDot(.red) }
                     if item.isPending {
@@ -41,22 +37,21 @@ struct MemoRow: View {
                     if item.source == "share" {
                         badge("share", system: "square.and.arrow.up", color: .secondary)
                     }
-                    if !item.source.isEmpty && item.source != "share" {
-                        Text(item.source).font(.caption2).foregroundStyle(.secondary)
-                    }
                 }
             }
         }
-        .padding(.vertical, 11)
+        .padding(.vertical, 4)
     }
 
     private func priorityDot(_ c: Color) -> some View {
-        Circle().fill(c).frame(width: 8, height: 8)
+        Circle().fill(c).frame(width: 7, height: 7)
     }
+
     private func badge(_ text: String, system: String, color: Color) -> some View {
         HStack(spacing: 3) {
             Image(systemName: system)
             Text(text)
+                .lineLimit(1)
         }
         .font(.caption2)
         .foregroundStyle(color)

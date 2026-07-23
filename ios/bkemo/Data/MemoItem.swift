@@ -1,7 +1,10 @@
 import Foundation
 import BkemoShared
 
-struct MemoItem: Identifiable, Equatable {
+struct MemoItem: Identifiable, Equatable, Hashable {
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+    }
     let id: String
     let localId: UUID?
     let serverId: Int?
