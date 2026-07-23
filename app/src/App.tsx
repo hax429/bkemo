@@ -20,6 +20,14 @@ import { isInTauri, isDesktop } from "@/lib/tauriHelper";
 import { listen } from "@tauri-apps/api/event";
 import QuickNotePage from "./pages/quicknote";
 import { useQuicknoteHotkey } from "./hooks/useQuicknoteHotkey";
+import { bootstrapNativeSession } from "@/lib/nativeSession";
+import { eventBus } from "@/lib/event";
+import { deleteNotesFromCache, upsertNotesToCache } from "@/lib/noteCache";
+import { applyExternalNoteChange } from "@/lib/noteChange";
+import { applyNoteSyncPayload, createNoteSyncController } from "@/lib/noteSync";
+import { getBlinkoEndpoint } from "@/lib/blinkoEndpoint";
+import { BaseStore } from "@/store/baseStore";
+import { api } from "@/lib/trpc";
 
 const SignInPage = lazy(() => import('./pages/signin'));
 const SignUpPage = lazy(() => import('./pages/signup'));
@@ -83,7 +91,90 @@ function AppRoutes() {
   const windowType = getWindowType();
 
   const userStore = RootStore.Get(UserStore);
+  const blinkoStore = RootStore.Get(BlinkoStore);
   userStore.use();
+  const [nativeSessionReady, setNativeSessionReady] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    let unlisten: (() => void) | null = null;
+
+    const hydrateNativeSession = () => bootstrapNativeSession()
+      .then((tokenData) => {
+        if (cancelled) return;
+        if (tokenData) {
+          userStore.tokenData.value = tokenData;
+          userStore.isSetup = true;
+        } else {
+          userStore.tokenData.value = null;
+          userStore.isSetup = false;
+        }
+      })
+      .catch(error => console.error('Failed to hydrate macOS Keychain session:', error));
+
+    listen('native-session-changed', hydrateNativeSession)
+      .then((stopListening) => {
+        if (cancelled) stopListening();
+        else unlisten = stopListening;
+      })
+      .catch(error => console.error('Failed to listen for macOS session changes:', error));
+
+    hydrateNativeSession()
+      .finally(() => {
+        if (!cancelled) setNativeSessionReady(true);
+      });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, [userStore]);
+
+  useEffect(() => {
+    if (!isInTauri() || windowType !== 'main') return;
+
+    let disposed = false;
+    let unlisten: (() => void) | null = null;
+    listen('native-note-changed', (event) => {
+      void applyExternalNoteChange(event.payload as any, {
+        cache: upsertNotesToCache,
+        reloadOffline: () => blinkoStore.offlineNoteStorage.load(),
+        invalidate: () => { blinkoStore.updateTicker++; },
+      });
+    }).then((stopListening) => {
+      if (disposed) stopListening();
+      else unlisten = stopListening;
+    }).catch(error => console.error('Failed to listen for native note changes:', error));
+
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [blinkoStore, windowType]);
+
+  useEffect(() => {
+    if (windowType !== 'main' || !userStore.id || !userStore.token) return;
+    const baseStore = RootStore.Get(BaseStore);
+    return createNoteSyncController({
+      accountId: userStore.id,
+      token: userStore.token,
+      streamUrl: getBlinkoEndpoint('/api/v1/note/events'),
+      isOnline: () => baseStore.isOnline,
+      subscribeOnline: (listener) => {
+        eventBus.on('app:online', listener);
+        return () => eventBus.off('app:online', listener);
+      },
+      fetchChanges: async (input) => api.notes.changes.mutate(input as any) as any,
+      apply: (payload) => applyNoteSyncPayload(payload, {
+        cache: upsertNotesToCache,
+        remove: deleteNotesFromCache,
+        invalidate: () => { blinkoStore.updateTicker++; },
+      }),
+      // Bootstrap establishes a race-safe server cursor, then the existing
+      // cache-first views perform one full reconciliation.
+      onBootstrap: () => { blinkoStore.updateTicker++; },
+      pollMs: 10_000,
+    });
+  }, [blinkoStore, userStore.id, userStore.token, windowType]);
 
   // Initialize quick-note hotkey handler inside Router context (main window, desktop only)
   if (windowType === 'main' && isDesktop()) {
@@ -146,6 +237,32 @@ function AppRoutes() {
       }
     };
   }, [navigate, windowType]);
+
+  useEffect(() => {
+    if (!isInTauri() || windowType !== 'main') return;
+
+    let disposed = false;
+    const unlisteners: Array<() => void> = [];
+    void Promise.all([
+      listen('native-new-note', () => {
+        navigate('/', { replace: true });
+        setTimeout(() => eventBus.emit('bkemo:quick-capture', {}), 0);
+      }),
+      listen('native-search', () => {
+        setTimeout(() => eventBus.emit('bkemo:search'), 0);
+      }),
+    ]).then((listeners) => {
+      if (disposed) listeners.forEach(unlisten => unlisten());
+      else unlisteners.push(...listeners);
+    }).catch(error => console.error('Failed to register native menu listeners:', error));
+
+    return () => {
+      disposed = true;
+      unlisteners.forEach(unlisten => unlisten());
+    };
+  }, [navigate, windowType]);
+
+  if (!nativeSessionReady) return <LoadingPage />;
 
   // Return different routes based on window type
   switch (windowType) {

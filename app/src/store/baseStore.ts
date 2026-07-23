@@ -7,10 +7,40 @@ import { useTranslation } from 'react-i18next';
 import { useMediaQuery } from 'usehooks-ts';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { eventBus } from '@/lib/event';
+import { createConnectivityRecovery } from '@/lib/connectivity';
+import { getBlinkoEndpoint } from '@/lib/blinkoEndpoint';
 export class BaseStore implements Store {
   sid = 'BaseStore';
   constructor() {
     makeAutoObservable(this);
+    if (typeof window !== 'undefined') {
+      const markOnline = () => {
+        if (this.isOnline) return;
+        this.setOnlineStatus(true);
+        eventBus.emit('app:online');
+      };
+      window.addEventListener('online', markOnline);
+      window.addEventListener('offline', () => this.setOnlineStatus(false));
+      createConnectivityRecovery({
+        isOnline: () => this.isOnline,
+        probe: async () => {
+          const controller = new AbortController();
+          const timeout = window.setTimeout(() => controller.abort(), 5_000);
+          try {
+            const response = await fetch(getBlinkoEndpoint('/health'), {
+              cache: 'no-store',
+              signal: controller.signal,
+            });
+            return response.ok;
+          } catch {
+            return false;
+          } finally {
+            window.clearTimeout(timeout);
+          }
+        },
+        onOnline: markOnline,
+      });
+    }
   }
   routerList = [
     {
@@ -134,19 +164,9 @@ export class BaseStore implements Store {
     };
 
     useEffect(() => {
-      const handleOnline = () => {
-        this.setOnlineStatus(true);
-        eventBus.emit('app:online');
-      };
-      const handleOffline = () => this.setOnlineStatus(false);
-
-      window.addEventListener('online', handleOnline);
-      window.addEventListener('offline', handleOffline);
       documentHeight();
       window.addEventListener('resize', documentHeight);
       return () => {
-        window.removeEventListener('online', handleOnline);
-        window.removeEventListener('offline', handleOffline);
         window.removeEventListener('resize', documentHeight);
       };
     }, [navigate]);

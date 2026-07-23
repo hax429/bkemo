@@ -16,7 +16,7 @@ import { UserStore } from './user';
 import { BaseStore } from './baseStore';
 import { StorageState } from './standard/StorageState';
 import { useSearchParams, useLocation } from 'react-router-dom';
-import { upsertNotesToCache, replaceNotesInCache, queryNotesFromCache, patchNoteInCache, patchNoteTreeInCache, deleteNoteFromCache, ensureCacheAccount } from '@/lib/noteCache';
+import { upsertNotesToCache, replaceNotesInCache, queryNotesFromCache, patchNoteInCache, deleteNoteFromCache, deleteNotesFromCache, ensureCacheAccount } from '@/lib/noteCache';
 
 type filterType = {
   label: string;
@@ -351,13 +351,7 @@ export class BlinkoStore implements Store {
           refresh && this.updateTicker++;
           return offlineNote;
         } else {
-          this.offlinePendingOps.push({ type: 'edit', noteId: id, patch: params });
-          const changesTreeState = isArchived !== undefined || isRecycle !== undefined;
-          (changesTreeState ? patchNoteTreeInCache([id], params as Partial<Note>) : patchNoteInCache(id, params as Partial<Note>))
-            .catch(e => console.error('[cache] patch failed:', e));
-          showToast && RootStore.Get(ToastPlugin).warning(i18n.t("offline-status"));
-          refresh && this.updateTicker++;
-          return;
+          throw new Error('Existing notes are read-only while offline');
         }
       };
 
@@ -393,6 +387,7 @@ export class BlinkoStore implements Store {
             setTimeout(() => reject(new Error('upsert-timeout')), 15000)
           )
         ]);
+        if (res?.id != null) await upsertNotesToCache([res as Note]);
         eventBus.emit('editor:clear')
         showToast && RootStore.Get(ToastPlugin).success(id ? i18n.t("update-successfully") : i18n.t("create-successfully"))
         refresh && this.updateTicker++
@@ -428,15 +423,10 @@ export class BlinkoStore implements Store {
     function: async (params: { ids: number[] }) => {
       const { ids } = params;
       if (!this.isOnline) {
-        for (const id of ids) {
-          this.offlinePendingOps.push({ type: 'edit', noteId: id, patch: { isRecycle: true } });
-          patchNoteTreeInCache([id], { isRecycle: true }).catch(e => console.error('[cache] trash patch failed:', e));
-        }
-        RootStore.Get(ToastPlugin).warning(i18n.t("offline-status"));
-        this.updateTicker++;
-        return;
+        throw new Error('Existing notes are read-only while offline');
       }
       const res = await api.notes.trashMany.mutate({ ids });
+      await deleteNotesFromCache(ids);
       this.updateTicker++;
       return res;
     }
@@ -446,15 +436,10 @@ export class BlinkoStore implements Store {
     function: async (params: { ids: number[] }) => {
       const { ids } = params;
       if (!this.isOnline) {
-        for (const id of ids) {
-          this.offlinePendingOps.push({ type: 'delete', noteId: id });
-          deleteNoteFromCache(id).catch(e => console.error('[cache] delete failed:', e));
-        }
-        RootStore.Get(ToastPlugin).warning(i18n.t("offline-status"));
-        this.updateTicker++;
-        return;
+        throw new Error('Existing notes are read-only while offline');
       }
       const res = await api.notes.deleteMany.mutate({ ids });
+      await deleteNotesFromCache(ids);
       ids.forEach(id => {
         api.ai.embeddingDelete.mutate({ id }).catch(e => console.error('[embedding] delete failed:', e));
       });
@@ -523,7 +508,9 @@ export class BlinkoStore implements Store {
             references: references.map(ref => ref.toNoteId),
             showToast: false
           };
-          await this.upsertNote.call(onlineNote);
+          const { showToast: _showToast, ...syncPayload } = onlineNote;
+          const synced = await api.notes.upsert.mutate(syncPayload);
+          if (synced) await upsertNotesToCache([synced]);
           this.removeOfflineNote(id);
         } catch (error) {
           console.error('[offline-sync] failed for create:', error);
@@ -940,6 +927,14 @@ export class BlinkoStore implements Store {
     eventBus.on('app:online', () => {
       this.syncOfflineNotes()
     })
+    if (typeof window !== 'undefined') {
+      window.addEventListener('storage', (event) => {
+        if (event.key !== 'offlineNotes') return;
+        this.offlineNoteStorage.load();
+        this.updateTicker++;
+        if (this.isOnline) this.syncOfflineNotes().catch(() => {});
+      });
+    }
   }
 
   removeCreateAttachments(file: { name: string, }) {

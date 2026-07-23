@@ -79,6 +79,10 @@ export async function queryNotesFromCache(filter: CacheFilter): Promise<Note[]> 
   return filterCachedNotes(await db.notes.toArray(), filter);
 }
 
+export async function getNoteFromCache(id: number): Promise<Note | undefined> {
+  return db.notes.get(id);
+}
+
 export async function patchNoteInCache(id: number, patch: Partial<Note>): Promise<void> {
   const existing = await db.notes.get(id);
   if (existing) await db.notes.put({ ...existing, ...patch, id });
@@ -117,4 +121,8 @@ export async function patchNoteTreeInCache(rootIds: number[], patch: Partial<Not
 
 export async function deleteNoteFromCache(id: number): Promise<void> {
   await db.notes.delete(id);
+}
+
+export async function deleteNotesFromCache(ids: number[]): Promise<void> {
+  if (ids.length > 0) await db.notes.bulkDelete(ids);
 }

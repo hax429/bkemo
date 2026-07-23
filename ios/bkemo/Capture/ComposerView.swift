@@ -16,22 +16,33 @@ struct ComposerView: View {
     }
 
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(alignment: .leading, spacing: 11) {
             HStack {
-                TypeToggle(selection: $type)
+                Text("QUICK CAPTURE")
+                    .font(.system(size: 10.5, weight: .medium, design: .monospaced))
+                    .tracking(0.9)
+                    .foregroundStyle(.secondary)
                 Spacer()
+                TypeToggle(selection: $type)
+                    .frame(width: 180)
             }
             TextEditor(text: $content)
                 .focused($focused)
-                .frame(minHeight: 96)
-                .padding(8)
+                .font(.system(size: 17))
+                .scrollContentBackground(.hidden)
+                .frame(minHeight: 116, maxHeight: 180)
+                .padding(10)
                 .background(Color(.secondarySystemBackground))
-                .cornerRadius(10)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(Color.primary.opacity(0.1), lineWidth: 0.75)
+                }
                 .overlay(alignment: .topLeading) {
                     if content.isEmpty {
 						Text(type == 2 ? "What needs to be done?" : "Capture a thought…")
                             .foregroundStyle(Color(.placeholderText))
-                            .padding(.horizontal, 14).padding(.vertical, 16)
+                            .padding(.horizontal, 15).padding(.vertical, 18)
                             .allowsHitTesting(false)
                     }
                 }
@@ -40,7 +51,8 @@ struct ComposerView: View {
             }
         }
         .padding(.horizontal)
-        .padding(.top)
+        .padding(.top, 12)
+        .padding(.bottom, 10)
         .onAppear {
             if let pending = AppGroup.defaults.object(forKey: AppGroup.pendingTypeKey) as? Int {
                 type = pending
@@ -68,16 +80,22 @@ struct ComposerView: View {
                 Button {
                     save()
                 } label: {
-                    Image(systemName: "arrow.up.circle.fill")
-                        .font(.system(size: 30))
-                        .foregroundColor(.accentColor)
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 36, height: 36)
+                        .background { Circle().fill(.tint) }
                 }
                 .buttonStyle(.plain)
                 .disabled(content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .opacity(content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.38 : 1)
             }
             .padding(.horizontal, 16)
-            .padding(.bottom, 6)
-            .background(.bar)
+            .padding(.vertical, 7)
+            .background(.ultraThinMaterial)
+            .overlay(alignment: .top) {
+                Rectangle().fill(Color.primary.opacity(0.08)).frame(height: 0.5)
+            }
         }
     }
 

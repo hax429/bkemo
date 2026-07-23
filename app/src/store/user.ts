@@ -20,6 +20,7 @@ import { StorageState } from './standard/StorageState';
 import { getBlinkoEndpoint } from '@/lib/blinkoEndpoint';
 import { isInTauri, setTauriTheme } from '@/lib/tauriHelper';
 import { FontManager } from '@/lib/fontManager';
+import { clearNativeSession, persistNativeSession } from '@/lib/nativeSession';
 
 export class UserStore implements Store {
   sid = 'user';
@@ -209,6 +210,9 @@ export class UserStore implements Store {
     this.adminReturn.save(null);
     this.isSetup = false;
     localStorage.removeItem('token');
+    clearNativeSession().catch(error =>
+      console.error('Failed to clear macOS Keychain session:', error)
+    );
     eventBus.emit('user:clear', this);
   }
 
@@ -401,6 +405,9 @@ export class UserStore implements Store {
       } else {
         this.tokenData.save(tokenData);
       }
+      persistNativeSession(tokenData).catch(error =>
+        console.error('Failed to persist macOS Keychain session:', error)
+      );
 
       this.isSetup = true;
 

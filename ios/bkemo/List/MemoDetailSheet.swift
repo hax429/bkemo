@@ -2,12 +2,14 @@ import SwiftUI
 
 struct MemoDetailSheet: View {
     let item: MemoItem
-    let onDelete: () -> Void
+    let onDelete: () async throws -> Void
     @State private var content: String = ""
     @State private var type: Int = 0
     @State private var isImportant = false
     @State private var isUrgent = false
     @State private var saving = false
+    @State private var deleting = false
+    @State private var operationError: String?
     @State private var showDeleteConfirm = false
     @Environment(\.dismiss) private var dismiss
 
@@ -33,14 +35,19 @@ struct MemoDetailSheet: View {
                     if let err = item.syncError, item.isError {
                         Text(err).font(.caption).foregroundStyle(.red)
                     }
+                    if let operationError {
+                        Text(operationError).font(.caption).foregroundStyle(.red)
+                    }
                     if editable {
                         Button("Save", action: update).buttonStyle(.borderedProminent).disabled(saving)
                     }
                     Button("Delete", role: .destructive) { showDeleteConfirm = true }
                         .buttonStyle(.bordered)
-                        .disabled(item.isPending)
-                    if item.isPending {
-                        Text("Pending capture — not synced yet").font(.caption).foregroundStyle(.secondary)
+                        .disabled(deleting)
+                    if item.isPending || item.isError {
+                        Text("This local capture can be deleted before it syncs.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                 }
                 .padding()
@@ -56,7 +63,19 @@ struct MemoDetailSheet: View {
             isUrgent = item.isUrgent
         }
         .confirmationDialog("Delete this capture?", isPresented: $showDeleteConfirm) {
-            Button("Delete", role: .destructive) { onDelete(); dismiss() }
+            Button("Delete", role: .destructive) {
+                deleting = true
+                operationError = nil
+                Task {
+                    do {
+                        try await onDelete()
+                        dismiss()
+                    } catch {
+                        operationError = error.localizedDescription
+                        deleting = false
+                    }
+                }
+            }
             Button("Cancel", role: .cancel) {}
         }
     }
@@ -65,10 +84,21 @@ struct MemoDetailSheet: View {
         let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, editable else { return }
         saving = true
+        operationError = nil
         Task {
-            await SyncEngine.shared.updateRemote(item: item, content: trimmed, type: type, isImportant: isImportant, isUrgent: isUrgent)
-            saving = false
-            dismiss()
+            do {
+                try await SyncEngine.shared.updateRemote(
+                    item: item,
+                    content: trimmed,
+                    type: type,
+                    isImportant: isImportant,
+                    isUrgent: isUrgent
+                )
+                dismiss()
+            } catch {
+                operationError = error.localizedDescription
+                saving = false
+            }
         }
     }
 }

@@ -9,8 +9,10 @@ matches the work before changing the repository:
   AI shell / dialog patterns, and what to avoid when changing UI.
 - [`docs/agents/DEPLOYMENT.md`](docs/agents/DEPLOYMENT.md) — local test workflow,
   production topology, deployment approval gate, release steps, and verification.
-- [`docs/plans/IOS.md`](docs/plans/IOS.md) — future iOS/macOS native, offline, OTA,
+- [`docs/plans/IOS.md`](docs/plans/IOS.md) — future iOS native, offline, OTA,
   build, and release work.
+- [`docs/plans/mac.md`](docs/plans/mac.md) — macOS Tauri shell; ⌃W → quicknote
+  capture.
 - [`docs/plans/MCP.md`](docs/plans/MCP.md) — future MCP server design and phases.
 - [`docs/plans/bkemo-ai-and-discovery-implementation.md`](docs/plans/bkemo-ai-and-discovery-implementation.md)
   — AI chat and discovery implementation plan.

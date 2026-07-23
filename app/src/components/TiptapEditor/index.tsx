@@ -12,6 +12,7 @@ import { Hashtag } from './hashtagExtension';
 import { SlashCommand } from './slashCommand';
 import { TagSuggestion } from './tagSuggestion';
 import { NoteLinkSuggestion, type NoteLinkItem } from './noteLinkSuggestion';
+import { isModifierEnter } from '@/lib/quicknoteSubmit';
 import 'highlight.js/styles/atom-one-dark.css';
 import './tiptap.css';
 
@@ -102,7 +103,7 @@ export const TiptapEditor = forwardRef<TiptapEditorHandle, Props>(function Tipta
     editorProps: {
       attributes: { class: 'tiptap-content' },
       handleKeyDown: (view, event) => {
-        if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+        if (isModifierEnter(event)) {
           event.preventDefault();
           onSubmit?.(getMd(editor));
           return true;

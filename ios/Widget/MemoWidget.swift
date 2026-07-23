@@ -3,6 +3,14 @@ import SwiftUI
 import SwiftData
 import BkemoShared
 
+private var widgetAccent: Color {
+    guard let data = AppGroup.defaults.data(forKey: AppGroup.appearanceKey),
+          let preferences = try? JSONDecoder().decode(BkemoClient.AppearancePreferences.self, from: data) else {
+        return Color(red: 0.89, green: 0.66, blue: 0.42)
+    }
+    return Color(widgetHex: preferences.accent)
+}
+
 // MARK: Timeline providers
 
 struct MemoProvider: TimelineProvider {
@@ -71,7 +79,7 @@ struct MemoButton: View {
                 .font(.caption.bold())
                 .padding(.vertical, 8)
                 .frame(maxWidth: .infinity)
-                .background(Color.accentColor.opacity(0.2))
+                .background(widgetAccent.opacity(0.2))
                 .foregroundStyle(.primary)
                 .cornerRadius(8)
         }
@@ -91,7 +99,7 @@ struct TodoButton: View {
             .font(.caption.bold())
             .padding(.vertical, 8)
             .frame(maxWidth: .infinity)
-            .background(Color.red.opacity(0.2))
+            .background(widgetAccent.opacity(0.2))
             .foregroundStyle(.primary)
             .cornerRadius(8)
         }
@@ -126,4 +134,16 @@ private func currentEntry() -> MemoEntry {
     let descriptor = FetchDescriptor<LocalMemo>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
     guard let memo = try? context.fetch(descriptor).first else { return .placeholder }
     return MemoEntry(date: .now, lastContent: memo.content, lastIsTodo: memo.type == NoteType.todo)
+}
+
+private extension Color {
+    init(widgetHex hex: String) {
+        let value = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+        let rgb = UInt64(value, radix: 16) ?? 0xE2A96B
+        self.init(
+            red: Double((rgb >> 16) & 0xff) / 255,
+            green: Double((rgb >> 8) & 0xff) / 255,
+            blue: Double(rgb & 0xff) / 255
+        )
+    }
 }

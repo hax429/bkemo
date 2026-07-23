@@ -25,6 +25,7 @@ const SETTINGS_PATHS: Record<string, string> = {
   ai: 'ai',
   task: 'tasks',
   storage: 'storage',
+  desktop: 'desktop',
   developer: 'developer',
   data: 'data',
   import: 'import',

@@ -1,4 +1,5 @@
 import SwiftUI
+import BkemoShared
 
 struct ShareDraft {
     var content: String
@@ -17,6 +18,14 @@ struct ShareView: View {
     @State private var isImportant = false
     @State private var isUrgent = false
     @FocusState private var focused: Bool
+
+    private var appearance: BkemoClient.AppearancePreferences {
+        guard let data = AppGroup.defaults.data(forKey: AppGroup.appearanceKey),
+              let value = try? JSONDecoder().decode(BkemoClient.AppearancePreferences.self, from: data) else {
+            return .init()
+        }
+        return value
+    }
 
     var body: some View {
         NavigationStack {
@@ -62,6 +71,8 @@ struct ShareView: View {
                 focused = true
             }
         }
+        .tint(Color(shareHex: appearance.accent))
+        .preferredColorScheme(appearance.theme == "light" ? .light : .dark)
     }
 
     private func chip(_ label: String, _ color: Color, _ selected: Binding<Bool>) -> some View {
@@ -74,5 +85,17 @@ struct ShareView: View {
                 .cornerRadius(8)
         }
         .buttonStyle(.plain)
+    }
+}
+
+private extension Color {
+    init(shareHex hex: String) {
+        let value = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+        let rgb = UInt64(value, radix: 16) ?? 0xE2A96B
+        self.init(
+            red: Double((rgb >> 16) & 0xff) / 255,
+            green: Double((rgb >> 8) & 0xff) / 255,
+            blue: Double(rgb & 0xff) / 255
+        )
     }
 }

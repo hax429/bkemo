@@ -51,7 +51,6 @@ pub fn run() {
                     println!("Focused existing Blinko window");
                 }
             }))
-            .plugin(tauri_plugin_updater::Builder::new().build())
             .plugin(
                 tauri_plugin_global_shortcut::Builder::new()
                     .with_handler(create_global_shortcut_handler())
@@ -67,6 +66,10 @@ pub fn run() {
                 register_hotkey,
                 unregister_hotkey,
                 get_registered_shortcuts,
+                save_session_token,
+                load_session_token,
+                clear_session_token,
+                set_tray_visible,
                 toggle_quicknote_window,
                 resize_quicknote_window,
                 toggle_quickai_window,

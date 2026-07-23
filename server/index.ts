@@ -39,6 +39,7 @@ import pluginRouter from './routerExpress/file/plugin';
 import rssRouter from './routerExpress/rss';
 import openaiRouter from './routerExpress/openai';
 import mcpRouter from './routerExpress/mcp';
+import { noteSyncRouter } from './routerExpress/noteSync';
 
 // Vite integration
 import ViteExpress from 'vite-express';
@@ -285,6 +286,9 @@ async function setupApiRoutes(app: express.Application) {
   </body>
 </html>`);
   });
+
+  // SSE must be registered before the catch-all OpenAPI middleware.
+  app.use(noteSyncRouter);
 
   // OpenAPI integration
   app.use('/api',

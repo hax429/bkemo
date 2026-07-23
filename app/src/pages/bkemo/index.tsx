@@ -32,6 +32,7 @@ import { SearchOverlay } from '@/components/bkemo/SearchOverlay';
 import { UserStore } from '@/store/user';
 import { pathForRoute, pathForSettingsSection, routeFromPath, settingsSectionFromPath } from '@/lib/bkemoRoutes';
 import { isAiDebugAvailable } from '@/lib/aiDebug';
+import { getNoteFromCache, upsertNotesToCache } from '@/lib/noteCache';
 
 function ComingSoon({ title }: { title: string }) {
   return (
@@ -78,12 +79,23 @@ const BkemoPage = observer(function BkemoPage() {
     const noteMatch = location.pathname.match(/^\/n\/(\d+)$/);
     if (!noteMatch) return;
     let cancelled = false;
-    api.notes.detail.mutate({ id: Number(noteMatch[1]) })
-      .then((note) => { if (!cancelled && note) setEditing(note as Note); })
-      .catch((error) => {
+    const id = Number(noteMatch[1]);
+    const load = async () => {
+      try {
+        const note = RootStore.Get(BlinkoStore).isOnline
+          ? await api.notes.detail.mutate({ id })
+          : await getNoteFromCache(id);
+        if (note?.id) await upsertNotesToCache([note as Note]);
+        if (!cancelled && note) setEditing(note as Note);
+        else if (!cancelled) navigate('/', { replace: true });
+      } catch (error) {
+        const cached = await getNoteFromCache(id);
+        if (!cancelled && cached) setEditing(cached);
+        else if (!cancelled) navigate('/', { replace: true });
         console.error('[bkemo] direct note load failed:', error);
-        if (!cancelled) navigate('/', { replace: true });
-      });
+      }
+    };
+    void load();
     return () => { cancelled = true; };
   }, [location.pathname, navigate]);
 
@@ -91,6 +103,7 @@ const BkemoPage = observer(function BkemoPage() {
   useEffect(() => {
     const blinko = RootStore.Get(BlinkoStore);
     if (!blinko.tagList.value) blinko.tagList.call();
+    blinko.queryNotes({}, 1, 500).catch(() => {});
     // Load the persisted preference config that the workspace honors.
     // After config loads, hydrate bkemoPrefs from server so appearance
     // follows the account across devices.
@@ -103,13 +116,18 @@ const BkemoPage = observer(function BkemoPage() {
     const onQuickCapture = (opts: { text?: string } = {}) => {
       setEditing({ content: opts.text ?? '', type: 2 } as Note);
     };
+    const onSearch = () => setShowSearch(true);
     eventBus.on('bkemo:quick-capture', onQuickCapture);
+    eventBus.on('bkemo:search', onSearch);
     // Clicking an internal [[memo]] link opens that memo in the editor.
     const onOpenNote = async (opts: { id?: number } = {}) => {
       if (!opts.id) return;
       try {
-        const note = await api.notes.detail.mutate({ id: opts.id });
+        const note = blinko.isOnline
+          ? await api.notes.detail.mutate({ id: opts.id })
+          : await getNoteFromCache(opts.id);
         if (note) {
+          if (note.id) await upsertNotesToCache([note as Note]);
           setEditing(note as Note);
           navigate(`/n/${opts.id}`, { replace: true });
         }
@@ -120,6 +138,7 @@ const BkemoPage = observer(function BkemoPage() {
     eventBus.on('bkemo:open-note', onOpenNote);
     return () => {
       eventBus.off('bkemo:quick-capture', onQuickCapture);
+      eventBus.off('bkemo:search', onSearch);
       eventBus.off('bkemo:open-note', onOpenNote);
     };
   }, [navigate]);

@@ -10,10 +10,12 @@ import { Item, ItemWithTooltip } from './Item';
 import { useEffect, useState, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { enable, isEnabled, disable } from '@tauri-apps/plugin-autostart';
-import { isDesktop, isInTauri, isWindows } from '@/lib/tauriHelper';
+import { openUrl } from '@tauri-apps/plugin-opener';
+import { isDesktop, isInTauri, isMacOS, isWindows } from '@/lib/tauriHelper';
 import { CollapsibleCard } from '../Common/CollapsibleCard';
 import { ToastPlugin } from '@/store/module/Toast/Toast';
 import { HotkeyConfig, DEFAULT_HOTKEY_CONFIG, TextSelectionToolbarConfig, DEFAULT_TEXT_SELECTION_TOOLBAR_CONFIG } from '@/../../shared/lib/types';
+import { QUICKNOTE_HOTKEY_ERROR_KEY } from '@/hooks/useInitialHotkeySetup';
 
 const HOTKEY_EXAMPLES = {
   'Shift+Space': 'Shift+Space (Recommended)',
@@ -42,6 +44,7 @@ export const HotkeySetting = observer(() => {
   const [recordedKeys, setRecordedKeys] = useState<string[]>([]);
   const [recordedAIKeys, setRecordedAIKeys] = useState<string[]>([]);
   const [registeredShortcuts, setRegisteredShortcuts] = useState<Record<string, string>>({});
+  const [quickNoteRegistrationError, setQuickNoteRegistrationError] = useState<string | null>(null);
   const [autoStartEnabled, setAutoStartEnabled] = useState(false);
   const recordingRef = useRef<HTMLInputElement>(null);
   const recordingAIRef = useRef<HTMLInputElement>(null);
@@ -57,7 +60,6 @@ export const HotkeySetting = observer(() => {
       const finalConfig = {
         ...DEFAULT_HOTKEY_CONFIG,
         ...config,
-        systemTrayEnabled: true,
         windowBehavior: 'show' as const
       };
       setHotkeyConfig(finalConfig);
@@ -97,6 +99,7 @@ export const HotkeySetting = observer(() => {
     try {
       const shortcuts = await invoke<Record<string, string>>('get_registered_shortcuts');
       setRegisteredShortcuts(shortcuts);
+      setQuickNoteRegistrationError(localStorage.getItem(QUICKNOTE_HOTKEY_ERROR_KEY));
     } catch (error) {
       console.error('Failed to get registered shortcuts:', error);
     }
@@ -115,13 +118,15 @@ export const HotkeySetting = observer(() => {
 
   // Save configuration
   const saveConfig = async (newConfig: Partial<HotkeyConfig>) => {
-    // Ensure system tray is always enabled, window behavior fixed to show
+    // Keep at least one background entry point available.
     const updatedConfig = {
       ...hotkeyConfig,
       ...newConfig,
-      systemTrayEnabled: true,
       windowBehavior: 'show' as const
     };
+    if (!updatedConfig.enabled && !updatedConfig.systemTrayEnabled) {
+      updatedConfig.systemTrayEnabled = true;
+    }
 
     try {
       await PromiseCall(
@@ -137,12 +142,17 @@ export const HotkeySetting = observer(() => {
 
       // If Tauri desktop, update hotkey registration based on enabled state
       if (isTauriDesktop) {
+        await invoke('set_tray_visible', { visible: updatedConfig.systemTrayEnabled });
+
         if (updatedConfig.enabled) {
           await updateHotkeyRegistration(updatedConfig.quickNote, true);
         } else {
           // Unregister quicknote hotkey when disabled
           try {
             await invoke('unregister_hotkey', { shortcut: hotkeyConfig.quickNote });
+            localStorage.removeItem(QUICKNOTE_HOTKEY_ERROR_KEY);
+            setQuickNoteRegistrationError(null);
+            await getRegisteredShortcuts();
             console.log('QuickNote hotkey unregistered due to disable');
           } catch (error) {
             console.warn('Failed to unregister quicknote hotkey on disable:', error);
@@ -202,14 +212,19 @@ export const HotkeySetting = observer(() => {
           shortcut: newShortcut,
           command: 'quicknote'
         });
+        localStorage.removeItem(QUICKNOTE_HOTKEY_ERROR_KEY);
+        setQuickNoteRegistrationError(null);
       }
 
       // Refresh registration status
       await getRegisteredShortcuts();
       console.log('Hotkey registration updated successfully');
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      localStorage.setItem(QUICKNOTE_HOTKEY_ERROR_KEY, message);
+      setQuickNoteRegistrationError(message);
       console.error('Failed to update hotkey registration:', error);
-      toast.error((error instanceof Error ? error.message : String(error)));
+      toast.error(message);
     }
   };
 
@@ -257,7 +272,8 @@ export const HotkeySetting = observer(() => {
     const keys: string[] = [];
 
     // Add modifier keys
-    if (event.metaKey || event.ctrlKey) keys.push('CommandOrControl');
+    if (event.metaKey) keys.push('CommandOrControl');
+    if (event.ctrlKey) keys.push(isMacOS() ? 'Control' : 'CommandOrControl');
     if (event.altKey) keys.push('Alt');
     if (event.shiftKey) keys.push('Shift');
 
@@ -290,7 +306,8 @@ export const HotkeySetting = observer(() => {
     const keys: string[] = [];
 
     // Add modifier keys
-    if (event.metaKey || event.ctrlKey) keys.push('CommandOrControl');
+    if (event.metaKey) keys.push('CommandOrControl');
+    if (event.ctrlKey) keys.push(isMacOS() ? 'Control' : 'CommandOrControl');
     if (event.altKey) keys.push('Alt');
     if (event.shiftKey) keys.push('Shift');
 
@@ -358,6 +375,7 @@ export const HotkeySetting = observer(() => {
     const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
     return shortcut
       .replace('CommandOrControl', isMac ? '⌘' : 'Ctrl')
+      .replace('Control', isMac ? '⌃' : 'Ctrl')
       .replace('Alt', isMac ? 'Option' : 'Alt')
       .replace('Shift', '⇧')
       .replace('+', isMac ? '' : '+');
@@ -395,6 +413,16 @@ export const HotkeySetting = observer(() => {
   // Check if shortcut is not default
   const isQuickNoteNotDefault = hotkeyConfig.quickNote !== DEFAULT_HOTKEY_CONFIG.quickNote;
   const isQuickAINotDefault = hotkeyConfig.quickAI !== DEFAULT_HOTKEY_CONFIG.quickAI;
+  const isQuickNoteRegistered =
+    registeredShortcuts[hotkeyConfig.quickNote.toLowerCase()] === 'quicknote';
+
+  const openMacHotkeySettings = async () => {
+    try {
+      await openUrl('x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error));
+    }
+  };
 
 
 
@@ -430,6 +458,22 @@ export const HotkeySetting = observer(() => {
               <Switch
                 isSelected={autoStartEnabled}
                 onValueChange={toggleAutoStart}
+              />
+            }
+          />
+
+          <Item
+            leftContent={
+              <ItemWithTooltip
+                content="Show menu bar icon"
+                toolTipContent="Keep bkemo in the top-right macOS menu bar"
+              />
+            }
+            rightContent={
+              <Switch
+                isSelected={hotkeyConfig.systemTrayEnabled}
+                isDisabled={!hotkeyConfig.enabled}
+                onValueChange={(systemTrayEnabled) => saveConfig({ systemTrayEnabled })}
               />
             }
           />
@@ -493,6 +537,39 @@ export const HotkeySetting = observer(() => {
             }
             type="col"
           />
+
+          {hotkeyConfig.enabled && (
+            <div
+              role={quickNoteRegistrationError ? 'alert' : 'status'}
+              className={`rounded-lg border px-3 py-2 text-xs ${
+                quickNoteRegistrationError
+                  ? 'border-danger-300 bg-danger-50 text-danger-700'
+                  : isQuickNoteRegistered
+                    ? 'border-success-300 bg-success-50 text-success-700'
+                    : 'border-default-200 text-foreground-500'
+              }`}
+            >
+              {quickNoteRegistrationError ? (
+                <div className="flex items-center justify-between gap-3">
+                  <span>
+                    Could not register {formatShortcut(hotkeyConfig.quickNote)}. Another app may use it.
+                    {isMacOS() && ' Grant bkemo Input Monitoring access or choose another shortcut.'}
+                  </span>
+                  {isMacOS() && (
+                    <Button size="sm" variant="flat" onPress={openMacHotkeySettings}>
+                      Open System Settings
+                    </Button>
+                  )}
+                </div>
+              ) : (
+                <span>
+                  {isQuickNoteRegistered
+                    ? `${formatShortcut(hotkeyConfig.quickNote)} is registered`
+                    : `Registering ${formatShortcut(hotkeyConfig.quickNote)}…`}
+                </span>
+              )}
+            </div>
+          )}
 
         </div>
       </CollapsibleCard>

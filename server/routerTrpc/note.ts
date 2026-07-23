@@ -15,6 +15,7 @@ import { cache } from '@shared/lib/cache';
 import { AiModelFactory } from '@server/aiServer/aiModelFactory';
 import { authProcedure, demoAuthMiddleware, publicProcedure, router, requireShare } from '@server/middleware';
 import { getBkemoSiteId } from '@server/lib/bkemoTransfer';
+import { latestNoteChangeCursor, publishNoteDirty, readNoteChanges } from '@server/lib/noteSync';
 import { randomBytes } from 'crypto';
 
 const extractHashtags = (input: string): string[] => {
@@ -42,6 +43,41 @@ const collectNoteTreeIds = async (accountId: number, rootIds: number[]) => {
 };
 
 export const noteRouter = router({
+  changes: authProcedure
+    .meta({ openapi: { method: 'POST', path: '/v1/note/changes', summary: 'Read ordered note changes', protect: true, tags: ['Note'] } })
+    .input(
+      z.object({
+        cursor: z.number().int().nonnegative().optional(),
+        bootstrap: z.boolean().default(false),
+        limit: z.number().int().positive().max(1000).default(500),
+      }),
+    )
+    .output(
+      z.object({
+        cursor: z.number().int().nonnegative(),
+        hasMore: z.boolean(),
+        changed: z.array(z.any()),
+        removedIds: z.array(z.number().int()),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      const accountId = Number(ctx.id);
+      if (input.bootstrap && input.cursor == null) {
+        return {
+          cursor: await latestNoteChangeCursor(prisma, accountId),
+          hasMore: false,
+          changed: [],
+          removedIds: [],
+        };
+      }
+      const page = await readNoteChanges(prisma, accountId, input.cursor ?? 0, input.limit);
+      return {
+        cursor: page.cursor,
+        hasMore: page.hasMore,
+        changed: page.snapshots,
+        removedIds: page.removedIds,
+      };
+    }),
   list: authProcedure
     .meta({ openapi: { method: 'POST', path: '/v1/note/list', summary: 'Query notes list', protect: true, tags: ['Note'] } })
     .input(
@@ -1020,17 +1056,21 @@ export const noteRouter = router({
     .input(z.object({ id: z.number() }))
     .output(z.union([z.null(), notesSchema]))
     .mutation(async function ({ input, ctx }) {
-      return await prisma.notes.update({ where: { id: input.id, accountId: Number(ctx.id) }, data: { isReviewed: true } });
+      const note = await prisma.notes.update({ where: { id: input.id, accountId: Number(ctx.id) }, data: { isReviewed: true } });
+      publishNoteDirty(ctx.id);
+      return note;
     }),
   toggleDone: authProcedure
     .meta({ openapi: { method: 'POST', path: '/v1/note/toggle-done', summary: 'Toggle a task between done and not-done', protect: true, tags: ['Note'] } })
     .input(z.object({ id: z.number(), done: z.boolean() }))
     .output(z.any())
     .mutation(async function ({ input, ctx }) {
-      return await prisma.notes.update({
+      const note = await prisma.notes.update({
         where: { id: input.id, accountId: Number(ctx.id) },
         data: { completedAt: input.done ? new Date() : null },
       });
+      publishNoteDirty(ctx.id);
+      return note;
     }),
   upsert: authProcedure
     .meta({
@@ -1235,6 +1275,7 @@ export const noteRouter = router({
         }
         if (content == null) {
           SendWebhook({ ...note, attachments }, isRecycle ? 'delete' : 'update', ctx);
+          publishNoteDirty(note.accountId);
           return note;
         }
         const oldTagsInThisNote = await prisma.tagsToNote.findMany({ where: { noteId: note.id }, include: { tag: true } });
@@ -1344,6 +1385,7 @@ export const noteRouter = router({
         }
 
         SendWebhook({ ...note, attachments }, isRecycle ? 'delete' : 'update', ctx);
+        publishNoteDirty(note.accountId);
         return note;
       } else {
         try {
@@ -1408,6 +1450,7 @@ export const noteRouter = router({
                       where: { id: note.id },
                       data: { content: note.content + transcriptionText },
                     }).then(() => {
+                      publishNoteDirty(note.accountId);
                       console.log(`Added transcriptions to note ${note.id},${transcriptionText}`);
 
                       // Re-run embedding if model is configured
@@ -1446,6 +1489,7 @@ export const noteRouter = router({
           }
 
           SendWebhook({ ...note, attachments }, 'create', ctx);
+          publishNoteDirty(note.accountId);
 
           return note;
         } catch (error) {
@@ -1493,7 +1537,7 @@ export const noteRouter = router({
 
       if (isCancel) {
         const { shareIncludeAiHistory: _drop, ...restMeta } = prevMeta;
-        return await prisma.notes.update({
+        const updated = await prisma.notes.update({
           where: { id },
           data: {
             isShare: false,
@@ -1503,13 +1547,15 @@ export const noteRouter = router({
             metadata: restMeta,
           },
         });
+        publishNoteDirty(updated.accountId);
+        return updated;
       } else {
         let shareId = note.shareEncryptedUrl || await generateShareId();
         while (await prisma.notes.findFirst({ where: { shareEncryptedUrl: shareId, id: { not: id } }, select: { id: true } })) {
           shareId = await generateShareId();
         }
         const nextIncludeAi = includeAiHistory ?? Boolean(prevMeta.shareIncludeAiHistory);
-        return await prisma.notes.update({
+        const updated = await prisma.notes.update({
           where: { id },
           data: {
             isShare: true,
@@ -1522,6 +1568,8 @@ export const noteRouter = router({
             },
           },
         });
+        publishNoteDirty(updated.accountId);
+        return updated;
       }
     }),
   updateMany: authProcedure
@@ -1543,7 +1591,9 @@ export const noteRouter = router({
         ...(isRecycle !== null && { isRecycle }),
       };
       const targetIds = isArchived !== null || isRecycle !== null ? await collectNoteTreeIds(Number(ctx.id), ids) : ids;
-      return await prisma.notes.updateMany({ where: { id: { in: targetIds }, accountId: Number(ctx.id) }, data: update });
+      const result = await prisma.notes.updateMany({ where: { id: { in: targetIds }, accountId: Number(ctx.id) }, data: update });
+      if (result.count > 0) publishNoteDirty(ctx.id);
+      return result;
     }),
   trashMany: authProcedure
     .meta({ openapi: { method: 'POST', path: '/v1/note/batch-trash', summary: 'Batch trash note', protect: true, tags: ['Note'] } })
@@ -1553,7 +1603,9 @@ export const noteRouter = router({
       const { ids } = input;
       const targetIds = await collectNoteTreeIds(Number(ctx.id), ids);
       SendWebhook({ ids: targetIds }, 'delete', ctx);
-      return await prisma.notes.updateMany({ where: { id: { in: targetIds }, accountId: Number(ctx.id) }, data: { isRecycle: true } });
+      const result = await prisma.notes.updateMany({ where: { id: { in: targetIds }, accountId: Number(ctx.id) }, data: { isRecycle: true } });
+      if (result.count > 0) publishNoteDirty(ctx.id);
+      return result;
     }),
   deleteMany: authProcedure
     .use(demoAuthMiddleware)
@@ -1714,6 +1766,7 @@ export const noteRouter = router({
         ),
       );
 
+      if (attachments.length > 0) publishNoteDirty(ctx.id);
       return { success: true };
     }),
   getNoteHistory: authProcedure
@@ -2052,6 +2105,7 @@ export const noteRouter = router({
         ),
       );
 
+      if (updates.length > 0) publishNoteDirty(ctx.id);
       return { success: true };
     }),
 });
@@ -2131,5 +2185,6 @@ export async function deleteNotes(ids: number[], ctx: Context) {
   await prisma.comments.deleteMany({ where: { noteId: { in: ids } } });
   await prisma.notes.deleteMany({ where: { id: { in: ids }, accountId: Number(ctx.id) } });
   await prisma.noteHistory.deleteMany({ where: { noteId: { in: ids }, accountId: Number(ctx.id) } });
+  if (notes.length > 0) publishNoteDirty(ctx.id);
   return { ok: true };
 }

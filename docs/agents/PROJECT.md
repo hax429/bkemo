@@ -35,8 +35,28 @@ capture windows and shared settings still import them.
 - Use tRPC internally or the scoped-token REST API under `/api`; the OpenAPI spec
   is at `/api/openapi.json`, Swagger at `/api-doc`, and the readable reference at
   `/docs`.
-- Use the Tauri iOS/macOS shells with local frontend assets, remote API access,
-  cached reads, queued offline writes, and cached attachments.
+- Use the native SwiftUI iOS app and Tauri macOS shell with remote API access,
+  cached reads, and queued offline creates.
+- On macOS, the Tauri app registers Control+W by default for quick capture.
+  The shortcut toggles a rounded `/quicknote` capture panel without discarding
+  its persisted draft. Escape and × hide it; Command+Enter saves.
+- macOS stores only the bearer token in Keychain (`keyring`); each Tauri window
+  hydrates its session from Keychain. Profile metadata remains in app data so
+  cached notes and offline creation work without a connection.
+- The native macOS menu is **bkemo / File / Edit / Navigate / Help**. It exposes
+  Settings, New Note, Quick Note, Search, Graph, Calendar, Files, Analytics, and
+  AI using canonical routes and macOS accelerators.
+- The main window caches the latest 500 notes plus older opened notes. Offline
+  mode is read-only for existing notes, but new notes appear immediately with a
+  pending-sync badge and replay when connectivity returns.
+- Open web, macOS, and iOS clients reconcile note changes through an authenticated
+  server-sent-event signal backed by a durable per-account change cursor. A
+  10-second foreground poll catches disconnects and server restarts; returning
+  to a visible/active client forces an immediate catch-up.
+- The Dock icon is present while the main window is active and hidden while the
+  app runs in the background. The top-right menu bar icon is optional as long
+  as the global shortcut remains enabled. Desktop auto-update is intentionally
+  not included.
 
 ## Architecture map
 
@@ -57,6 +77,8 @@ Important implementation anchors:
 - `server/routerTrpc/note.ts` — note/task queries and mutations.
 - `app/src/store/blinkoStore.tsx` — online queries, Dexie fallback, and offline
   operation merging/replay.
+- `app/src/lib/noteSync.ts` — foreground SSE lifecycle, durable polling fallback,
+  and cache reconciliation for web and Tauri.
 - `app/src/components/TiptapEditor/` — markdown-backed editor.
 - `app/src/lib/taskSyntax.ts` and `app/src/lib/noteLinks.ts` — inline task and
   memo-link parsing.

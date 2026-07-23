@@ -50,13 +50,16 @@ const TaskCheck = observer(function TaskCheck({ note }: { note: Note }) {
   const done = isDone(note);
   return (
     <span
-      onClick={(e) => { e.stopPropagation(); blinko.toggleTaskDone.call({ id: note.id!, done: !done }); }}
+      onClick={(e) => {
+        e.stopPropagation();
+        if (blinko.isOnline) blinko.toggleTaskDone.call({ id: note.id!, done: !done });
+      }}
       style={{
         width: 14, height: 14, borderRadius: 3, marginTop: 3,
         border: `1.5px solid ${done ? 'var(--accent)' : (note.isImportant && note.isUrgent) ? 'var(--urgent)' : 'var(--fg-3)'}`,
         background: done ? 'var(--accent)' : 'transparent',
         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-        flexShrink: 0, color: '#fff', fontSize: 10, lineHeight: 1, cursor: 'pointer',
+        flexShrink: 0, color: '#fff', fontSize: 10, lineHeight: 1, cursor: blinko.isOnline ? 'pointer' : 'default',
       }}
     >{done ? '✓' : ''}</span>
   );
@@ -441,6 +444,7 @@ const MemoRow = observer(function MemoRow({ note, onOpen, selected, selectionAct
   hideComments: boolean;
   textFoldLength: number;
 }) {
+  const blinko = RootStore.Get(BlinkoStore);
   const task = isTask(note);
   const done = isDone(note);
   const [expanded, setExpanded] = useState(false);
@@ -456,7 +460,10 @@ const MemoRow = observer(function MemoRow({ note, onOpen, selected, selectionAct
   return (
     <div
       className="bk-memo"
-      onContextMenu={(e) => { e.preventDefault(); onContext(e, note); }}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        if (blinko.isOnline) onContext(e, note);
+      }}
       onClick={() => (selectionActive ? onToggleSelect(note.id!) : onOpen?.(note))}
       style={{
         background: 'var(--bg-2)',
@@ -483,7 +490,12 @@ const MemoRow = observer(function MemoRow({ note, onOpen, selected, selectionAct
         )}
         {task && <TaskCheck note={note} />}
         {note.isTop && <span title="Pinned" style={{ color: 'var(--accent)' }}>⊕</span>}
-        <span className="bk-memo-id">BK-{note.id}</span>
+        <span className="bk-memo-id">{(note as any).isOffline ? 'LOCAL' : `BK-${note.id}`}</span>
+        {(note as any).pendingSync && (
+          <span style={{ color: 'var(--important)', border: '1px solid color-mix(in srgb, var(--important) 35%, transparent)', borderRadius: 100, padding: '1px 7px', fontSize: 10 }}>
+            pending sync
+          </span>
+        )}
         <PriorityDots important={note.isImportant} urgent={note.isUrgent} />
         {task && note.dueDate && (() => {
           const overdue = dayjs(note.dueDate).endOf('day').isBefore(dayjs());
@@ -517,7 +529,7 @@ const MemoRow = observer(function MemoRow({ note, onOpen, selected, selectionAct
           <span className="bk-rel">{getDisplayTime(note.createdAt, note.updatedAt)}</span>
           <span className="bk-exact">BK-{note.id} · {dayjs(note.createdAt).format('YYYY-MM-DD HH:mm')}</span>
         </span>
-        <MoreButton size={26} onClick={(e) => onContext(e, note)} />
+        {blinko.isOnline && <MoreButton size={26} onClick={(e) => onContext(e, note)} />}
       </div>
       {/* body — markdown preview, consistent with the editor */}
       <div style={{ position: 'relative', maxHeight: collapsed ? 150 : undefined, overflow: collapsed ? 'hidden' : undefined }}>

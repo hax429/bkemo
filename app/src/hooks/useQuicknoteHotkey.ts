@@ -67,7 +67,7 @@ export const useQuicknoteHotkey = (isCreateMode: boolean) => {
         // Listen for navigate to settings page events
         const unlistenNavigateSettings = await listen('navigate-to-settings', () => {
           try {
-            navigate('/settings?tab=hotkey');
+            navigate('/settings/desktop');
             console.log('Navigating to hotkey settings');
           } catch (error) {
             console.error('Error navigating to settings:', error);

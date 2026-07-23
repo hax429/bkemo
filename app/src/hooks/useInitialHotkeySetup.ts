@@ -3,29 +3,14 @@ import { isInTauri, isDesktop } from '@/lib/tauriHelper';
 import { invoke } from '@tauri-apps/api/core';
 import { RootStore } from '@/store';
 import { BlinkoStore } from '@/store/blinkoStore';
+import { DEFAULT_HOTKEY_CONFIG } from '@shared/lib/types';
 
-const DEFAULT_HOTKEY_CONFIG = {
-  quickNote: 'Shift+Space',
-  quickAI: 'Alt+Space',
-  enabled: true,
-  aiEnabled: true,
-  systemTrayEnabled: true,
-  windowBehavior: 'show' as const,
-  textSelectionToolbar: {
-    enabled: true,
-    triggerModifier: 'none' as const,
-    features: {
-      translation: true,
-      copy: true,
-      qna: true,
-      bookmark: true
-    }
-  }
-};
+export const QUICKNOTE_HOTKEY_ERROR_KEY = 'bkemo.quicknoteHotkeyError';
 
 export const useInitialHotkeySetup = () => {
   useEffect(() => {
     if (!isInTauri() || !isDesktop()) return;
+    if (/^\/quick(note|ai|tool)/.test(window.location.pathname)) return;
 
     const setupInitialHotkeys = async () => {
       try {
@@ -36,11 +21,14 @@ export const useInitialHotkeySetup = () => {
         const finalConfig = {
           ...DEFAULT_HOTKEY_CONFIG,
           ...config,
-          systemTrayEnabled: true,
           windowBehavior: 'show' as const
         };
         
         console.log('Setting up initial hotkeys with config:', finalConfig);
+
+        await invoke('set_tray_visible', {
+          visible: finalConfig.systemTrayEnabled || !finalConfig.enabled
+        });
         
         // Register quicknote shortcut if enabled
         if (finalConfig.enabled) {
@@ -49,8 +37,13 @@ export const useInitialHotkeySetup = () => {
               shortcut: finalConfig.quickNote,
               command: 'quicknote'
             });
+            localStorage.removeItem(QUICKNOTE_HOTKEY_ERROR_KEY);
             console.log('Initial registration - quicknote shortcut:', finalConfig.quickNote);
           } catch (error) {
+            localStorage.setItem(
+              QUICKNOTE_HOTKEY_ERROR_KEY,
+              error instanceof Error ? error.message : String(error)
+            );
             console.warn('Failed to register initial quicknote shortcut:', error);
           }
         }

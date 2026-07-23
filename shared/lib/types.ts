@@ -311,8 +311,13 @@ export const DEFAULT_VOICE_RECOGNITION_CONFIG: VoiceRecognitionConfig = {
   autoGpuDetection: true,
 };
 
+export const getDefaultQuickNoteHotkey = () =>
+  typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform)
+    ? 'Control+W'
+    : 'Shift+Space';
+
 export const DEFAULT_HOTKEY_CONFIG: HotkeyConfig = {
-  quickNote: 'Shift+Space',
+  quickNote: getDefaultQuickNoteHotkey(),
   quickAI: 'Alt+Space',
   enabled: true,
   aiEnabled: true,

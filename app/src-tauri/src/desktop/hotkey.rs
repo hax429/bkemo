@@ -31,7 +31,11 @@ pub struct WindowConfig {
 impl Default for HotkeyConfig {
     fn default() -> Self {
         Self {
-            quick_note: "Shift+Space".to_string(),
+            quick_note: if cfg!(target_os = "macos") {
+                "Control+W".to_string()
+            } else {
+                "Shift+Space".to_string()
+            },
             quick_ai: "Alt+Space".to_string(),
             enabled: true,
             ai_enabled: true,
@@ -163,4 +167,20 @@ pub fn setup_default_shortcuts(app_handle: &AppHandle) -> Result<(), String> {
     }
     
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::HotkeyConfig;
+
+    #[test]
+    fn quicknote_default_matches_desktop_platform() {
+        let expected = if cfg!(target_os = "macos") {
+            "Control+W"
+        } else {
+            "Shift+Space"
+        };
+
+        assert_eq!(HotkeyConfig::default().quick_note, expected);
+    }
 }

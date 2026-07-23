@@ -4,6 +4,21 @@ use tauri::{AppHandle, Manager, Emitter, WebviewWindowBuilder, WebviewUrl, Runti
 pub const QUICKTOOL_WIDTH: f64 = 190.0;
 pub const QUICKTOOL_HEIGHT: f64 = 35.0;
 
+pub fn set_dock_visible<R: Runtime>(app: &AppHandle<R>, visible: bool) {
+    #[cfg(target_os = "macos")]
+    {
+        let policy = if visible {
+            tauri::ActivationPolicy::Regular
+        } else {
+            tauri::ActivationPolicy::Accessory
+        };
+        let _ = app.set_activation_policy(policy);
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    let _ = (app, visible);
+}
+
 /// Configuration for quick windows
 struct QuickWindowConfig {
     label: &'static str,
@@ -78,7 +93,9 @@ pub fn toggle_editor_window<R: tauri::Runtime>(app: AppHandle<R>) -> Result<(), 
                     if window.is_focused().unwrap_or(false) {
                         // If window is visible and focused, hide it
                         let _ = window.hide();
+                        set_dock_visible(&app, false);
                     } else {
+                        set_dock_visible(&app, true);
                         // If window is visible but not focused, focus it
                         let _ = window.set_focus();
                         let _ = window.emit("quicknote-triggered", ());
@@ -86,6 +103,7 @@ pub fn toggle_editor_window<R: tauri::Runtime>(app: AppHandle<R>) -> Result<(), 
                 },
                 Ok(false) | Err(_) => {
                     // If window is hidden, show and focus it
+                    set_dock_visible(&app, true);
                     let _ = window.show();
                     let _ = window.set_focus();
                     let _ = window.emit("quicknote-triggered", ());
@@ -118,8 +136,20 @@ pub fn resize_quicknote_window<R: tauri::Runtime>(app: AppHandle<R>, height: f64
 
 #[tauri::command]
 pub fn toggle_quicknote_window<R: tauri::Runtime>(app: AppHandle<R>) -> Result<(), String> {
-    // Try to toggle existing window first
-    if let Ok(()) = toggle_window(&app, "quicknote") {
+    if let Some(window) = app.get_webview_window("quicknote") {
+        if window.is_visible().unwrap_or(false) {
+            window
+                .hide()
+                .map_err(|e| format!("Failed to hide quicknote window: {}", e))?;
+        } else {
+            window
+                .show()
+                .map_err(|e| format!("Failed to show quicknote window: {}", e))?;
+            window
+                .set_focus()
+                .map_err(|e| format!("Failed to focus quicknote window: {}", e))?;
+            let _ = window.emit("quicknote-shortcut", ());
+        }
         return Ok(());
     }
 
@@ -135,6 +165,37 @@ pub fn toggle_quicknote_window<R: tauri::Runtime>(app: AppHandle<R>) -> Result<(
     };
 
     create_quick_window(&app, config)
+}
+
+/// Show and focus quicknote without toggling it closed.
+///
+/// This is the capture entry point for global shortcuts and the tray. The
+/// existing toggle command remains available for explicit close/hide actions.
+pub fn show_quicknote_window<R: tauri::Runtime>(app: AppHandle<R>) -> Result<(), String> {
+    if app.get_webview_window("quicknote").is_none() {
+        let config = QuickWindowConfig {
+            label: "quicknote",
+            title: "Quick Note",
+            url: "/quicknote",
+            width: 600.0,
+            height: 150.0,
+            resizable: true,
+            skip_taskbar: false,
+        };
+        create_quick_window(&app, config)?;
+    }
+
+    let window = app
+        .get_webview_window("quicknote")
+        .ok_or_else(|| "Quicknote window not found after creation".to_string())?;
+    window
+        .show()
+        .map_err(|e| format!("Failed to show quicknote window: {}", e))?;
+    window
+        .set_focus()
+        .map_err(|e| format!("Failed to focus quicknote window: {}", e))?;
+    let _ = window.emit("quicknote-shortcut", ());
+    Ok(())
 }
 
 #[tauri::command]

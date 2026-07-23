@@ -17,25 +17,51 @@ packages:
 targets:
   bkemo:
     type: application
+    productName: bkemo
     platform: iOS
     deploymentTarget: "17.0"
     sources:
       - path: bkemo
     info:
       path: bkemo/Info.plist
+      properties:
+        NSFaceIDUsageDescription: "Optionally verify your identity on this device before showing captures. Face ID is handled by iOS; bkemo never receives biometric data."
+        UILaunchScreen:
+          UIColorName: BkemoLaunchBackground
+        UIRequiresFullScreen: true
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
     entitlements:
       path: bkemo/bkemo.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.me.hax429.bk
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)me.hax429.bk
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: me.hax429.bk
         PRODUCT_NAME: bkemo
+        DEVELOPMENT_TEAM: 5L7AP54366
         INFOPLIST_FILE: bkemo/Info.plist
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.utilities
         CODE_SIGN_ENTITLEMENTS: bkemo/bkemo.entitlements
+        SUPPORTED_PLATFORMS: "iphoneos iphonesimulator"
+        SUPPORTS_MACCATALYST: NO
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
+        SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD: NO
+        TARGETED_DEVICE_FAMILY: 1
     dependencies:
       - package: BkemoShared
+    systemCapabilities:
+      com.apple.ApplicationGroups.iOS:
+        enabled: 1
+      com.apple.Keychain:
+        enabled: 1
     infoPlist: bkemo/Info.plist
   ShareExtension:
     type: app-extension
+    productName: bkemoShare
     platform: iOS
     deploymentTarget: "17.0"
     sources:
@@ -44,17 +70,29 @@ targets:
       path: ShareExtension/Info.plist
     entitlements:
       path: ShareExtension/ShareExtension.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.me.hax429.bk
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)me.hax429.bk
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: me.hax429.bk.ShareExtension
         PRODUCT_NAME: bkemoShare
+        DEVELOPMENT_TEAM: 5L7AP54366
         INFOPLIST_FILE: ShareExtension/Info.plist
         CODE_SIGN_ENTITLEMENTS: ShareExtension/ShareExtension.entitlements
     dependencies:
       - package: BkemoShared
       - target: bkemo
+    systemCapabilities:
+      com.apple.ApplicationGroups.iOS:
+        enabled: 1
+      com.apple.Keychain:
+        enabled: 1
   Widget:
     type: app-extension
+    productName: bkemoWidget
     platform: iOS
     deploymentTarget: "17.0"
     sources:
@@ -63,12 +101,37 @@ targets:
       path: Widget/Info.plist
     entitlements:
       path: Widget/Widget.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.me.hax429.bk
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)me.hax429.bk
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: me.hax429.bk.Widget
         PRODUCT_NAME: bkemoWidget
+        DEVELOPMENT_TEAM: 5L7AP54366
         INFOPLIST_FILE: Widget/Info.plist
         CODE_SIGN_ENTITLEMENTS: Widget/Widget.entitlements
     dependencies:
       - package: BkemoShared
       - target: bkemo
+    systemCapabilities:
+      com.apple.ApplicationGroups.iOS:
+        enabled: 1
+      com.apple.Keychain:
+        enabled: 1
+  bkemoTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: bkemoTests
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: me.hax429.bk.tests
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGNING_ALLOWED: NO
+    dependencies:
+      - target: bkemo
+      - package: BkemoShared

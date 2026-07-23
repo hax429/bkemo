@@ -40,6 +40,7 @@ model accounts {
   sharedNotes      noteInternalShare[]
   aiScheduledTasks aiScheduledTask[]
   accessTokens     accessToken[]
+  noteChanges      noteChange[]
 }
 
 // Named, scope-limited API access tokens (GitHub-PAT style). The actual bearer
@@ -226,6 +227,21 @@ model notes {
   @@index([accountId, dueDate])
   @@index([accountId, type])
   @@index([parentNoteId])
+}
+
+// Append-only per-account cursor journal maintained by a PostgreSQL trigger on
+// notes. Rows intentionally do not reference notes so hard-delete events remain
+// available to synchronizing clients.
+model noteChange {
+  id        Int      @id @default(autoincrement())
+  accountId Int
+  noteId    Int
+  operation String   @db.VarChar(16)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  account accounts @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, id])
 }
 
 model reaction {

@@ -40,6 +40,7 @@ export const ACCESS_SCOPES: AccessScopeDef[] = [
     description: 'List, search, and read memos & tasks (and their history).',
     paths: [
       'notes.list',
+      'notes.changes',
       'notes.detail',
       'notes.listByIds',
       'notes.dailyReviewNoteList',

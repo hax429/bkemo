@@ -107,13 +107,18 @@ export const NoteModal = observer(function NoteModal({ note, onClose, startFulls
   const [updateTicker, setUpdateTicker] = useState(0);
   // Long memos are read as an article by default; the pencil switches to editing.
   const isLong = (note.content?.length ?? 0) >= ARTICLE_THRESHOLD;
-  const [reading, setReading] = useState(isLong);
+  const readOnlyOffline = !!note.id && !blinko.isOnline;
+  const [reading, setReading] = useState(isLong || readOnlyOffline);
   const readMins = Math.max(1, Math.round((note.content?.trim().split(/\s+/).filter(Boolean).length ?? 0) / 220));
   // Track live length so the collapse/expand affordance follows what's typed.
   const [contentLen, setContentLen] = useState(note.content?.length ?? 0);
   const longEditor = contentLen >= ARTICLE_THRESHOLD;
   // Full-page (telegra.ph-style) editing: full viewport, centered wide column.
   const [fullscreen, setFullscreen] = useState(!!startFullscreen || !!(note as any).__fullscreen);
+
+  useEffect(() => {
+    if (readOnlyOffline) setReading(true);
+  }, [readOnlyOffline]);
   // Seed pending uploads from a composer "expand" draft so they aren't lost.
   const att = useAttachments((note as any).__draftAttachments);
   const [subtasks, setSubtasks] = useState<Note[]>(() => ((note as any).subtasks ?? []) as Note[]);
@@ -200,7 +205,7 @@ export const NoteModal = observer(function NoteModal({ note, onClose, startFulls
   };
 
   const save = async () => {
-    if (saving) return;
+    if (saving || readOnlyOffline) return;
     const parsed = parseTaskSyntax(ref.current?.getMarkdown() ?? note.content ?? '');
     // Inline syntax can promote a memo to a task or set/clear its due date.
     const todo = isTodo || parsed.isTodo;
@@ -303,9 +308,10 @@ export const NoteModal = observer(function NoteModal({ note, onClose, startFulls
           <div className="h-stack" style={{ padding: '14px 22px', gap: 12, alignItems: 'center', borderBottom: '1px solid var(--border)' }}>
             <span onClick={handleClose} title="Back" className="bk-icon-btn" style={{ cursor: 'pointer', fontSize: 18, color: 'var(--fg-2)', width: 30, height: 30, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8 }}>←</span>
             <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg-3)' }}>{note.id ? `BK-${note.id}` : 'NEW'}{note.createdAt ? ` · ${dayjs(note.createdAt).format('MMM D, YYYY')}` : ''}</span>
+            {readOnlyOffline && <span style={{ color: 'var(--important)', fontFamily: 'var(--font-mono)', fontSize: 10 }}>OFFLINE · READ ONLY</span>}
             <span className="spacer" />
             <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg-3)' }}>{readMins} min read</span>
-            <span onClick={() => setReading(false)} title="Edit" className="bk-icon-btn" style={{ cursor: 'pointer', fontSize: 15, color: 'var(--fg-2)', width: 30, height: 30, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8 }}>✎</span>
+            {!readOnlyOffline && <span onClick={() => setReading(false)} title="Edit" className="bk-icon-btn" style={{ cursor: 'pointer', fontSize: 15, color: 'var(--fg-2)', width: 30, height: 30, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8 }}>✎</span>}
           </div>
           {/* article body — comfortable long-form typography */}
           <div className="bk-scroll bk-article" style={{ flex: 1, overflow: 'auto', padding: '28px 24px 96px' }}>

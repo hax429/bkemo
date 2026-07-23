@@ -19,7 +19,9 @@ public enum AppGroup {
     public static let tokenKey = "bkemo.token"
     public static let pendingTypeKey = "bkemo.pendingType"
     public static let lastSyncKey = "bkemo.lastSync"
+    public static let noteChangesCursorKey = "bkemo.noteChangesCursor"
     public static let lastTypeKey = "bkemo.lastType"
     public static let biometricKey = "bkemo.biometricEnabled"
     public static let voiceHintKey = "bkemo.hasSeenVoiceHint"
+    public static let appearanceKey = "bkemo.appearancePreferences"
 }

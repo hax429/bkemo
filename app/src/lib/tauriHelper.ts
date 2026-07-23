@@ -53,6 +53,14 @@ export function isWindows() {
     }
 }
 
+export function isMacOS() {
+    try {
+        return platform() === 'macos';
+    } catch (error) {
+        return false
+    }
+}
+
 export function isInTauri() {
     try {
         // @ts-ignore

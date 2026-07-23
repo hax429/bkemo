@@ -5,10 +5,19 @@ use tauri::{
     image::Image,
     menu::{MenuBuilder, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent},
-    Manager, Emitter,
+    Emitter, Manager,
 };
 
-use crate::desktop::{toggle_editor_window, toggle_quicknote_window};
+use crate::desktop::{show_quicknote_window, toggle_editor_window};
+
+#[tauri::command]
+pub fn set_tray_visible(app: AppHandle, visible: bool) -> Result<(), String> {
+    let tray = app
+        .tray_by_id("blinko-tray")
+        .ok_or_else(|| "Menu bar icon not found".to_string())?;
+    tray.set_visible(visible)
+        .map_err(|error| error.to_string())
+}
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn setup_system_tray(app: &AppHandle) -> Result<TrayIcon, Box<dyn std::error::Error>> {
@@ -37,7 +46,7 @@ pub fn setup_system_tray(app: &AppHandle) -> Result<TrayIcon, Box<dyn std::error
     let tray_icon = TrayIconBuilder::with_id("blinko-tray")
         .icon(image)
         .menu(&tray_menu)
-        .tooltip("Blinko - Quick Note")
+        .tooltip("bkemo")
         .on_tray_icon_event(|tray, event| {
             match event {
                 TrayIconEvent::Click {
@@ -55,7 +64,7 @@ pub fn setup_system_tray(app: &AppHandle) -> Result<TrayIcon, Box<dyn std::error
         .on_menu_event(|app, event| {
             match event.id().as_ref() {
                 "quicknote" => {
-                    let _ = toggle_quicknote_window(app.clone());
+                    let _ = show_quicknote_window(app.clone());
                 }
                 "toggle" => {
                     let _ = toggle_editor_window(app.clone());

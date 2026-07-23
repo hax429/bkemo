@@ -75,6 +75,48 @@ public struct BkemoClient {
         } catch APIError.unauthorized { return false } catch { throw error }
     }
 
+    // MARK: Account preferences
+
+    public struct AppearancePreferences: Codable, Equatable {
+        public var theme: String
+        public var accent: String
+        public var density: String
+        public var bgGradient: String?
+
+        public init(
+            theme: String = "dark",
+            accent: String = "#e2a96b",
+            density: String = "regular",
+            bgGradient: String? = "dusk"
+        ) {
+            self.theme = theme
+            self.accent = accent
+            self.density = density
+            self.bgGradient = bgGradient
+        }
+    }
+
+    public func appearancePreferences() async throws -> AppearancePreferences? {
+        let data = try await call("/api/v1/config/list", method: "GET")
+        guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let value = root["bkemoPrefs"] else {
+            return nil
+        }
+        let preferencesData = try JSONSerialization.data(withJSONObject: value)
+        return try JSONDecoder().decode(AppearancePreferences.self, from: preferencesData)
+    }
+
+    public func updateAppearancePreferences(_ preferences: AppearancePreferences) async throws {
+        let valueData = try JSONEncoder().encode(preferences)
+        guard let value = try JSONSerialization.jsonObject(with: valueData) as? [String: Any] else {
+            throw APIError.decode("invalid appearance preferences")
+        }
+        _ = try await call("/api/v1/config/update", body: [
+            "key": "bkemoPrefs",
+            "value": value,
+        ])
+    }
+
     // MARK: Notes
 
     public struct UpsertBody {
@@ -115,6 +157,86 @@ public struct BkemoClient {
         if let arr = obj as? [[String: Any]] { return arr }
         if let single = obj as? [String: Any], let arr = single["data"] as? [[String: Any]] { return arr }
         return []
+    }
+
+    public struct NoteChanges {
+        public let cursor: Int
+        public let changed: [[String: Any]]
+        public let removedIds: [Int]
+
+        public init(cursor: Int, changed: [[String: Any]], removedIds: [Int]) {
+            self.cursor = cursor
+            self.changed = changed
+            self.removedIds = removedIds
+        }
+    }
+
+    public struct NoteEvent: Equatable, Sendable {
+        public let data: String
+
+        public init(data: String) {
+            self.data = data
+        }
+    }
+
+    public func noteChanges(cursor: Int? = nil, bootstrap: Bool = false) async throws -> NoteChanges {
+        var body: [String: Any] = [:]
+        if let cursor { body["cursor"] = cursor }
+        if bootstrap { body["bootstrap"] = true }
+        let data = try await call("/api/v1/note/changes", body: body)
+        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let cursor = object["cursor"] as? Int else {
+            throw APIError.decode("invalid note changes response")
+        }
+        return NoteChanges(
+            cursor: cursor,
+            changed: object["changed"] as? [[String: Any]] ?? [],
+            removedIds: object["removedIds"] as? [Int] ?? []
+        )
+    }
+
+    public func noteEvents() -> AsyncThrowingStream<NoteEvent, Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    guard let url = URL(string: endpoint + "/api/v1/note/events") else {
+                        throw APIError.decode("bad url")
+                    }
+                    var request = URLRequest(url: url)
+                    request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+                    request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
+                    if let token {
+                        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+                    }
+                    let (bytes, response) = try await URLSession.shared.bytes(for: request)
+                    guard let http = response as? HTTPURLResponse else {
+                        throw APIError.decode("no http")
+                    }
+                    if http.statusCode == 401 { throw APIError.unauthorized }
+                    guard (200..<300).contains(http.statusCode) else {
+                        throw APIError.http(http.statusCode, nil)
+                    }
+
+                    var dataLines: [String] = []
+                    for try await line in bytes.lines {
+                        try Task.checkCancellation()
+                        if line.isEmpty {
+                            if !dataLines.isEmpty {
+                                continuation.yield(NoteEvent(data: dataLines.joined(separator: "\n")))
+                                dataLines.removeAll(keepingCapacity: true)
+                            }
+                        } else if line.hasPrefix("data:") {
+                            dataLines.append(String(line.dropFirst(5)).trimmingCharacters(in: .whitespaces))
+                        }
+                    }
+                } catch is CancellationError {
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
     }
 
     public func noteToggleDone(id: Int, done: Bool) async throws {

@@ -29,7 +29,8 @@ In scope:
 - Offline-first writes: the composer is always usable, even on cold launch with no
   network and even on a poor/returning connection. List fetch is lazy and never
   blocks capture.
-- Biometric (Face ID / Touch ID) unlock on app launch.
+- Optional biometric (Face ID / Touch ID) app lock, disabled until the user
+  enables it in Settings.
 
 Non-goals (explicit cuts, see §14): markdown editor / preview, attachment upload
 from the app body, photo share in v1, voice memo as an audio file in v1, search /
@@ -46,7 +47,7 @@ generation.
 | G3 | Offline capture | Capture in airplane mode → row appears locally → on reconnect syncs to server within 3 s |
 | G4 | Share Extension saves | Share from Safari/YouTube → bkemo → save → memo appears on server (online) or in local queue (offline) |
 | G5 | Widget one-tap | Tap "Todo" on the home-screen widget → app opens with Todo selected, keyboard up, cursor ready |
-| G6 | Biometric gate | Kill app, reopen → Face ID prompt → cancel → composer not visible |
+| G6 | Biometric gate | Fresh install opens without Face ID; enable the lock, kill and reopen → Face ID prompt → cancel → composer not visible |
 | G7 | Voice input | Tap system 🎤 on the keyboard → dictated text appears in composer |
 | G8 | TestFlight install | Archive + upload via App Store Connect → TestFlight install on the user's iPhone |
 
@@ -275,12 +276,15 @@ let container = try ModelContainer(for: schema, configurations: config)
 
 ### List refresh policy
 
-- On foreground, if online and more than 30 s since last sync, `POST
-  /api/v1/note/list` with `{page: 1, size: 50, orderBy: "desc"}`.
+- While foregrounded and online, keep an authenticated server-sent-event stream
+  open and reconcile its durable note-change cursor immediately.
+- Poll `/api/v1/note/changes` every 10 s as a fallback for dropped streams,
+  server restarts, or missed events. Foreground and network restoration force an
+  immediate catch-up.
 - Merge the response with locally pending rows: pending rows always show first
   with a small "Pending" badge; synced rows appear after, in server order.
-- The 30 s throttle prevents pathological foreground-loops from hammering the
-  API.
+- Stop the stream and polling while the app is backgrounded. iOS-suspended apps
+  reconcile when they next become active.
 
 ---
 
@@ -446,11 +450,12 @@ fallback.
   (`requiresTwoFactor`), show a code field, submit via
   `/api/auth/verify-2fa`. Store the final `token` (JWT) in Keychain under the
   shared keychain access group.
-- Biometric: on every foreground (cold or warm), `LAContext.evaluatePolicy(
-  .deviceOwnerAuthenticationWithBiometrics)`. On success: reveal RootView. On
-  failure: stay on a "bkemo locked" screen with a "Try again" button. Biometric
-  adds <100 ms; well within the "instant capture" budget. A Settings toggle lets
-  the user turn biometric lock off if it interferes with the speed expectation.
+- Biometric lock defaults **off**. When the user enables it in Settings, every
+  foreground evaluates `LAContext` device-owner authentication; failure stays on
+  a locked screen with a retry button. Copy explains that verification is
+  performed by the Apple device, bkemo never receives biometric data, and the
+  feature is an optional local privacy lock rather than Apple-account
+  verification.
 - 401 handling: any REST call that returns `401` causes `AuthManager` to clear
   the Keychain token and present the sign-in sheet again, with a toast "Your
   session expired".
@@ -497,8 +502,9 @@ class SyncMonitor: ObservableObject {
 }
 ```
 
-Combined with `scenePhase` observation: foreground → try sync if last sync >30 s
-ago; network change → sync; explicit pull-to-refresh on the list → force sync.
+Combined with `scenePhase` observation: foreground and network restoration
+perform an immediate durable-cursor catch-up, SSE signals reconcile while active,
+and a 10-second poll is the fallback.
 
 ### Sync replay pseudocode
 
@@ -772,9 +778,9 @@ Composer + capture (online + offline):
 
 Recent list:
 
-- [ ] Foreground with network ≥ 30 s after last sync: list refreshes.
-- [ ] Foreground within 30 s: list does not refresh (no duplicate fetch in
-      Console).
+- [ ] Create/edit/delete on another client while iOS is foregrounded: the list
+      updates immediately through SSE.
+- [ ] Disconnect the SSE stream: the 10-second durable poll catches the change.
 - [ ] Pull-to-refresh forces a refresh.
 - [ ] Server returns 5 notes; verify pending local rows appear *above* server
       rows with a Pending badge.
@@ -873,10 +879,10 @@ TestFlight:
 | 12 | Local store | SwiftData in App Group; `LocalMemo` `@Model` with `syncState` |
 | 13 | Client IDs | UUID generated client-side for local tracking only; server assigns numeric `id` on upsert |
 | 14 | Offline operations | Create only (v1). Edit/delete are online-only. Pending rows can be deleted locally |
-| 15 | Sync policy | Replay oldest-first on `app:online` + foreground with >30 s throttle |
+| 15 | Sync policy | Replay pending oldest-first; SSE while active + immediate foreground/reconnect catch-up + 10 s durable poll fallback |
 | 16 | Auth | Sign in with username/password, JWT in shared Keychain, no scoped-token paste |
 | 17 | Token refresh | None — re-login on 401 |
-| 18 | Biometric | Face ID / Touch ID gate after sign-in; dismissible in Settings |
+| 18 | Biometric | Optional Face ID / Touch ID local app lock; disabled by default and configurable in Settings |
 | 19 | Server URL | Hardcoded `https://bk.hax429.me` (no prompt) |
 | 20 | Widget v1 | Small (Memo+Todo stacked) + Medium (two buttons + last-memo preview) only |
 | 21 | Widget interaction | Tap → open app with composer pre-set; no inline-create-empty-memo |

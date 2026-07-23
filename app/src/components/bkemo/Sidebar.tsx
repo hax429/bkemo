@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { signOut, navigate } from '@/components/Auth/auth-client';
 import { eventBus } from '@/lib/event';
 import { RootStore } from '@/store';
+import { isInTauri, isMacOS } from '@/lib/tauriHelper';
 import { BlinkoStore } from '@/store/blinkoStore';
 import { BaseStore } from '@/store/baseStore';
 import { UserStore } from '@/store/user';
@@ -108,7 +109,7 @@ export const Sidebar = observer(function Sidebar({ activeRoute, onNav, onNewMemo
 
   const tree = blinko.tagList.value?.listTags ?? [];
   const initials = (user?.nickname || user?.name || 'BK').slice(0, 2).toUpperCase();
-  const pending = blinko.offlinePendingOps.list?.length ?? 0;
+  const pending = blinko.offlineNotes.length + (blinko.offlinePendingOps.list?.length ?? 0);
   // Collapsible logic to make sidebar breathe
   const notesToShow = showMore ? NOTES_NAV : NOTES_NAV.filter((n) => n.id === 'home');
   const todosToShow = showMore ? TODOS_NAV : TODOS_NAV.filter((t) => t.id === 'today');
@@ -116,7 +117,8 @@ export const Sidebar = observer(function Sidebar({ activeRoute, onNav, onNewMemo
 
   return (
     <div style={{ width: 248, height: '100%', flexShrink: 0, position: 'relative', background: 'color-mix(in srgb, var(--bg) 60%, #000 6%)', borderRight: '1px solid var(--border)' }}>
-      <div className="v-stack bk-scroll" style={{ height: '100%', overflow: 'auto', padding: '12px 8px 12px', gap: 2 }}>
+      {isInTauri() && isMacOS() && <div data-tauri-drag-region style={{ height: 28 }} />}
+      <div className="v-stack bk-scroll" style={{ height: isInTauri() && isMacOS() ? 'calc(100% - 28px)' : '100%', overflow: 'auto', padding: '12px 8px 12px', gap: 2 }}>
         {/* workspace trigger */}
         <div style={{ position: 'relative' }}>
           <div

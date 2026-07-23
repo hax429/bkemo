@@ -86,6 +86,11 @@ export default defineConfig({
           orientation: 'portrait'
         },
         workbox: {
+          // Workbox's production terser worker exits early under the Bun build
+          // used by this repo. Generate readable deterministic code instead;
+          // cache/versioning behavior is identical.
+          mode: 'development',
+          disableDevLogs: true,
           // Maximum file size to cache (10MB)
           maximumFileSizeToCacheInBytes: 10 * 1024 * 1024,
           // Don't cache API requests

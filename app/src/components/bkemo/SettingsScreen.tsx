@@ -26,6 +26,7 @@ import { ensureNotificationPermission, clearTaskNotifications } from '@/lib/task
 import type { BkemoRoute } from './Sidebar';
 import { useMediaQuery } from 'usehooks-ts';
 import { DeveloperAiDebugSettings } from './ai/AIDebugPanel';
+import { HotkeySetting } from '@/components/BlinkoSettings/HotkeySetting';
 
 const mono: React.CSSProperties = { fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '.06em', color: 'var(--fg-3)', textTransform: 'uppercase' };
 
@@ -40,6 +41,7 @@ const GROUP_OF: Record<string, 'you' | 'system' | 'data'> = {
   ai: 'system',
   task: 'system',
   storage: 'system',
+  desktop: 'system',
   developer: 'system',
   data: 'data',
   about: 'data',
@@ -512,6 +514,7 @@ export const SettingsScreen = observer(function SettingsScreen({ prefs, onChange
     { key: 'account', title: 'Account', icon: 'tabler:user-cog', requireAdmin: false, component: <Account /> },
     { key: 'security', title: 'Security & API', icon: 'tabler:key', requireAdmin: false, component: <SecurityScreen /> },
     { key: 'apidocs', title: 'API Docs', icon: 'tabler:code', requireAdmin: false, component: <ApiDocsScreen /> },
+    ...(isInTauri() ? [{ key: 'desktop', title: 'Desktop & Hotkeys', icon: 'tabler:device-desktop', requireAdmin: false, component: <HotkeySetting /> }] : []),
     ...(user.canManageSite ? [
       { key: 'ai', title: 'AI', icon: 'hugeicons:ai-beautify', requireAdmin: true, component: <AiSetting /> },
       { key: 'task', title: 'Schedule Task', icon: 'tabler:list-check', requireAdmin: true, component: <TaskSetting /> },

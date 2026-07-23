@@ -27,6 +27,7 @@ final class AuthManager: ObservableObject {
             if let token = resp.token {
                 Keychain.set(token, forKey: AppGroup.tokenKey)
                 client.token = token
+                AppGroup.defaults.removeObject(forKey: AppGroup.noteChangesCursorKey)
                 isLoggedIn = true
                 requires2faUserId = nil
             } else {
@@ -45,6 +46,7 @@ final class AuthManager: ObservableObject {
             if let token = resp.token {
                 Keychain.set(token, forKey: AppGroup.tokenKey)
                 client.token = token
+                AppGroup.defaults.removeObject(forKey: AppGroup.noteChangesCursorKey)
                 isLoggedIn = true
                 requires2faUserId = nil
             } else {
@@ -57,6 +59,7 @@ final class AuthManager: ObservableObject {
 
     func logout() {
         Keychain.remove(AppGroup.tokenKey)
+        AppGroup.defaults.removeObject(forKey: AppGroup.noteChangesCursorKey)
         client.token = nil
         isLoggedIn = false
         requires2faUserId = nil
@@ -64,6 +67,7 @@ final class AuthManager: ObservableObject {
 
     func handleUnauthorized() {
         Keychain.remove(AppGroup.tokenKey)
+        AppGroup.defaults.removeObject(forKey: AppGroup.noteChangesCursorKey)
         client.token = nil
         isLoggedIn = false
     }

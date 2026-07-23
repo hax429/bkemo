@@ -18,8 +18,7 @@ final class SyncMonitor: ObservableObject {
                 self.isOnline = online
                 if changed, online {
                     await SyncEngine.shared.replayPending()
-                    await SyncEngine.shared.refreshRecentList(force: false)
-                    await ListStore.shared.reload()
+                    await SyncEngine.shared.syncChanges()
                 }
             }
         }

@@ -8,8 +8,15 @@ struct MemoRow: View {
         HStack(alignment: .top, spacing: 10) {
             if item.isTodo {
                 Button(action: onToggleDone) {
-                    Image(systemName: item.isCompleted ? "checkmark.circle.fill" : "circle")
-                        .foregroundStyle(item.isCompleted ? .green : .secondary)
+                    if item.isCompleted {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(.tint)
+                            .font(.system(size: 17))
+                    } else {
+                        Image(systemName: "circle")
+                            .foregroundStyle(.secondary)
+                            .font(.system(size: 17))
+                    }
                 }
                 .buttonStyle(.plain)
             } else {
@@ -20,8 +27,9 @@ struct MemoRow: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(item.content.split(separator: "\n").first.map(String.init) ?? item.content)
                     .lineLimit(2)
-                    .font(.body)
+                    .font(.system(size: 15.5))
                     .strikethrough(item.isCompleted, color: .secondary)
+                    .foregroundStyle(item.isCompleted ? .secondary : .primary)
                 HStack(spacing: 6) {
                     if item.isImportant { priorityDot(.yellow) }
                     if item.isUrgent { priorityDot(.red) }
@@ -31,7 +39,7 @@ struct MemoRow: View {
                         badge(item.syncError ?? "Failed", system: "exclamationmark.triangle.fill", color: .red)
                     }
                     if item.source == "share" {
-                        badge("share", system: "square.and.arrow.up", color: .blue)
+                        badge("share", system: "square.and.arrow.up", color: .secondary)
                     }
                     if !item.source.isEmpty && item.source != "share" {
                         Text(item.source).font(.caption2).foregroundStyle(.secondary)
@@ -39,7 +47,7 @@ struct MemoRow: View {
                 }
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 11)
     }
 
     private func priorityDot(_ c: Color) -> some View {

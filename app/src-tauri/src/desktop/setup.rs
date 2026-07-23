@@ -1,15 +1,25 @@
 use tauri::{AppHandle, Manager};
 
-
-
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-use tauri_plugin_global_shortcut::{ShortcutState, ShortcutEvent};
+use tauri_plugin_global_shortcut::{ShortcutEvent, ShortcutState};
 
-use crate::desktop::{HotkeyConfig, setup_system_tray, toggle_quicknote_window, toggle_quickai_window, toggle_quicktool_window, restore_main_window_state, setup_window_state_monitoring};
+use crate::desktop::{
+    restore_main_window_state, setup_system_tray, setup_window_state_monitoring,
+    set_dock_visible, toggle_quickai_window, toggle_quicknote_window, toggle_quicktool_window,
+    HotkeyConfig,
+};
+#[cfg(target_os = "macos")]
+use crate::desktop::setup_application_menu;
 
 pub fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let app_handle = app.handle();
     let main_window = app.get_webview_window("main").unwrap();
+
+    #[cfg(target_os = "macos")]
+    {
+        use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
+        let _ = apply_vibrancy(&main_window, NSVisualEffectMaterial::Sidebar, None, Some(12.0));
+    }
 
     // Check if launched via autostart
     let args: Vec<String> = std::env::args().collect();
@@ -19,8 +29,10 @@ pub fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>>
         println!("Application launched via autostart, hiding window to tray");
         // Hide window immediately on autostart
         let _ = main_window.hide();
+        set_dock_visible(&app_handle, false);
     } else {
         println!("Application launched normally");
+        set_dock_visible(&app_handle, true);
         // Restore window state before applying decorations only for normal launches
         restore_main_window_state(&app_handle);
     }
@@ -28,14 +40,19 @@ pub fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>>
     // Setup window state monitoring
     setup_window_state_monitoring(&app_handle);
 
+    #[cfg(target_os = "macos")]
+    setup_application_menu(&app_handle)?;
+
     // Set window close event handler to hide to tray instead of exit
     let window = main_window.clone();
+    let close_app_handle = app_handle.clone();
     main_window.on_window_event(move |event| {
         if let tauri::WindowEvent::CloseRequested { api, .. } = event {
             // Prevent window close
             api.prevent_close();
             // Hide window to tray
             let _ = window.hide();
+            set_dock_visible(&close_app_handle, false);
             println!("Window hidden to tray");
         }
     });
