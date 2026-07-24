@@ -11,7 +11,7 @@ export function getActiveTiptapEditor(): Editor | null {
   return activeEditor;
 }
 
-export type FormatCommand = 'bold' | 'italic' | 'underline' | 'strike' | 'code' | 'link';
+export type FormatCommand = 'bold' | 'italic' | 'underline' | 'highlight' | 'strike' | 'code' | 'link';
 
 export function runTiptapFormat(command: FormatCommand): boolean {
   const editor = activeEditor;
@@ -24,6 +24,8 @@ export function runTiptapFormat(command: FormatCommand): boolean {
       return chain.toggleItalic().run();
     case 'underline':
       return chain.toggleUnderline().run();
+    case 'highlight':
+      return chain.toggleHighlight().run();
     case 'strike':
       return chain.toggleStrike().run();
     case 'code':

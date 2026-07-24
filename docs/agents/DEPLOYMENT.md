@@ -213,7 +213,8 @@ For a new systemd host, the required shape is:
 3. Run `bun install`, Prisma generation/migrations, `bun run build:web`, and
    `bun run build:seed`.
 4. Ensure `server/public` resolves to `dist/public` and create the required
-   `.blinko/{files,plugins,vector,pgdump}` runtime directories.
+   `.blinko/{files,plugins,vector}` runtime directories (scheduled `.bk` backups
+   write under `.blinko/files/BKEMO_BACKUP` when object storage is local).
 5. Run `bun dist/index.js` from the repository root under systemd and expose it
    through nginx with TLS and upload-size/upgrade headers.
 6. Keep `.env`, `.blinko`, database storage, and backups outside Git lifecycle

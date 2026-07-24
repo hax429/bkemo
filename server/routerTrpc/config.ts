@@ -148,6 +148,7 @@ export const getGlobalConfig = async ({ ctx, useAdmin = false }: { ctx?: Context
     const hasSecretKey = Boolean(savedSecret);
     delete globalConfig.s3AccessKeyId;
     delete globalConfig.s3AccessKeySecret;
+    delete globalConfig.scheduledBackupPassphrase;
     globalConfig.s3CredentialsConfigured = hasAccessKey && hasSecretKey;
     globalConfig.s3AccessKeyIdMasked = hasAccessKey ? maskedAccessKey(savedAccessKey) : '';
     globalConfig.s3SecretAccessKeyMasked = hasSecretKey ? '****************' : '';

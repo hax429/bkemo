@@ -22,6 +22,7 @@ import { eventBus } from '@/lib/event';
 import { toUpsertAttachment } from '@/lib/attachments';
 import { useAttachments, PendingAttachments } from './useAttachments';
 import { AttachmentList } from './AttachmentList';
+import { ShareImageSheet } from './ShareImage';
 import { noteMatchesProject } from '@/lib/noteCacheFilters';
 import { queryNotesFromCache } from '@/lib/noteCache';
 import { Icon } from '@/components/Common/Iconify/icons';
@@ -202,45 +203,6 @@ const Composer = observer(function Composer({ onExpand }: { onExpand?: (draft: N
         <div className="h-stack" style={{ gap: 8, marginTop: 12, borderTop: '1px solid var(--border)', paddingTop: 12, justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
           {/* List out everything as small icons/buttons underneath the editor */}
           <div className="h-stack" style={{ gap: 6, flexWrap: 'wrap', alignItems: 'center', flex: 1 }}>
-            <button
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => ref.current?.editor?.chain().focus().toggleBold().run()}
-              style={{
-                width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6,
-                color: ref.current?.editor?.isActive('bold') ? 'var(--accent)' : 'var(--fg-2)',
-                background: ref.current?.editor?.isActive('bold') ? 'var(--hover)' : 'transparent',
-                fontWeight: 'bold', fontSize: 13, border: 'none', cursor: 'pointer', transition: 'all 0.12s'
-              }}
-              title="Bold (⌘B)"
-            >
-              B
-            </button>
-            <button
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => ref.current?.editor?.chain().focus().toggleItalic().run()}
-              style={{
-                width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6,
-                color: ref.current?.editor?.isActive('italic') ? 'var(--accent)' : 'var(--fg-2)',
-                background: ref.current?.editor?.isActive('italic') ? 'var(--hover)' : 'transparent',
-                fontStyle: 'italic', fontSize: 13, border: 'none', cursor: 'pointer', transition: 'all 0.12s'
-              }}
-              title="Italic (⌘I)"
-            >
-              I
-            </button>
-            <button
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => ref.current?.editor?.chain().focus().toggleHeading({ level: 2 }).run()}
-              style={{
-                width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6,
-                color: ref.current?.editor?.isActive('heading') ? 'var(--accent)' : 'var(--fg-2)',
-                background: ref.current?.editor?.isActive('heading') ? 'var(--hover)' : 'transparent',
-                fontWeight: 'bold', fontSize: 13, border: 'none', cursor: 'pointer', transition: 'all 0.12s'
-              }}
-              title="Heading (H2)"
-            >
-              H
-            </button>
             <button
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => ref.current?.editor?.chain().focus().toggleBulletList().run()}
@@ -589,6 +551,7 @@ export const Stream = observer(function Stream({ onOpen, onNew, onExpand, tag }:
   const [hasMore, setHasMore] = useState(false);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [menu, setMenu] = useState<{ x: number; y: number; note: Note } | null>(null);
+  const [shareImageNote, setShareImageNote] = useState<Note | null>(null);
   const [windowPinned, setWindowPinned] = useState(() => {
     try { return localStorage.getItem(MAIN_WINDOW_PIN_KEY) === '1'; } catch { return false; }
   });
@@ -767,6 +730,7 @@ export const Stream = observer(function Stream({ onOpen, onNew, onExpand, tag }:
       { label: n.isTop ? 'Unpin' : 'Pin', icon: '⊕', onClick: () => pin(n) },
       { label: isTask(n) ? 'Make memo' : 'Make to-do', icon: '☑', onClick: () => setType(n, isTask(n) ? NoteType.BLINKO : NoteType.TODO) },
       { label: 'Copy text', icon: '⧉', onClick: () => navigator.clipboard?.writeText(n.content ?? '') },
+      { label: 'Share as image', icon: '▣', onClick: () => setShareImageNote(n) },
       { label: 'Select', icon: '☑', onClick: () => toggleSelect(n.id!) },
       { type: 'divider' },
       ...(isShared ? ([
@@ -929,6 +893,7 @@ export const Stream = observer(function Stream({ onOpen, onNew, onExpand, tag }:
       </div>
 
       {menu && <ContextMenu x={menu.x} y={menu.y} items={menuItems(menu.note)} onClose={() => setMenu(null)} />}
+      {shareImageNote && <ShareImageSheet note={shareImageNote} onClose={() => setShareImageNote(null)} />}
       <MultiSelectBar
         count={selected.size}
         onPin={() => { [...selected].forEach((id) => { const n = allNotes.find((x) => x.id === id); if (n) pin(n); }); clearSelection(); }}

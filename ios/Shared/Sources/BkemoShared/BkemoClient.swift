@@ -250,4 +250,39 @@ public struct BkemoClient {
     public func noteBatchDelete(ids: [Int]) async throws {
         _ = try await call("/api/v1/note/batch-delete", body: ["ids": ids])
     }
+
+    // MARK: Tags
+
+    public struct TagRow: Equatable, Sendable {
+        public let id: Int
+        public let name: String
+        public let parent: Int
+        public let sortOrder: Int
+
+        public init(id: Int, name: String, parent: Int, sortOrder: Int) {
+            self.id = id
+            self.name = name
+            self.parent = parent
+            self.sortOrder = sortOrder
+        }
+    }
+
+    public func tagList() async throws -> [TagRow] {
+        let data = try await call("/api/v1/tags/list", method: "GET")
+        let obj = try JSONSerialization.jsonObject(with: data)
+        let rows: [[String: Any]]
+        if let arr = obj as? [[String: Any]] {
+            rows = arr
+        } else if let single = obj as? [String: Any], let arr = single["data"] as? [[String: Any]] {
+            rows = arr
+        } else {
+            return []
+        }
+        return rows.compactMap { row in
+            guard let id = row["id"] as? Int, let name = row["name"] as? String else { return nil }
+            let parent = (row["parent"] as? Int) ?? 0
+            let sortOrder = (row["sortOrder"] as? Int) ?? 0
+            return TagRow(id: id, name: name, parent: parent, sortOrder: sortOrder)
+        }
+    }
 }

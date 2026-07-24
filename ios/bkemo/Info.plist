@@ -27,6 +27,12 @@
 	</dict>
 	<key>UIRequiresFullScreen</key>
 	<true/>
+	<key>UIAppFonts</key>
+	<array>
+		<string>Outfit-Regular.ttf</string>
+		<string>Outfit-Medium.ttf</string>
+		<string>Outfit-SemiBold.ttf</string>
+	</array>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>

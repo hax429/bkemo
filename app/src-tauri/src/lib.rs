@@ -13,6 +13,10 @@ mod bundle_updater;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // macOS WKWebView leaves continuous spellcheck off unless this defaults key is set.
+    #[cfg(all(not(any(target_os = "android", target_os = "ios")), target_os = "macos"))]
+    enable_webview_spellcheck();
+
     let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_upload::init())

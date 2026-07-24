@@ -1,22 +1,17 @@
-// src/server/plugins/BaseScheduleJob.ts
 import { getPgBoss } from "../lib/pgBoss";
+
+export type ScheduleTimezone = string;
 
 export abstract class BaseScheduleJob {
   protected static taskName: string;
-  protected static cronSchedule: string = '0 0 * * *'; // Default: daily at midnight
+  protected static cronSchedule: string = '0 0 * * *';
   protected static isWorkerRegistered: boolean = false;
+  protected static defaultTimezone: ScheduleTimezone = 'UTC';
 
-  /**
-   * The main task logic - must be implemented by subclasses
-   */
   protected static async RunTask(): Promise<any> {
     throw new Error('RunTask must be implemented');
   }
 
-  /**
-   * Register the worker for this job type
-   * This should be called once during initialization
-   */
   protected static async registerWorker(): Promise<void> {
     if (this.isWorkerRegistered) {
       return;
@@ -26,10 +21,9 @@ export abstract class BaseScheduleJob {
     const taskName = this.taskName;
     const RunTask = this.RunTask.bind(this);
 
-    // Create the queue first (required in pg-boss v10+)
     await boss.createQueue(taskName);
 
-    await boss.work(taskName, async (job) => {
+    await boss.work(taskName, async () => {
       console.log(`[${taskName}] Starting job execution...`);
       try {
         const res = await RunTask();
@@ -45,26 +39,19 @@ export abstract class BaseScheduleJob {
     console.log(`[${taskName}] Worker registered`);
   }
 
-  /**
-   * Start the scheduled job with optional cron time
-   * @param cronTime - Cron expression (e.g., '0 0 * * *' for daily at midnight)
-   * @param immediate - Whether to run the task immediately
-   */
-  static async Start(cronTime?: string, immediate: boolean = true): Promise<void> {
+  static async Start(cronTime?: string, immediate: boolean = true, timezone: ScheduleTimezone = this.defaultTimezone): Promise<void> {
     const boss = await getPgBoss();
     const schedule = cronTime || this.cronSchedule;
+    const tz = timezone || 'UTC';
 
-    // Register the worker first
     await this.registerWorker();
 
-    // Schedule the job with pg-boss
-    await boss.schedule(this.taskName, schedule, {}, {
-      tz: 'UTC'
+    await boss.schedule(this.taskName, schedule, { timezone: tz }, {
+      tz,
     });
 
-    console.log(`[${this.taskName}] Scheduled with cron: ${schedule}`);
+    console.log(`[${this.taskName}] Scheduled with cron: ${schedule} (${tz})`);
 
-    // Run immediately if requested
     if (immediate) {
       try {
         await this.RunTask();
@@ -74,63 +61,37 @@ export abstract class BaseScheduleJob {
     }
   }
 
-  /**
-   * Stop the scheduled job
-   */
   static async Stop(): Promise<void> {
     const boss = await getPgBoss();
     await boss.unschedule(this.taskName);
     console.log(`[${this.taskName}] Unscheduled`);
   }
 
-  /**
-   * Update the cron schedule for the job
-   * @param cronTime - New cron expression
-   */
-  static async SetCronTime(cronTime: string): Promise<void> {
+  static async SetCronTime(cronTime: string, timezone?: ScheduleTimezone): Promise<void> {
     const boss = await getPgBoss();
+    const existing = await this.getSchedule();
+    const tz = timezone || existing?.timezone || 'UTC';
 
-    // Unschedule current and reschedule with new time
     await boss.unschedule(this.taskName);
-    await boss.schedule(this.taskName, cronTime, {}, {
-      tz: 'UTC'
+    await boss.schedule(this.taskName, cronTime, { timezone: tz }, {
+      tz,
     });
 
-    console.log(`[${this.taskName}] Rescheduled with cron: ${cronTime}`);
-
-    // Run immediately after rescheduling
-    try {
-      await this.RunTask();
-    } catch (error: any) {
-      console.error(`[${this.taskName}] Run after reschedule failed:`, error);
-    }
+    console.log(`[${this.taskName}] Rescheduled with cron: ${cronTime} (${tz})`);
   }
 
-  /**
-   * Trigger the job to run immediately (outside of schedule)
-   */
   static async TriggerNow(): Promise<string | null> {
     const boss = await getPgBoss();
-    
-    // Ensure worker is registered
     await this.registerWorker();
-    
-    // Send a job to be processed immediately
     const jobId = await boss.send(this.taskName, {});
     console.log(`[${this.taskName}] Triggered immediately, jobId: ${jobId}`);
-    
     return jobId;
   }
 
-  /**
-   * Initialize the job - should be called once at startup
-   * This replaces the old static {} block initialization
-   */
   static async initialize(defaultSchedule?: string): Promise<void> {
     const schedule = defaultSchedule || this.cronSchedule;
-    
+
     try {
-      // Register worker
       await this.registerWorker();
       console.log(`[${this.taskName}] Initialized with default schedule: ${schedule}`);
     } catch (error) {
@@ -138,19 +99,19 @@ export abstract class BaseScheduleJob {
     }
   }
 
-  /**
-   * Get the current schedule from pg-boss
-   */
-  static async getSchedule(): Promise<{ name: string; cron: string; data: any } | null> {
+  static async getSchedule(): Promise<{ name: string; cron: string; data: any; timezone?: string } | null> {
     const boss = await getPgBoss();
     const schedules = await boss.getSchedules();
-    const found = schedules.find(s => s.name === this.taskName);
-    return found ? { name: found.name, cron: found.cron, data: found.data } : null;
+    const found = schedules.find((s) => s.name === this.taskName);
+    if (!found) return null;
+    return {
+      name: found.name,
+      cron: found.cron,
+      data: found.data,
+      timezone: (found as any).timezone || found.data?.timezone || 'UTC',
+    };
   }
 
-  /**
-   * Check if the job is currently scheduled
-   */
   static async isScheduled(): Promise<boolean> {
     const schedule = await this.getSchedule();
     return schedule !== null;

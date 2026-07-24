@@ -1,10 +1,12 @@
 import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import rehypeRaw from 'rehype-raw';
 import { PrismAsyncLight as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { renderMemoBody } from './renderMemoBody';
 import { NOTE_LINK_HREF_RE } from '@/lib/noteLinks';
+import { expandBkemoMarkSyntax } from '@/lib/bkemoMarkSyntax';
 import { eventBus } from '@/lib/event';
 import { loadPrefs } from '@/lib/bkemoSettings';
 import '../TiptapEditor/tiptap.css';
@@ -48,12 +50,14 @@ function CodeBlock({ className, children, dark }: { className?: string; children
  * (.tiptap-content) so the stream stays visually consistent with editing, and
  * keeps the accent #tag highlighting from the prototype.
  */
-export function MarkdownView({ content }: { content: string }) {
-  const dark = loadPrefs().theme !== 'light';
+export function MarkdownView({ content, dark: darkProp }: { content: string; dark?: boolean }) {
+  const dark = darkProp ?? loadPrefs().theme !== 'light';
+  const body = expandBkemoMarkSyntax(content ?? '');
   return (
     <div className="tiptap-content">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
+        rehypePlugins={[rehypeRaw]}
         components={{
           p: ({ children }) => <p>{hl(children)}</p>,
           // Code blocks render their own container (highlighter) — pass `pre`
@@ -67,6 +71,7 @@ export function MarkdownView({ content }: { content: string }) {
           h1: ({ children }) => <h1>{hl(children)}</h1>,
           h2: ({ children }) => <h2>{hl(children)}</h2>,
           h3: ({ children }) => <h3>{hl(children)}</h3>,
+          mark: ({ children }) => <mark className="bk-highlight">{children}</mark>,
           a: ({ href, children }) => {
             const m = typeof href === 'string' ? href.match(NOTE_LINK_HREF_RE) : null;
             if (m) {
@@ -85,7 +90,7 @@ export function MarkdownView({ content }: { content: string }) {
           },
         }}
       >
-        {content}
+        {body}
       </ReactMarkdown>
     </div>
   );

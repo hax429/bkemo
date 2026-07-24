@@ -1,0 +1,1321 @@
+/* Share-as-image card skins. Scoped under .bk-share-card */
+
+.bk-share-card {
+  --sic-bg: #f6f1e8;
+  --sic-fg: #1c1916;
+  --sic-muted: #7a736a;
+  --sic-line: #d9d0c4;
+  --sic-accent: #e2a96b;
+  --sic-font: var(--note-font, Georgia, 'Times New Roman', serif);
+  --sic-mono: var(--font-mono, ui-monospace, Menlo, monospace);
+  --sic-ig: linear-gradient(135deg, #f58529 0%, #dd2a7b 45%, #8134af 70%, #515bd4 100%);
+  box-sizing: border-box;
+  width: 100%;
+  color: var(--sic-fg);
+  background: var(--sic-bg);
+  font-family: var(--sic-font);
+  position: relative;
+  overflow: hidden;
+}
+
+.bk-share-card *,
+.bk-share-card *::before,
+.bk-share-card *::after {
+  box-sizing: border-box;
+}
+
+.bk-share-card[data-theme='dark'] {
+  --sic-bg: #171512;
+  --sic-fg: #f3ece3;
+  --sic-muted: #9a9186;
+  --sic-line: #3a342e;
+}
+
+/* Poster / auto: hug content — no empty color slab */
+.bk-share-card.is-hug {
+  height: auto !important;
+  min-height: 0 !important;
+}
+
+.bk-share-card.is-hug .bk-share-inner {
+  height: auto;
+  flex: none;
+}
+
+/* Poster with fixed ratio: keep min aspect, grow only if needed */
+.bk-share-card.is-poster {
+  height: auto !important;
+}
+
+.bk-share-card.is-poster .bk-share-inner,
+.bk-share-card.is-poster .bk-share-stamp-shell,
+.bk-share-card.is-poster .bk-share-frame-mat,
+.bk-share-card.is-poster .bk-share-frame-plate,
+.bk-share-card.is-poster .bk-share-ig-shell,
+.bk-share-card.is-poster .bk-share-receipt,
+.bk-share-card.is-poster .bk-share-apple-shell,
+.bk-share-card.is-poster .bk-share-apple-glass {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.bk-share-card.is-truncate {
+  overflow: hidden;
+}
+
+/* Clean clip — no overlay gradient (it read as a white bar on colored templates) */
+.bk-share-card.is-truncate .bk-share-body {
+  overflow: hidden;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.bk-share-inner {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 36px 40px 32px;
+  gap: 18px;
+  position: relative;
+  z-index: 1;
+}
+
+.bk-share-card:not(.is-hug) .bk-share-inner {
+  height: 100%;
+}
+
+.bk-share-body {
+  flex: 0 1 auto;
+  min-height: 0;
+  font-size: var(--sic-body-size, 18px);
+  line-height: 1.55;
+  word-break: break-word;
+}
+
+.bk-share-card:not(.is-hug) .bk-share-body {
+  flex: 1 1 auto;
+}
+
+/* Growable main region — fills leftover canvas in truncate / fixed-ratio / poster */
+.bk-share-main {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.bk-share-card:not(.is-hug) .bk-share-main,
+.bk-share-card.is-poster .bk-share-main {
+  flex: 1 1 auto;
+}
+
+.bk-share-card:not(.is-hug) .bk-share-main > .bk-share-body,
+.bk-share-card.is-poster .bk-share-main > .bk-share-body {
+  flex: 1 1 auto;
+}
+
+.bk-share-body .tiptap-content {
+  font-family: inherit;
+  color: inherit;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.bk-share-body .tiptap-content p {
+  margin: 0 0 0.7em;
+}
+
+.bk-share-body .tiptap-content p:last-child {
+  margin-bottom: 0;
+}
+
+.bk-share-body .tiptap-content code {
+  font-family: var(--sic-mono);
+  font-size: 0.88em;
+  background: color-mix(in srgb, var(--sic-accent) 16%, transparent);
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+}
+
+.bk-share-body .tiptap-content .bk-code-block {
+  max-height: 220px;
+  overflow: hidden;
+  margin: 0.8em 0;
+  position: relative;
+}
+
+.bk-share-body .tiptap-content .bk-highlight,
+.bk-share-body .tiptap-content mark.bk-highlight {
+  background: #ffe566;
+  color: inherit;
+  padding: 0 0.15em;
+}
+
+.bk-share-card[data-theme='dark'] .bk-share-body .tiptap-content .bk-highlight,
+.bk-share-card[data-theme='dark'] .bk-share-body .tiptap-content mark.bk-highlight {
+  background: #8a6d12;
+}
+
+.bk-share-meta {
+  font-family: var(--sic-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--sic-muted);
+}
+
+.bk-share-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.bk-share-username {
+  color: var(--sic-fg);
+  font-family: var(--sic-mono);
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+
+.bk-share-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  object-fit: cover;
+  background: var(--sic-line);
+  flex-shrink: 0;
+  display: block;
+}
+
+.bk-share-avatar-fallback {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--sic-accent) 28%, var(--sic-bg));
+  color: var(--sic-fg);
+  font-family: var(--sic-mono);
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.bk-share-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-height: 3.2em;
+  overflow: hidden;
+}
+
+.bk-share-tag {
+  font-family: var(--sic-mono);
+  font-size: 11px;
+  color: var(--sic-accent);
+  border: 1px solid color-mix(in srgb, var(--sic-accent) 40%, transparent);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+.bk-share-attach {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.bk-share-thumb {
+  aspect-ratio: 1;
+  border-radius: 8px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--sic-fg) 6%, var(--sic-bg));
+  border: 1px solid var(--sic-line);
+  display: grid;
+  place-items: center;
+  position: relative;
+}
+
+.bk-share-thumb img,
+.bk-share-thumb canvas {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.bk-share-thumb-file {
+  font-family: var(--sic-mono);
+  font-size: 10px;
+  color: var(--sic-muted);
+  text-align: center;
+  padding: 6px;
+  line-height: 1.3;
+  word-break: break-all;
+}
+
+.bk-share-thumb-more {
+  font-family: var(--sic-mono);
+  font-size: 13px;
+  color: var(--sic-muted);
+}
+
+.bk-share-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: auto;
+  padding-top: 8px;
+}
+
+.bk-share-brand {
+  font-family: var(--sic-mono);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: lowercase;
+  color: var(--sic-muted);
+}
+
+.bk-share-page {
+  font-family: var(--sic-mono);
+  font-size: 10px;
+  color: var(--sic-muted);
+  letter-spacing: 0.08em;
+}
+
+/* ——— decorations ——— */
+.bk-share-decor {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  color: var(--sic-accent);
+  overflow: hidden;
+}
+
+.bk-share-sticker {
+  position: absolute;
+}
+
+.bk-share-sticker--tl { top: 14px; left: 14px; }
+.bk-share-sticker--tr { top: 18px; right: 16px; }
+.bk-share-sticker--br { bottom: 16px; right: 14px; }
+.bk-share-sticker--seal { bottom: 22px; right: 22px; color: var(--sic-accent); filter: drop-shadow(0 4px 8px rgba(0,0,0,.25)); }
+.bk-share-sticker--flourish-l { top: 58px; left: 50%; transform: translateX(-110%); color: var(--sic-fg); }
+.bk-share-sticker--flourish-r { top: 58px; left: 50%; transform: translateX(10%); color: var(--sic-fg); }
+.bk-share-sticker--star-sm { top: 16px; right: 20px; color: var(--sic-fg); }
+
+/* Postage ink stamp — sits on the cream paper, above content */
+.bk-share-postage {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 132px;
+  height: 132px;
+  object-fit: contain;
+  transform: rotate(12deg);
+  mix-blend-mode: multiply;
+  opacity: 0.88;
+  pointer-events: none;
+  z-index: 5;
+  filter: contrast(1.15);
+}
+
+.bk-share-card[data-theme='dark'] .bk-share-postage {
+  mix-blend-mode: screen;
+  opacity: 0.75;
+  filter: invert(1) contrast(1.1);
+}
+
+.bk-share-card[data-template='stamp'] .bk-share-inner {
+  position: relative;
+  overflow: visible;
+  background: var(--sic-bg);
+  border-radius: 4px;
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--sic-fg) 8%, transparent);
+  padding-right: 120px;
+}
+
+/* Force share-card markdown to honor font size / family controls */
+.bk-share-card .bk-share-body,
+.bk-share-card .bk-share-body .tiptap-content {
+  font-size: var(--sic-body-size, 18px) !important;
+  font-family: var(--sic-font) !important;
+  line-height: 1.55;
+}
+
+/* ——— stamp ——— */
+.bk-share-card[data-template='stamp'] {
+  background: var(--sic-accent);
+  padding: 16px;
+  /* perforated outer edge */
+  clip-path: polygon(
+    0 10px, 10px 0, calc(100% - 10px) 0, 100% 10px,
+    100% calc(100% - 10px), calc(100% - 10px) 100%, 10px 100%, 0 calc(100% - 10px)
+  );
+}
+
+.bk-share-card[data-template='stamp'] .bk-share-stamp-shell {
+  background: transparent;
+}
+
+.bk-share-card:not(.is-hug)[data-template='stamp'] .bk-share-stamp-shell {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.bk-share-card:not(.is-hug)[data-template='stamp'] .bk-share-inner {
+  flex: 1;
+  height: auto;
+}
+
+.bk-share-card[data-template='stamp'] .bk-share-stamp-edge {
+  height: 10px;
+  margin: -8px -12px 8px;
+  background:
+    radial-gradient(circle at 8px 0, transparent 6px, color-mix(in srgb, var(--sic-accent) 55%, transparent) 6.5px) repeat-x;
+  background-size: 16px 10px;
+}
+
+/* ——— peach ——— */
+.bk-share-card[data-template='peach'] {
+  background:
+    radial-gradient(ellipse at 20% 0%, color-mix(in srgb, var(--sic-accent) 35%, transparent), transparent 55%),
+    linear-gradient(120deg, color-mix(in srgb, var(--sic-accent) 32%, #fff5ee), #f7d7c8 55%, #f0c4b4);
+}
+
+.bk-share-card[data-template='peach'][data-theme='dark'] {
+  background:
+    radial-gradient(ellipse at 80% 100%, color-mix(in srgb, var(--sic-accent) 30%, transparent), transparent 50%),
+    linear-gradient(120deg, #2a1c18, color-mix(in srgb, var(--sic-accent) 25%, #1a1210));
+}
+
+.bk-share-card[data-template='peach'] .bk-share-ornament {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  justify-content: center;
+  color: var(--sic-muted);
+  font-family: var(--sic-mono);
+  font-size: 12px;
+  letter-spacing: 0.12em;
+}
+
+.bk-share-card[data-template='peach'] .bk-share-ornament::before,
+.bk-share-card[data-template='peach'] .bk-share-ornament::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--sic-line);
+}
+
+/* ——— calendar ——— */
+.bk-share-card[data-template='calendar'] {
+  background:
+    radial-gradient(circle at 90% 10%, color-mix(in srgb, #fff 35%, transparent), transparent 40%),
+    color-mix(in srgb, var(--sic-accent) 42%, #f4e7c5);
+}
+
+.bk-share-card[data-template='calendar'][data-theme='dark'] {
+  background: color-mix(in srgb, var(--sic-accent) 22%, #1c1812);
+}
+
+.bk-share-card[data-template='calendar'] .bk-share-day {
+  font-size: 84px;
+  font-weight: 650;
+  line-height: 0.9;
+  letter-spacing: -0.04em;
+  text-align: center;
+  color: color-mix(in srgb, var(--sic-fg) 85%, var(--sic-accent));
+}
+
+.bk-share-card[data-template='calendar'] .bk-share-day-sub {
+  text-align: center;
+  font-family: var(--sic-mono);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: var(--sic-muted);
+  margin-top: 6px;
+}
+
+.bk-share-card[data-template='calendar'] .bk-share-main {
+  border-top: 1px solid var(--sic-line);
+  padding-top: 14px;
+}
+
+/* ——— frame (ornate) ——— */
+.bk-share-card[data-template='frame'] {
+  background:
+    radial-gradient(ellipse at 50% 0%, color-mix(in srgb, var(--sic-accent) 40%, transparent), transparent 55%),
+    linear-gradient(160deg, #1a2418 0%, #2d3b28 40%, #1c2619 100%);
+  padding: 22px;
+}
+
+.bk-share-card[data-template='frame'][data-theme='light'] {
+  background:
+    radial-gradient(ellipse at 50% 100%, color-mix(in srgb, var(--sic-accent) 28%, transparent), transparent 50%),
+    linear-gradient(160deg, #3a4a34 0%, #2a3826 50%, #1e2a1c 100%);
+}
+
+.bk-share-card[data-template='frame'] .bk-share-frame-mat {
+  border: 1px solid color-mix(in srgb, var(--sic-accent) 55%, #c9b896);
+  padding: 10px;
+  background: linear-gradient(135deg, #c4b08a, #8a7550 40%, #c4b08a 80%);
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.25);
+}
+
+.bk-share-card:not(.is-hug)[data-template='frame'] .bk-share-frame-mat,
+.bk-share-card:not(.is-hug)[data-template='frame'] .bk-share-frame-plate {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.bk-share-card:not(.is-hug)[data-template='frame'] .bk-share-inner {
+  flex: 1;
+  height: auto;
+}
+
+.bk-share-card[data-template='frame'] .bk-share-frame-plate {
+  background: var(--sic-bg);
+  border: 1.5px solid var(--sic-fg);
+  position: relative;
+  box-shadow:
+    inset 0 0 0 6px color-mix(in srgb, var(--sic-bg) 88%, var(--sic-accent)),
+    inset 0 0 0 7px color-mix(in srgb, var(--sic-fg) 18%, transparent);
+}
+
+.bk-share-card[data-template='frame'] .bk-share-corner {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--sic-fg);
+  z-index: 2;
+  background: var(--sic-bg);
+}
+
+.bk-share-card[data-template='frame'] .bk-share-corner.tl { top: -1px; left: -1px; border-right: none; border-bottom: none; }
+.bk-share-card[data-template='frame'] .bk-share-corner.tr { top: -1px; right: -1px; border-left: none; border-bottom: none; }
+.bk-share-card[data-template='frame'] .bk-share-corner.bl { bottom: -1px; left: -1px; border-right: none; border-top: none; }
+.bk-share-card[data-template='frame'] .bk-share-corner.br { bottom: -1px; right: -1px; border-left: none; border-top: none; }
+
+.bk-share-card[data-template='frame'] .bk-share-frame-date {
+  text-align: center;
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  margin-top: 4px;
+}
+
+.bk-share-card[data-template='frame'] .bk-share-inner {
+  padding-top: 28px;
+}
+
+/* ——— receipt ——— */
+.bk-share-card[data-template='receipt'] {
+  --sic-bg: #fafafa;
+  --sic-fg: #111;
+  --sic-muted: #666;
+  --sic-line: #ccc;
+  background: var(--sic-bg);
+  padding: 0;
+}
+
+.bk-share-card[data-template='receipt'][data-theme='dark'] {
+  --sic-bg: #141414;
+  --sic-fg: #f2f2f2;
+  --sic-muted: #999;
+  --sic-line: #333;
+}
+
+.bk-share-card[data-template='receipt'] .bk-share-receipt {
+  background: var(--sic-bg);
+  min-height: 100%;
+  clip-path: polygon(
+    0 0, 100% 0,
+    100% calc(100% - 10px),
+    96% 100%, 92% calc(100% - 10px), 88% 100%, 84% calc(100% - 10px), 80% 100%,
+    76% calc(100% - 10px), 72% 100%, 68% calc(100% - 10px), 64% 100%,
+    60% calc(100% - 10px), 56% 100%, 52% calc(100% - 10px), 48% 100%,
+    44% calc(100% - 10px), 40% 100%, 36% calc(100% - 10px), 32% 100%,
+    28% calc(100% - 10px), 24% 100%, 20% calc(100% - 10px), 16% 100%,
+    12% calc(100% - 10px), 8% 100%, 4% calc(100% - 10px), 0 100%
+  );
+  box-shadow: none;
+}
+
+.bk-share-card:not(.is-hug)[data-template='receipt'] .bk-share-receipt,
+.bk-share-card.is-poster[data-template='receipt'] .bk-share-receipt {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.bk-share-card:not(.is-hug)[data-template='receipt'] .bk-share-inner,
+.bk-share-card.is-poster[data-template='receipt'] .bk-share-inner {
+  flex: 1;
+  height: auto;
+  min-height: 0;
+}
+
+.bk-share-card[data-template='receipt'] .bk-share-receipt-main {
+  border-top: 1px dashed var(--sic-line);
+  padding-top: 14px;
+}
+
+.bk-share-card[data-template='receipt'] .bk-share-inner {
+  font-family: var(--sic-mono);
+}
+
+.bk-share-card[data-template='receipt'] .bk-share-body {
+  font-family: var(--sic-mono);
+  font-size: 15px;
+}
+
+.bk-share-card[data-template='receipt'] .bk-share-receipt-rows {
+  border-top: 1px dashed var(--sic-line);
+  border-bottom: 1px dashed var(--sic-line);
+  padding: 12px 0;
+  display: grid;
+  gap: 8px;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--sic-muted);
+}
+
+.bk-share-card[data-template='receipt'] .bk-share-receipt-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.bk-share-barcode {
+  height: 36px;
+  margin: 8px auto 0;
+  width: 70%;
+  background: repeating-linear-gradient(
+    90deg,
+    var(--sic-fg) 0 2px,
+    transparent 2px 4px,
+    var(--sic-fg) 4px 5px,
+    transparent 5px 8px,
+    var(--sic-fg) 8px 11px,
+    transparent 11px 13px
+  );
+  opacity: 0.85;
+}
+
+/* ——— x card ——— */
+.bk-share-card[data-template='xcard'] {
+  --sic-bg: #0f1419;
+  --sic-fg: #e7e9ea;
+  --sic-muted: #8b98a5;
+  --sic-line: #2f3336;
+  background: var(--sic-bg);
+  border-radius: 16px;
+  border: 1px solid var(--sic-line);
+}
+
+.bk-share-card[data-template='xcard'][data-theme='light'] {
+  --sic-bg: #ffffff;
+  --sic-fg: #0f1419;
+  --sic-muted: #536471;
+  --sic-line: #eff3f4;
+}
+
+.bk-share-card[data-template='xcard'] .bk-share-x-inner {
+  padding: 22px 24px 18px;
+  gap: 12px;
+}
+
+.bk-share-card[data-template='xcard'] .bk-share-avatar,
+.bk-share-card[data-template='xcard'] .bk-share-avatar-fallback {
+  width: 48px;
+  height: 48px;
+  font-size: 16px;
+}
+
+.bk-share-card[data-template='xcard'] .bk-share-x-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.bk-share-card[data-template='xcard'] .bk-share-x-logo {
+  color: var(--sic-fg);
+  flex-shrink: 0;
+  opacity: 0.92;
+  margin-top: 2px;
+}
+
+.bk-share-card[data-template='xcard'] .bk-share-x-name-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.bk-share-card[data-template='xcard'] .bk-share-x-name {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--sic-fg);
+  line-height: 1.2;
+}
+
+.bk-share-card[data-template='xcard'] .bk-share-x-verified {
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: #1d9bf0;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  display: inline-grid;
+  place-items: center;
+  line-height: 1;
+}
+
+.bk-share-card[data-template='xcard'] .bk-share-x-handle {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 14px;
+  color: var(--sic-muted);
+  margin-top: 1px;
+}
+
+.bk-share-card[data-template='xcard'] .bk-share-body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: var(--sic-body-size, 18px);
+  line-height: 1.45;
+  letter-spacing: -0.01em;
+}
+
+.bk-share-card[data-template='xcard'] .bk-share-x-time {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 14px;
+  color: var(--sic-muted);
+}
+
+.bk-share-card[data-template='xcard'] .bk-share-x-divider {
+  height: 1px;
+  background: var(--sic-line);
+  margin: 2px 0;
+}
+
+.bk-share-card[data-template='xcard'] .bk-share-x-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 18px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 14px;
+  color: var(--sic-muted);
+}
+
+.bk-share-card[data-template='xcard'] .bk-share-x-stats b {
+  color: var(--sic-fg);
+  font-weight: 700;
+  margin-right: 4px;
+}
+
+.bk-share-card[data-template='xcard'] .bk-share-x-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: var(--sic-muted);
+  padding: 2px 4px 0;
+  max-width: 100%;
+}
+
+.bk-share-card[data-template='xcard'] .bk-share-x-actions span {
+  display: inline-flex;
+  opacity: 0.85;
+}
+
+/* ——— codeblock / VS Code ——— */
+.bk-share-card[data-template='codeblock'] {
+  --sic-bg: #1e1e1e;
+  --sic-fg: #d4d4d4;
+  --sic-muted: #858585;
+  --sic-line: #333;
+  background: #1e1e1e;
+  border-radius: 10px;
+  border: 1px solid #333;
+  box-shadow: 0 16px 48px rgba(0,0,0,.45);
+  overflow: hidden;
+}
+
+.bk-share-card[data-template='codeblock'][data-theme='light'] {
+  --sic-bg: #ffffff;
+  --sic-fg: #1e1e1e;
+  --sic-muted: #6e6e6e;
+  --sic-line: #e5e5e5;
+  background: #fff;
+  border-color: #ddd;
+}
+
+.bk-share-card[data-template='codeblock'] .bk-share-code-inner {
+  padding: 0;
+  gap: 0;
+  height: 100%;
+  min-height: 0;
+}
+
+.bk-share-card:not(.is-hug)[data-template='codeblock'] .bk-share-code-inner,
+.bk-share-card.is-poster[data-template='codeblock'] .bk-share-code-inner {
+  display: flex;
+  flex-direction: column;
+}
+
+.bk-share-card[data-template='codeblock'] .bk-share-footer {
+  padding: 10px 14px 12px;
+  border-top: 1px solid var(--sic-line);
+  flex-shrink: 0;
+  margin-top: 0;
+}
+
+.bk-share-vscode {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1 1 auto;
+  font-family: 'SF Mono', Menlo, Consolas, 'Courier New', monospace;
+}
+
+.bk-share-card:not(.is-hug) .bk-share-vscode,
+.bk-share-card.is-poster .bk-share-vscode {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.bk-share-vscode-titlebar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px 0;
+  background: #323233;
+  border-bottom: 1px solid #252526;
+  flex-shrink: 0;
+}
+
+.bk-share-card[data-theme='light'] .bk-share-vscode-titlebar {
+  background: #f3f3f3;
+  border-bottom-color: #e5e5e5;
+}
+
+.bk-share-vscode-tabs {
+  display: flex;
+  align-items: flex-end;
+  flex: 1;
+  min-width: 0;
+}
+
+.bk-share-vscode-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #1e1e1e;
+  color: #ccc;
+  font-size: 12px;
+  border-radius: 6px 6px 0 0;
+  border: 1px solid #252526;
+  border-bottom: none;
+  max-width: 220px;
+}
+
+.bk-share-card[data-theme='light'] .bk-share-vscode-tab {
+  background: #fff;
+  color: #333;
+  border-color: #e5e5e5;
+}
+
+.bk-share-vscode-tab-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: #519aba;
+  flex-shrink: 0;
+}
+
+.bk-share-vscode-tab-x {
+  opacity: 0.45;
+  font-size: 14px;
+  margin-left: 4px;
+}
+
+.bk-share-vscode-editor {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  background: #1e1e1e;
+  min-height: 120px;
+  overflow: hidden;
+  flex: 1 1 auto;
+}
+
+.bk-share-card:not(.is-hug) .bk-share-vscode-editor,
+.bk-share-card.is-poster .bk-share-vscode-editor {
+  flex: 1 1 auto;
+  min-height: 0;
+  align-content: start;
+}
+
+.bk-share-card[data-theme='light'] .bk-share-vscode-editor {
+  background: #fff;
+}
+
+.bk-share-vscode-gutter {
+  padding: 12px 0 12px 10px;
+  background: #1e1e1e;
+  color: #858585;
+  font-size: 13px;
+  line-height: 1.55;
+  text-align: right;
+  user-select: none;
+  border-right: 1px solid #2b2b2b;
+  height: 100%;
+}
+
+.bk-share-card[data-theme='light'] .bk-share-vscode-gutter {
+  background: #fff;
+  border-right-color: #eee;
+  color: #999;
+}
+
+.bk-share-vscode-ln {
+  padding: 0 10px 0 6px;
+  white-space: pre;
+}
+
+.bk-share-vscode-code {
+  margin: 0;
+  padding: 12px 14px;
+  font-size: var(--sic-body-size, 13px);
+  line-height: 1.55;
+  color: #d4d4d4;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow: hidden;
+  height: 100%;
+}
+
+.bk-share-card[data-theme='light'] .bk-share-vscode-code {
+  color: #1e1e1e;
+}
+
+.bk-share-vscode-code code {
+  font-family: inherit;
+  font-size: inherit;
+  background: none;
+  padding: 0;
+}
+
+.bk-share-vscode-statusbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 4px 12px;
+  background: #007acc;
+  color: #fff;
+  font-size: 11px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  flex-shrink: 0;
+}
+
+.bk-share-card[data-theme='light'] .bk-share-vscode-statusbar {
+  background: #007acc;
+}
+
+.bk-share-card[data-template='codeblock'] .bk-share-code-chrome {
+  display: flex;
+  gap: 6px;
+  padding-left: 4px;
+}
+
+.bk-share-card[data-template='codeblock'] .bk-share-code-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: #ff5f57;
+}
+.bk-share-card[data-template='codeblock'] .bk-share-code-dot:nth-child(2) { background: #febc2e; }
+.bk-share-card[data-template='codeblock'] .bk-share-code-dot:nth-child(3) { background: #28c840; }
+
+/* ——— ig post ——— */
+.bk-share-card[data-template='igpost'] {
+  --sic-bg: #fff;
+  --sic-fg: #262626;
+  --sic-muted: #8e8e8e;
+  --sic-line: #efefef;
+  background: var(--sic-bg);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 10px 36px rgba(0,0,0,.2);
+}
+
+.bk-share-card[data-template='igpost'][data-theme='dark'] {
+  --sic-bg: #121212;
+  --sic-fg: #f5f5f5;
+  --sic-muted: #a8a8a8;
+  --sic-line: #262626;
+}
+
+.bk-share-card[data-template='igpost'] .bk-share-ig-shell {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.bk-share-card:not(.is-hug)[data-template='igpost'] .bk-share-ig-shell {
+  height: 100%;
+}
+
+.bk-share-card:not(.is-hug)[data-template='igpost'] .bk-share-inner {
+  flex: 1;
+  height: auto;
+}
+
+.bk-share-card[data-template='igpost'] .bk-share-ig-bar {
+  height: 4px;
+  background: var(--sic-ig);
+  flex-shrink: 0;
+}
+
+.bk-share-card[data-template='igpost'] .bk-share-ig-bar--bottom {
+  height: 3px;
+  opacity: 0.85;
+}
+
+.bk-share-card[data-template='igpost'] .bk-share-ig-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--sic-line);
+  margin-bottom: 4px;
+}
+
+.bk-share-card[data-template='igpost'] .bk-share-ig-ring {
+  display: inline-grid;
+  place-items: center;
+  padding: 2px;
+  border-radius: 999px;
+  background: var(--sic-ig);
+}
+
+.bk-share-card[data-template='igpost'] .bk-share-ig-ring .bk-share-avatar,
+.bk-share-card[data-template='igpost'] .bk-share-ig-ring .bk-share-avatar-fallback {
+  border: 2px solid var(--sic-bg);
+}
+
+.bk-share-card[data-template='igpost'] .bk-share-body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: var(--sic-body-size, 16px);
+}
+
+.bk-share-card[data-template='igpost'] .bk-share-brand {
+  background: var(--sic-ig);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-weight: 600;
+}
+
+.bk-share-card[data-template='igpost'] .bk-share-ig-more {
+  font-size: 20px;
+  line-height: 1;
+  color: var(--sic-fg);
+  padding: 0 2px;
+  letter-spacing: 0.05em;
+}
+
+.bk-share-card[data-template='igpost'] .bk-share-ig-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--sic-fg);
+  padding: 6px 0 2px;
+}
+
+.bk-share-card[data-template='igpost'] .bk-share-ig-action-group {
+  display: inline-flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.bk-share-card[data-template='igpost'] .bk-share-ig-actions svg {
+  display: block;
+}
+
+.bk-share-card[data-template='igpost'] .bk-share-ig-liked {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 13px;
+  color: var(--sic-fg);
+}
+
+.bk-share-card[data-template='igpost'] .bk-share-ig-liked b {
+  font-weight: 650;
+}
+
+.bk-share-card[data-template='igpost'] .bk-share-ig-comments,
+.bk-share-card[data-template='igpost'] .bk-share-ig-ago,
+.bk-share-card[data-template='igpost'] .bk-share-ig-add-comment {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 12px;
+  color: var(--sic-muted);
+}
+
+.bk-share-card[data-template='igpost'] .bk-share-ig-add-comment {
+  border-top: 1px solid var(--sic-line);
+  padding-top: 10px;
+  margin-top: 2px;
+}
+
+.bk-share-ig-blob {
+  position: absolute;
+  border-radius: 999px;
+  filter: blur(28px);
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+.bk-share-ig-blob--a {
+  width: 160px;
+  height: 160px;
+  top: -40px;
+  right: -30px;
+  background: #dd2a7b;
+}
+
+.bk-share-ig-blob--b {
+  width: 120px;
+  height: 120px;
+  bottom: 10%;
+  left: -40px;
+  background: #515bd4;
+  opacity: 0.28;
+}
+
+.bk-share-ig-blob--c {
+  width: 100px;
+  height: 100px;
+  top: 40%;
+  right: 8%;
+  background: #f58529;
+  opacity: 0.22;
+}
+
+.bk-share-card[data-template='igpost'][data-theme='dark'] .bk-share-ig-blob {
+  opacity: 0.22;
+}
+
+.bk-share-task {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--sic-mono);
+  font-size: 11px;
+  color: var(--sic-muted);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.bk-share-task-box {
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid var(--sic-muted);
+  border-radius: 3px;
+  display: inline-grid;
+  place-items: center;
+  font-size: 10px;
+  color: var(--sic-accent);
+}
+
+.bk-share-task-box.is-done {
+  border-color: var(--sic-accent);
+  background: color-mix(in srgb, var(--sic-accent) 25%, transparent);
+}
+
+/* ——— Apple Notes (liquid glass) ——— */
+.bk-share-card[data-template='applenotes'] {
+  --sic-bg: transparent;
+  --sic-fg: #1c1c1e;
+  --sic-muted: #8e8e93;
+  --sic-line: rgba(255,255,255,0.35);
+  --sic-apple-yellow: #ffd60a;
+  background:
+    radial-gradient(ellipse at 15% 10%, color-mix(in srgb, var(--sic-accent) 45%, #fff) 0%, transparent 50%),
+    radial-gradient(ellipse at 90% 80%, color-mix(in srgb, #5ac8fa 40%, transparent), transparent 45%),
+    linear-gradient(160deg, #e8eef8 0%, #f5f0e8 45%, #dde7f5 100%);
+  border-radius: 22px;
+  padding: 14px;
+  overflow: hidden;
+}
+
+.bk-share-card[data-template='applenotes'][data-theme='dark'] {
+  --sic-fg: #f5f5f7;
+  --sic-muted: #98989d;
+  --sic-line: rgba(255,255,255,0.12);
+  background:
+    radial-gradient(ellipse at 20% 0%, color-mix(in srgb, var(--sic-accent) 35%, #1c1c1e), transparent 50%),
+    radial-gradient(ellipse at 100% 100%, rgba(90, 200, 250, 0.25), transparent 45%),
+    linear-gradient(160deg, #1c1c1e 0%, #2c2c2e 55%, #1a1a1c 100%);
+}
+
+.bk-share-card[data-template='applenotes'] .bk-share-apple-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  height: 100%;
+  min-height: 0;
+  position: relative;
+  z-index: 1;
+}
+
+.bk-share-card[data-template='applenotes'] .bk-share-apple-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 2px;
+  color: var(--sic-fg);
+}
+
+.bk-share-card[data-template='applenotes'] .bk-share-apple-pill,
+.bk-share-card[data-template='applenotes'] .bk-share-apple-capsule {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.38);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.65),
+    0 6px 18px rgba(0, 0, 0, 0.08);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  backdrop-filter: blur(24px) saturate(180%);
+  color: inherit;
+}
+
+.bk-share-card[data-template='applenotes'][data-theme='dark'] .bk-share-apple-pill,
+.bk-share-card[data-template='applenotes'][data-theme='dark'] .bk-share-apple-capsule {
+  background: rgba(58, 58, 60, 0.55);
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 6px 18px rgba(0, 0, 0, 0.35);
+}
+
+.bk-share-card[data-template='applenotes'] .bk-share-apple-pill--round {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.bk-share-card[data-template='applenotes'] .bk-share-apple-capsule {
+  flex: 1;
+  min-width: 0;
+  justify-content: space-evenly;
+  padding: 10px 16px;
+}
+
+.bk-share-card[data-template='applenotes'] .bk-share-apple-capsule--sm {
+  flex: 0 0 auto;
+  gap: 16px;
+  padding: 10px 14px;
+}
+
+.bk-share-card[data-template='applenotes'] .bk-share-apple-capsule > span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  opacity: 0.92;
+}
+
+.bk-share-card[data-template='applenotes'] .bk-share-apple-glass {
+  flex: 1;
+  min-height: 0;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.48);
+  border: 1px solid rgba(255, 255, 255, 0.62);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.85),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.2),
+    0 16px 40px rgba(0, 0, 0, 0.1);
+  -webkit-backdrop-filter: blur(36px) saturate(190%);
+  backdrop-filter: blur(36px) saturate(190%);
+  overflow: hidden;
+  position: relative;
+}
+
+.bk-share-card[data-template='applenotes'][data-theme='dark'] .bk-share-apple-glass {
+  background: rgba(28, 28, 30, 0.55);
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 16px 40px rgba(0, 0, 0, 0.4);
+}
+
+.bk-share-card[data-template='applenotes'] .bk-share-inner {
+  height: 100%;
+  padding: 22px 28px 22px;
+}
+
+.bk-share-card[data-template='applenotes'] .bk-share-apple-date {
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', sans-serif;
+  font-size: 12px;
+  color: var(--sic-muted);
+  text-align: center;
+  letter-spacing: -0.01em;
+  margin-bottom: 4px;
+}
+
+.bk-share-card[data-template='applenotes'] .bk-share-apple-user {
+  margin-top: -2px;
+}
+
+.bk-share-card[data-template='applenotes'] .bk-share-body {
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', sans-serif;
+  font-size: var(--sic-body-size, 18px);
+  letter-spacing: -0.015em;
+  line-height: 1.45;
+}
+
+.bk-share-glass-shine {
+  position: absolute;
+  border-radius: 999px;
+  pointer-events: none;
+  filter: blur(40px);
+  opacity: 0.45;
+}
+
+.bk-share-glass-shine--a {
+  width: 180px;
+  height: 100px;
+  top: -30px;
+  left: 10%;
+  background: rgba(255, 255, 255, 0.85);
+}
+
+.bk-share-glass-shine--b {
+  width: 140px;
+  height: 140px;
+  bottom: 5%;
+  right: -20px;
+  background: color-mix(in srgb, var(--sic-accent) 50%, transparent);
+  opacity: 0.35;
+}
+
+@media (max-width: 860px) {
+  .bk-share-sheet {
+    grid-template-columns: 1fr !important;
+    grid-template-rows: minmax(240px, 45vh) minmax(0, 1fr) !important;
+  }
+}

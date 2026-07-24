@@ -32,6 +32,16 @@ capture windows and shared settings still import them.
 - Upload arbitrary attachments, preview supported media, and reuse the same
   viewer across cards, note details, public shares, and Files.
 - Share a memo at `/m/:id` with guest reactions and comments.
+- Share a memo as a PNG card (stream menu → Share as image): templates
+  (stamp, peach, calendar, frame, receipt, X card, codeblock, IG post,
+  Apple Notes), light/dark, optional accent, font family/size, ratio
+  presets, truncate / multipage / long-poster overflow, chrome toggles,
+  and 1×/2×/3× export via DOM screenshot. Separate from link share.
+- Settings → Data Transfer exports/imports markdown, JSON, and encrypted
+  `.bk` archives. Settings → Schedule Task (site-manage) runs pinned
+  system jobs: auto-archive and scheduled `.bk` backups (S3/R2 when
+  configured, else local; retain last 7; timezone UTC or America/New_York).
+  Legacy `.bko` backups are removed.
 - Use tRPC internally or the scoped-token REST API under `/api`; the OpenAPI spec
   is at `/api/openapi.json`, Swagger at `/api-doc`, and the readable reference at
   `/docs`.
@@ -85,13 +95,19 @@ Important implementation anchors:
 - `app/src/styles/bkemo-theme.css` and `app/src/lib/bkemoSettings.ts` — scoped
   design tokens and persisted preferences.
 - `app/src/lib/blinkoEndpoint.ts` — remote API endpoint used by Tauri clients.
+- `app/src/components/BlinkoSettings/TaskSetting.tsx` — Settings → Schedule Task
+  (archive + scheduled `.bk` backup UI).
+- `server/jobs/backupJob.ts` / `server/jobs/archivejob.ts` — pg-boss scheduled
+  `.bk` backup (retain 7) and auto-archive workers.
+- `server/lib/bkemoTransfer.ts` — portable `.bk` / markdown / JSON transfer.
 
 ## Data and API conventions
 
 - A note is complete when `completedAt` is non-null. Keep task detection and
   task filters consistent between the server, UI, and offline filtering.
 - Preserve markdown as the stored note format. TipTap must round-trip markdown
-  rather than introduce a second storage representation.
+  rather than introduce a second storage representation. bkemo extensions:
+  `==highlight==` (yellow) and `++underline++`.
 - Use tRPC for typed application calls. Add REST/OpenAPI metadata when a route is
   intentionally part of the external API.
 - Scoped access tokens are the external API security boundary. Never expose

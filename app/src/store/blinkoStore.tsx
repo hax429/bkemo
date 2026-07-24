@@ -714,9 +714,15 @@ export class BlinkoStore implements Store {
   })
 
   updateDBTask = new PromiseState({
-    function: async (isStart) => {
+    function: async (isStart: boolean, options?: { time?: string; timezone?: string; passphrase?: string }) => {
       if (isStart) {
-        await api.task.upsertTask.mutate({ type: 'start', task: DBBAK_TASK_NAME })
+        await api.task.upsertTask.mutate({
+          type: 'start',
+          task: DBBAK_TASK_NAME,
+          time: options?.time,
+          timezone: options?.timezone as any,
+          passphrase: options?.passphrase,
+        })
       } else {
         await api.task.upsertTask.mutate({ type: 'stop', task: DBBAK_TASK_NAME })
       }
@@ -724,9 +730,14 @@ export class BlinkoStore implements Store {
     }
   })
   updateArchiveTask = new PromiseState({
-    function: async (isStart) => {
+    function: async (isStart: boolean, options?: { time?: string; timezone?: string }) => {
       if (isStart) {
-        await api.task.upsertTask.mutate({ type: 'start', task: ARCHIVE_BLINKO_TASK_NAME })
+        await api.task.upsertTask.mutate({
+          type: 'start',
+          task: ARCHIVE_BLINKO_TASK_NAME,
+          time: options?.time,
+          timezone: options?.timezone as any,
+        })
       } else {
         await api.task.upsertTask.mutate({ type: 'stop', task: ARCHIVE_BLINKO_TASK_NAME })
       }

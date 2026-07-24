@@ -8,6 +8,7 @@ A personal, self-hosted note app — derived from [blinkospace/blinko](https://g
 
 - **No Docker.** The server runs from source on a Linux VM under `systemd`. See the [deployment workflow](./docs/agents/DEPLOYMENT.md).
 - **Unified notes and tasks.** The web UI uses one memo/task model and a TipTap editor. Inline task syntax in any composer includes `-[]` to promote a memo to a task and a `due:` token (`due:today`, `due:tmr`, `due:06/25/2026`, `due:06/25/26`) to set the due date.
+- **Portable backups.** Settings → Data Transfer exports encrypted `.bk` archives (plus markdown/JSON). Settings → Schedule Task can run site-managed auto-archive and scheduled `.bk` backups to local storage or R2/S3 (last 7 retained). Legacy Blinko `.bko` backups are gone.
 - **iOS / macOS first.** The Tauri shell is the primary client. The web UI still works; the iOS app gets dedicated offline handling, keyboard-aware editor sizing, an OTA bundle updater, and visualViewport-based layout. See the [iOS/macOS plan](./docs/plans/IOS.md).
 - **Single-tenant.** No multi-user provisioning, no PikaPods, no public install.sh.
 - **Renamed.** Bundle id is `me.hax429.bk`, Xcode target is `bkemo-ios`, Cargo crate is `bkemo`.

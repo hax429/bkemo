@@ -23,6 +23,7 @@ const HELP_ID: &str = "help/bkemo";
 const FORMAT_BOLD_ID: &str = "edit/bold";
 const FORMAT_ITALIC_ID: &str = "edit/italic";
 const FORMAT_UNDERLINE_ID: &str = "edit/underline";
+const FORMAT_HIGHLIGHT_ID: &str = "edit/highlight";
 const FORMAT_STRIKE_ID: &str = "edit/strike";
 const FORMAT_CODE_ID: &str = "edit/code";
 const FORMAT_LINK_ID: &str = "edit/link";
@@ -144,6 +145,9 @@ pub fn setup_application_menu(app: &AppHandle) -> tauri::Result<()> {
     let underline = MenuItemBuilder::with_id(FORMAT_UNDERLINE_ID, "Underline")
         .accelerator("CmdOrCtrl+U")
         .build(app)?;
+    let highlight = MenuItemBuilder::with_id(FORMAT_HIGHLIGHT_ID, "Highlight")
+        .accelerator("CmdOrCtrl+Shift+H")
+        .build(app)?;
     let strike = MenuItemBuilder::with_id(FORMAT_STRIKE_ID, "Strikethrough")
         .accelerator("CmdOrCtrl+Shift+X")
         .build(app)?;
@@ -164,7 +168,7 @@ pub fn setup_application_menu(app: &AppHandle) -> tauri::Result<()> {
         .paste()
         .select_all()
         .item(&edit_sep_2)
-        .items(&[&bold, &italic, &underline, &strike, &code, &link])
+        .items(&[&bold, &italic, &underline, &highlight, &strike, &code, &link])
         .build()?;
 
     let search = MenuItemBuilder::with_id(SEARCH_ID, "Search…")
@@ -225,6 +229,7 @@ pub fn setup_application_menu(app: &AppHandle) -> tauri::Result<()> {
         FORMAT_BOLD_ID => emit_to_focused(app, "native-format-bold"),
         FORMAT_ITALIC_ID => emit_to_focused(app, "native-format-italic"),
         FORMAT_UNDERLINE_ID => emit_to_focused(app, "native-format-underline"),
+        FORMAT_HIGHLIGHT_ID => emit_to_focused(app, "native-format-highlight"),
         FORMAT_STRIKE_ID => emit_to_focused(app, "native-format-strike"),
         FORMAT_CODE_ID => emit_to_focused(app, "native-format-code"),
         FORMAT_LINK_ID => emit_to_focused(app, "native-format-link"),

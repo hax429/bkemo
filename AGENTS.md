@@ -17,6 +17,10 @@ matches the work before changing the repository:
 - [`docs/plans/bkemo-ai-and-discovery-implementation.md`](docs/plans/bkemo-ai-and-discovery-implementation.md)
   — AI chat and discovery implementation plan.
 
+Schedule Task (Settings → System) is documented in PROJECT.md: pinned
+auto-archive and scheduled `.bk` backups via pg-boss. AI automations and custom
+scripts on that page are deferred.
+
 Treat `docs/agents/` as current project memory. Treat `docs/plans/` as proposed
 or unfinished work; verify a plan against the source before assuming it exists.
 Do not commit, push, connect to production, or deploy until the user explicitly

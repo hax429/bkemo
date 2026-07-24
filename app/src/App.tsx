@@ -256,6 +256,7 @@ function AppRoutes() {
       listen('native-format-bold', formatListener('bold')),
       listen('native-format-italic', formatListener('italic')),
       listen('native-format-underline', formatListener('underline')),
+      listen('native-format-highlight', formatListener('highlight')),
       listen('native-format-strike', formatListener('strike')),
       listen('native-format-code', formatListener('code')),
       listen('native-format-link', formatListener('link')),

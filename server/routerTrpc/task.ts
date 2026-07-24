@@ -1,15 +1,14 @@
 import { router, authProcedure, demoAuthMiddleware, requireManageSite } from '@server/middleware';
 import { z } from 'zod';
-import { DBJob } from '@server/jobs/dbjob';
+import { BackupJob, BACKUP_STATUS_CACHE_KEY, SCHEDULE_TIMEZONES, hasScheduledBackupPassphrase } from '@server/jobs/backupJob';
 import { ArchiveJob } from '@server/jobs/archivejob';
+import { exportMarkdownFiles } from '@server/jobs/exportMarkdownFiles';
 import { UPLOAD_FILE_PATH } from '@shared/lib/pathConstant';
 import { ARCHIVE_BLINKO_TASK_NAME, DBBAK_TASK_NAME } from '@shared/lib/sharedConstant';
-import { Memos } from '../jobs/memosJob';
 import { unlink } from 'fs/promises';
 import { FileService } from '../lib/files';
 import path from 'path';
 import fs from 'fs';
-import { MarkdownImporter } from '../jobs/markdownJob';
 import { getPgBoss } from '../lib/pgBoss';
 import { prisma } from '../prisma';
 import { TRPCError } from '@trpc/server';
@@ -19,26 +18,41 @@ import {
   exportRecoveryKey,
   importRecoveryKey,
   importTransfer,
-  isFirstSuperadminAccount,
   previewImport,
 } from '../lib/bkemoTransfer';
+import { encryptStorageCredential } from '../lib/storageCredentialEncryption';
 
-// Schema for task info compatible with frontend
 const taskInfoSchema = z.object({
   name: z.string(),
   schedule: z.string(),
+  timezone: z.string().optional(),
   lastRun: z.date().nullable().optional(),
   isRunning: z.boolean(),
   output: z.any().optional(),
+  hasPassphrase: z.boolean().optional(),
 });
 
-// Cache keys for task outputs
-const BACKUP_PROGRESS_CACHE_KEY = "backup-database-progress";
+const scheduleTimezoneSchema = z.enum(SCHEDULE_TIMEZONES);
+const BACKUP_PASSPHRASE_CONFIG_KEY = 'scheduledBackupPassphrase';
 
 async function assertOwnedTransferFile(filePath: string, accountId: number): Promise<void> {
   const storedPath = await FileService.resolveStoredPath(filePath);
   const attachment = await prisma.attachments.findFirst({ where: { path: storedPath, accountId }, select: { id: true } });
   if (!attachment) throw new TRPCError({ code: 'FORBIDDEN', message: 'The uploaded transfer file does not belong to this account' });
+}
+
+async function saveBackupPassphrase(passphrase: string): Promise<void> {
+  if (passphrase.length < 8) {
+    throw new TRPCError({ code: 'BAD_REQUEST', message: 'Backup passphrase must be at least 8 characters' });
+  }
+  const encrypted = encryptStorageCredential(passphrase);
+  const payload = { type: 'string', value: encrypted };
+  const existing = await prisma.config.findFirst({ where: { key: BACKUP_PASSPHRASE_CONFIG_KEY } });
+  if (existing) {
+    await prisma.config.update({ where: { id: existing.id }, data: { config: payload } });
+  } else {
+    await prisma.config.create({ data: { key: BACKUP_PASSPHRASE_CONFIG_KEY, config: payload } });
+  }
 }
 
 export const taskRouter = router({
@@ -142,124 +156,152 @@ export const taskRouter = router({
     .query(async () => {
       const boss = await getPgBoss();
       const schedules = await boss.getSchedules();
-      
-      // Get last completed jobs for each scheduled task
+      const passphraseReady = await hasScheduledBackupPassphrase();
+
       const results = await Promise.all(schedules.map(async (s) => {
-        // Get the most recent completed job for this queue
         let lastRun: Date | null = null;
         let output: any = null;
-        
+
         try {
-          // Query pgboss.job table for the last completed job
           const lastJob = await prisma.$queryRaw<{ completed_on: Date | null }[]>`
-            SELECT "completed_on" 
-            FROM pgboss.job 
+            SELECT "completed_on"
+            FROM pgboss.job
             WHERE name = ${s.name} AND state = 'completed'
-            ORDER BY "completed_on" DESC 
+            ORDER BY "completed_on" DESC
             LIMIT 1
           `;
-          
           if (lastJob.length > 0 && lastJob[0].completed_on) {
             lastRun = lastJob[0].completed_on;
           }
-        } catch (e) {
-          // pgboss tables might not exist yet, ignore
+        } catch {
+          // pgboss tables might not exist yet
         }
-        
-        // Get output from cache for backup task
+
         if (s.name === DBBAK_TASK_NAME) {
-          const cached = await prisma.cache.findUnique({
-            where: { key: BACKUP_PROGRESS_CACHE_KEY }
-          });
-          if (cached?.value) {
-            output = cached.value;
-          }
+          const cached = await prisma.cache.findUnique({ where: { key: BACKUP_STATUS_CACHE_KEY } });
+          if (cached?.value) output = cached.value;
         }
-        
+
         return {
           name: s.name,
           schedule: s.cron,
+          timezone: (s as any).timezone || (s.data as any)?.timezone || 'UTC',
           lastRun,
-          isRunning: true, // If it's in schedules, it's running
+          isRunning: true,
           output,
+          hasPassphrase: s.name === DBBAK_TASK_NAME ? passphraseReady : undefined,
         };
       }));
-      
-      return results;
+
+      // Always surface backup/archive rows even when stopped, so the UI can show enable controls.
+      const known = new Set(results.map((row) => row.name));
+      if (!known.has(ARCHIVE_BLINKO_TASK_NAME)) {
+        results.push({
+          name: ARCHIVE_BLINKO_TASK_NAME,
+          schedule: '0 0 * * *',
+          timezone: 'UTC',
+          lastRun: null,
+          isRunning: false,
+          output: null,
+          hasPassphrase: undefined,
+        });
+      }
+      if (!known.has(DBBAK_TASK_NAME)) {
+        const cached = await prisma.cache.findUnique({ where: { key: BACKUP_STATUS_CACHE_KEY } });
+        results.push({
+          name: DBBAK_TASK_NAME,
+          schedule: '0 0 * * *',
+          timezone: 'UTC',
+          lastRun: null,
+          isRunning: false,
+          output: cached?.value ?? null,
+          hasPassphrase: passphraseReady,
+        });
+      }
+
+      return results.filter((row) => row.name === ARCHIVE_BLINKO_TASK_NAME || row.name === DBBAK_TASK_NAME);
     }),
+
   upsertTask: authProcedure.use(requireManageSite)
     .meta({ openapi: { method: 'GET', path: '/v1/tasks/upsert', summary: 'Upsert Task', protect: true, tags: ['Task'] } })
     .input(z.object({
       time: z.string().optional(),
-      type: z.enum(['start', 'stop', 'update']),
+      timezone: scheduleTimezoneSchema.optional(),
+      passphrase: z.string().optional(),
+      type: z.enum(['start', 'stop', 'update', 'runNow']),
       task: z.enum([ARCHIVE_BLINKO_TASK_NAME, DBBAK_TASK_NAME]),
     }))
     .output(z.any())
     .mutation(async ({ input }) => {
-      const { time, type, task } = input
-      if (type == 'start') {
-        const cronTime = time ?? '0 0 * * *'
-        if (task == DBBAK_TASK_NAME) {
-          await DBJob.Start(cronTime, true);
-        } else {
-          await ArchiveJob.Start(cronTime, true);
+      const { time, type, task, timezone, passphrase } = input;
+      const tz = timezone ?? 'UTC';
+
+      if (passphrase) {
+        if (task !== DBBAK_TASK_NAME) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Passphrase only applies to scheduled .bk backup' });
         }
-        return { success: true, action: 'started', cron: cronTime };
+        await saveBackupPassphrase(passphrase);
       }
-      if (type == 'stop') {
-        if (task == DBBAK_TASK_NAME) {
-          await DBJob.Stop();
+
+      if (type === 'runNow') {
+        if (task === DBBAK_TASK_NAME) {
+          if (!(await hasScheduledBackupPassphrase())) {
+            throw new TRPCError({ code: 'BAD_REQUEST', message: 'Set a backup passphrase before running' });
+          }
+          await BackupJob.TriggerNow();
+        } else {
+          await ArchiveJob.TriggerNow();
+        }
+        return { success: true, action: 'runNow' };
+      }
+
+      if (type === 'start') {
+        const cronTime = time ?? '0 0 * * *';
+        if (task === DBBAK_TASK_NAME) {
+          if (!(await hasScheduledBackupPassphrase())) {
+            throw new TRPCError({ code: 'BAD_REQUEST', message: 'Set a backup passphrase before enabling scheduled backup' });
+          }
+          await BackupJob.Start(cronTime, true, tz);
+        } else {
+          await ArchiveJob.Start(cronTime, true, tz);
+        }
+        return { success: true, action: 'started', cron: cronTime, timezone: tz };
+      }
+
+      if (type === 'stop') {
+        if (task === DBBAK_TASK_NAME) {
+          await BackupJob.Stop();
         } else {
           await ArchiveJob.Stop();
         }
         return { success: true, action: 'stopped' };
       }
-      if (type == 'update' && time) {
-        if (task == DBBAK_TASK_NAME) {
-          await DBJob.SetCronTime(time);
+
+      if (type === 'update' && time) {
+        if (task === DBBAK_TASK_NAME) {
+          await BackupJob.SetCronTime(time, timezone);
         } else {
-          await ArchiveJob.SetCronTime(time);
+          await ArchiveJob.SetCronTime(time, timezone);
         }
-        return { success: true, action: 'updated', cron: time };
+        return { success: true, action: 'updated', cron: time, timezone: tz };
       }
-    }),
-  importFromBlinko: authProcedure.use(demoAuthMiddleware).use(requireManageSite)
-    .input(z.object({
-      filePath: z.string()
-    }))
-    .mutation(async function* ({ input, ctx }) {
-      if (!(await isFirstSuperadminAccount(Number(ctx.id)))) {
-        throw new TRPCError({ code: 'FORBIDDEN', message: 'Only the first superadmin can restore a full database backup' });
+
+      if (type === 'update' && passphrase && task === DBBAK_TASK_NAME) {
+        return { success: true, action: 'passphrase-updated' };
       }
-      const { filePath } = input
-      try {
-        const fileResult = await FileService.getFile(filePath)
-        const res = DBJob.RestoreDB(fileResult.path, ctx)
-        for await (const result of res) {
-          yield result;
-        }
-        try {
-          if (fileResult.isTemporary && fileResult.cleanup) {
-            await fileResult.cleanup()
-          } else {
-            await unlink(fileResult.path)
-          }
-          await FileService.deleteFile(filePath)
-        } catch (error) {
-        }
-      } catch (error) {
-        throw new Error(error as string)
-      }
+
+      throw new TRPCError({ code: 'BAD_REQUEST', message: 'Invalid task update' });
     }),
 
   importFromMemos: authProcedure.use(demoAuthMiddleware).use(requireManageSite)
     .input(z.object({
-      filePath: z.string() //xxxx.db
+      filePath: z.string(),
     }))
     .mutation(async function* ({ input, ctx }) {
       try {
+        const { Memos } = await import('../jobs/memosJob');
         const memos = new Memos();
-        const dbPath = await memos.initDB(input.filePath);
+        await memos.initDB(input.filePath);
         for await (const result of memos.importMemosDB(ctx)) {
           yield result;
         }
@@ -268,40 +310,41 @@ export const taskRouter = router({
         }
         await memos.closeDB();
         try {
-          await FileService.deleteFile(input.filePath)
-        } catch (error) {
+          await FileService.deleteFile(input.filePath);
+        } catch {
+          // ignore cleanup
         }
       } catch (error) {
-        throw new Error(error as string)
+        throw new Error(error as string);
       }
     }),
 
   importFromMarkdown: authProcedure.use(demoAuthMiddleware)
     .input(z.object({
-      filePath: z.string() // Path to .md file or .zip containing md files
+      filePath: z.string(),
     }))
     .mutation(async function* ({ input, ctx }) {
       try {
         const fileResult = await FileService.getFile(input.filePath);
+        const { MarkdownImporter } = await import('../jobs/markdownJob');
         const markdownImporter = new MarkdownImporter();
 
         for await (const result of markdownImporter.importMarkdown(fileResult.path, ctx)) {
           yield result;
         }
 
-        // Clean up the file after import
         try {
           if (fileResult.isTemporary && fileResult.cleanup) {
-            await fileResult.cleanup()
+            await fileResult.cleanup();
           } else {
-            await unlink(fileResult.path)
+            await unlink(fileResult.path);
           }
           await FileService.deleteFile(input.filePath);
         } catch (error) {
-          console.error("Failed to clean up files after markdown import:", error);
+          console.error('Failed to clean up files after markdown import:', error);
         }
       } catch (error) {
-        console.error("Error in importFromMarkdown:", error);
+        console.error('Error in importFromMarkdown:', error);
         throw new Error(error as string);
       }
     }),
@@ -316,10 +359,10 @@ export const taskRouter = router({
       success: z.boolean(),
       downloadUrl: z.string().optional(),
       fileCount: z.number().optional(),
-      error: z.string().optional()
+      error: z.string().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
-      const result = await DBJob.ExporMDFiles({ ...input, ctx });
+      const result = await exportMarkdownFiles({ ...input, ctx });
       setTimeout(async () => {
         try {
           const zipPath = path.join(UPLOAD_FILE_PATH, result.path);
@@ -333,7 +376,7 @@ export const taskRouter = router({
       return {
         success: true,
         downloadUrl: `/api/file${result.path}`,
-        fileCount: result.fileCount
+        fileCount: result.fileCount,
       };
     }),
-})
+});

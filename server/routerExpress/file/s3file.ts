@@ -123,7 +123,11 @@ router.get(/.*/, async (req: Request, res: Response) => {
 
     // Security fix: Validate S3 file path and check user permissions
     // Check if the file exists in attachments and user has access
-    if (!fullPath.includes('temp/')) {
+    if (fullPath.includes('BKEMO_BACKUP/')) {
+      if (!token || token.role !== 'superadmin') {
+        return res.status(401).json({ error: 'Only superadmin can access scheduled backups' });
+      }
+    } else if (!fullPath.includes('temp/')) {
       try {
         const myFile = await prisma.attachments.findFirst({
           where: {

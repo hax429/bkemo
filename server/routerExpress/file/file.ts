@@ -121,7 +121,7 @@ router.get(/.*/, async (req, res) => {
     return res.status(400).json({ error: 'Invalid path' });
   }
 
-  if (!fullPath.includes('temp/') && !fullPath.endsWith('.bko')) {
+  if (!fullPath.includes('temp/') && !fullPath.includes('BKEMO_BACKUP/')) {
     try {
       const myFile = await prisma.attachments.findFirst({
         where: {
@@ -173,8 +173,8 @@ router.get(/.*/, async (req, res) => {
     }
   }
 
-  if (fullPath.endsWith('.bko') && token?.role !== 'superadmin') {
-    return res.status(401).json({ error: "Only superadmin can access" });
+  if (fullPath.includes('BKEMO_BACKUP/') && token?.role !== 'superadmin') {
+    return res.status(401).json({ error: 'Only superadmin can access scheduled backups' });
   }
 
   // filePath is already validated and resolved by FileService.validateAndResolvePath

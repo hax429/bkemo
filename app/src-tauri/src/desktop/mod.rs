@@ -7,6 +7,7 @@ pub mod setup;
 pub mod window_state;
 pub mod text_selection;
 pub mod drag_out;
+pub mod spellcheck;
 
 pub use hotkey::*;
 pub use keychain::*;
@@ -17,3 +18,4 @@ pub use setup::*;
 pub use window_state::*;
 pub use text_selection::*;
 pub use drag_out::*;
+pub use spellcheck::*;

@@ -94,6 +94,7 @@ struct bkemoApp: App {
         container = ModelContainerSetup.make()
         SyncEngine.shared.configure(container: container)
         _ = SyncMonitor.shared
+        BkemoFont.configureAppearance()
     }
 
     var body: some Scene {

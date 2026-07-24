@@ -3,7 +3,6 @@ import StarterKit from '@tiptap/starter-kit';
 import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
 import Image from '@tiptap/extension-image';
-import Underline from '@tiptap/extension-underline';
 import Placeholder from '@tiptap/extension-placeholder';
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
 import { createLowlight, common } from 'lowlight';
@@ -13,6 +12,9 @@ import { Hashtag } from './hashtagExtension';
 import { SlashCommand } from './slashCommand';
 import { TagSuggestion } from './tagSuggestion';
 import { NoteLinkSuggestion, type NoteLinkItem } from './noteLinkSuggestion';
+import { MarkdownHighlight, MarkdownUnderline } from './markdownMarks';
+import { EditorBubbleMenu } from './EditorBubbleMenu';
+import { Spellcheck } from './spellcheckExtension';
 import { isModifierEnter } from '@/lib/quicknoteSubmit';
 import { setActiveTiptapEditor, getActiveTiptapEditor } from '@/lib/tiptapFormat';
 import 'highlight.js/styles/atom-one-dark.css';
@@ -78,8 +80,11 @@ export const TiptapEditor = forwardRef<TiptapEditorHandle, Props>(function Tipta
         link: { openOnClick: false, autolink: true },
         // Replaced by CodeBlockLowlight below for ```lang syntax highlighting.
         codeBlock: false,
+        // Replaced by MarkdownUnderline for ++…++ markdown round-trip.
+        underline: false,
       }),
-      Underline,
+      MarkdownUnderline,
+      MarkdownHighlight,
       CodeBlockLowlight.configure({ lowlight }),
       TaskList,
       TaskItem.configure({ nested: true }),
@@ -89,6 +94,7 @@ export const TiptapEditor = forwardRef<TiptapEditorHandle, Props>(function Tipta
       SlashCommand,
       TagSuggestion.configure({ getTags: () => getTags?.() ?? [] }),
       NoteLinkSuggestion.configure({ getNotes: (q) => getNotes?.(q) ?? [] }),
+      Spellcheck,
       Markdown.configure({
         html: false,
         transformPastedText: true,
@@ -108,7 +114,14 @@ export const TiptapEditor = forwardRef<TiptapEditorHandle, Props>(function Tipta
       onBlur?.();
     },
     editorProps: {
-      attributes: { class: 'tiptap-content' },
+      attributes: {
+        class: 'tiptap-content',
+        // Own decorations handle spellcheck (native skips loaded note content).
+        spellcheck: 'false',
+        lang: 'en',
+        autocapitalize: 'off',
+        autocorrect: 'off',
+      },
       handleKeyDown: (view, event) => {
         if (isModifierEnter(event)) {
           event.preventDefault();
@@ -188,5 +201,10 @@ export const TiptapEditor = forwardRef<TiptapEditorHandle, Props>(function Tipta
     editor: editor ?? null,
   }), [editor]);
 
-  return <EditorContent editor={editor} className={className} />;
+  return (
+    <>
+      <EditorContent editor={editor} className={className} />
+      {editor && editable && <EditorBubbleMenu editor={editor} />}
+    </>
+  );
 });

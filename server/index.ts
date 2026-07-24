@@ -10,7 +10,7 @@ import { configureSession } from './routerExpress/auth/config';
 import { stopPgBoss } from './lib/pgBoss';
 import { getPgBoss } from './lib/pgBoss';
 import { ArchiveJob } from './jobs/archivejob';
-import { DBJob } from './jobs/dbjob';
+import { BackupJob } from './jobs/backupJob';
 import { RebuildEmbeddingJob } from './jobs/rebuildEmbeddingJob';
 import { RecommandJob } from './jobs/recommandJob';
 import { AIScheduledTaskJob } from './jobs/aiScheduledTaskJob';
@@ -79,7 +79,7 @@ async function initializeJobs() {
     
     await getPgBoss();
     await ArchiveJob.initialize();
-    await DBJob.initialize();
+    await BackupJob.initialize();
     await RebuildEmbeddingJob.initialize();
     await RecommandJob.initialize();
     await AIScheduledTaskJob.initialize();

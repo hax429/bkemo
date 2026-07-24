@@ -49,7 +49,7 @@ struct RootView: View {
                                 RecentListView()
                             } label: {
                                 ZStack(alignment: .topTrailing) {
-                                    Image(systemName: "list.bullet")
+                                    Image(systemName: "list.bullet.rectangle")
                                         .font(.system(size: 15, weight: .medium))
                                         .frame(width: 28, height: 28)
                                     if !failedMemos.isEmpty {
@@ -68,13 +68,13 @@ struct RootView: View {
                                     .font(.system(size: 14, weight: .semibold))
                                     .foregroundStyle(.tint)
                                 Text("bkemo")
-                                    .font(.system(size: 16, weight: .semibold, design: .rounded))
+                                    .font(BkemoFont.ui(16, weight: .semibold))
                             }
                         }
                         ToolbarItem(placement: .topBarTrailing) {
                             Button { showSettings = true } label: {
-                                Image(systemName: "slider.horizontal.3")
-                                    .font(.system(size: 14, weight: .medium))
+                                Image(systemName: "gearshape")
+                                    .font(.system(size: 15, weight: .medium))
                             }
                             .accessibilityLabel("Settings")
                         }

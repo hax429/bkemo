@@ -21,6 +21,7 @@ import { Skeleton } from '@heroui/react';
 import { MermaidWrapper } from './MermaidWrapper';
 import { MarkmapWrapper } from './MarkmapWrapper';
 import { EchartsWrapper } from './EchartsWrapper';
+import { expandBkemoMarkSyntax } from '@/lib/bkemoMarkSyntax';
 
 const HighlightTags = observer(({ text, }: { text: any }) => {
   const location = useLocation();
@@ -64,6 +65,7 @@ const Table = ({ children }: { children: React.ReactNode }) => {
 export const MarkdownRender = observer(({ content = '', onChange, isShareMode, largeSpacing = false }: { content?: string, onChange?: (newContent: string) => void, isShareMode?: boolean, largeSpacing?: boolean }) => {
   const { theme } = useTheme()
   const contentRef = useRef(null);
+  const body = expandBkemoMarkSyntax(content);
 
   return (
     <div className={`markdown-body ${largeSpacing ? 'markdown-large-spacing' : ''}`}>
@@ -88,6 +90,7 @@ export const MarkdownRender = observer(({ content = '', onChange, isShareMode, l
             }]
           ]}
           components={{
+            mark: ({ children }) => <mark className="bk-highlight">{children}</mark>,
             p: ({ node, children }) => {
               // Check if paragraph contains only a single link
               if (
@@ -203,7 +206,7 @@ export const MarkdownRender = observer(({ content = '', onChange, isShareMode, l
             table: TableWrapper
           }}
         >
-          {content}
+          {body}
         </ReactMarkdown>
       </div>
     </div>

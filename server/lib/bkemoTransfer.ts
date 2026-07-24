@@ -455,7 +455,7 @@ async function addAttachmentFiles(zip: AdmZip, attachments: any[]): Promise<{ pa
   return manifest;
 }
 
-export async function exportBk(ctx: Context, passphrase: string): Promise<{ path: string; downloadUrl: string; filename: string; scope: 'account' | 'site' }> {
+export async function buildBkArchive(ctx: Context, passphrase: string): Promise<{ buffer: Buffer; scope: 'account' | 'site'; filename: string }> {
   const includeSite = await isFirstSuperadminAccount(Number(ctx.id));
   const data = await gatherPortableData(ctx, includeSite);
   const zip = new AdmZip();
@@ -468,11 +468,33 @@ export async function exportBk(ctx: Context, passphrase: string): Promise<{ path
     data: { path: 'data.json', sha256: sha256(dataBytes), size: dataBytes.length },
     attachments: attachmentManifest,
   }));
-  const encrypted = await encryptBkPayload(zip.toBuffer(), passphrase);
+  const buffer = await encryptBkPayload(zip.toBuffer(), passphrase);
   const stamp = transferStamp();
-  const result = await writeTempDownload(`bkemo-backup-${stamp}.bk`, encrypted);
+  return { buffer, scope: data.scope, filename: `bkemo-backup-${stamp}.bk` };
+}
+
+export async function exportBk(ctx: Context, passphrase: string): Promise<{ path: string; downloadUrl: string; filename: string; scope: 'account' | 'site' }> {
+  const archive = await buildBkArchive(ctx, passphrase);
+  const result = await writeTempDownload(archive.filename, archive.buffer);
   scheduleTransferCleanup(result.path);
-  return { ...result, scope: data.scope };
+  return { ...result, scope: archive.scope };
+}
+
+export async function getFirstSuperadminContext(): Promise<Context> {
+  const first = await prisma.accounts.findFirst({
+    where: { role: 'superadmin' },
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    select: { id: true, name: true, role: true },
+  });
+  if (!first) throw new Error('No superadmin account found for scheduled backup');
+  return {
+    id: String(first.id),
+    name: first.name,
+    sub: String(first.id),
+    role: first.role,
+    exp: 0,
+    iat: 0,
+  };
 }
 
 type ExportSelection = {

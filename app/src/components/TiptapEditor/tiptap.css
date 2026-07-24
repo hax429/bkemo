@@ -58,6 +58,34 @@
   font-family: var(--font-mono, ui-monospace, monospace);
 }
 
+/* Yellow text highlight (==…==) — fixed #FFDC74; dark ink for contrast. */
+.tiptap-content mark,
+.tiptap-content .bk-highlight,
+.markdown-body mark,
+.markdown-body .bk-highlight {
+  background: #FFDC74;
+  color: #1a1b1f;
+  border-radius: 2px;
+  padding: 0 0.12em;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+.tiptap-content u,
+.markdown-body u {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* Decoration spellcheck (covers loaded note content in the full-page editor). */
+.tiptap-content .bk-spell-error {
+  text-decoration-line: underline;
+  text-decoration-style: wavy;
+  text-decoration-color: #e0696b;
+  text-decoration-thickness: 1.25px;
+  text-underline-offset: 3px;
+}
+
 /* Links */
 .tiptap-content a {
   color: var(--accent, #5e6ad2);
