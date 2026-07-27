@@ -32,6 +32,7 @@ type NoteSyncControllerOptions = {
   onBootstrap: () => void;
   subscribeOnline?: (listener: () => void) => () => void;
   pollMs?: number;
+  idleMs?: number;
   fetchImpl?: typeof fetch;
 };
 
@@ -53,28 +54,32 @@ function writeCursor(accountId: string, cursor: number) {
 }
 
 /**
- * Foreground-only live sync. SSE is the fast signal; the durable cursor poll is
- * authoritative and catches disconnects, server restarts, and suspended apps.
+ * Visible-client live sync. SSE remains connected while the client is online;
+ * cursor polling is limited to recently active clients to avoid idle traffic.
  */
 export function createNoteSyncController(options: NoteSyncControllerOptions): {
   dispose: () => void;
   syncNow: () => Promise<void>;
 } {
   const fetchImpl = options.fetchImpl ?? fetch;
-  const pollMs = options.pollMs ?? 10_000;
+  const pollMs = options.pollMs ?? 60_000;
+  const idleMs = options.idleMs ?? 5 * 60_000;
   let stopped = false;
+  let recentlyActive = true;
   let cursor = readCursor(options.accountId);
   let syncing: Promise<void> | null = null;
   let syncRequested = false;
   let streamAbort: AbortController | null = null;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  let pollTimer: ReturnType<typeof setInterval> | null = null;
+  let idleTimer: ReturnType<typeof setTimeout> | null = null;
 
-  const canRun = () => !stopped
+  const canConnect = () => !stopped
     && options.isOnline()
     && (typeof document === 'undefined' || document.visibilityState === 'visible');
 
   const sync = () => {
-    if (!canRun()) return Promise.resolve();
+    if (!canConnect()) return Promise.resolve();
     if (syncing) {
       syncRequested = true;
       return syncing;
@@ -101,16 +106,28 @@ export function createNoteSyncController(options: NoteSyncControllerOptions): {
     return syncing;
   };
 
+  const stopPolling = () => {
+    if (!pollTimer) return;
+    clearInterval(pollTimer);
+    pollTimer = null;
+  };
+
+  const startPolling = () => {
+    if (!canConnect() || !recentlyActive || pollTimer) return;
+    pollTimer = setInterval(() => { void sync(); }, pollMs);
+  };
+
   const scheduleReconnect = () => {
-    if (stopped || reconnectTimer || !canRun()) return;
+    if (stopped || reconnectTimer || !canConnect()) return;
     reconnectTimer = setTimeout(() => {
       reconnectTimer = null;
+      void sync();
       void openStream();
     }, 2_000);
   };
 
   const openStream = async () => {
-    if (!canRun() || streamAbort) return;
+    if (!canConnect() || streamAbort) return;
     const abort = new AbortController();
     streamAbort = abort;
     try {
@@ -131,9 +148,16 @@ export function createNoteSyncController(options: NoteSyncControllerOptions): {
         const { done, value } = await reader.read();
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split(/\r?\n/);
-        buffer = lines.pop() ?? '';
-        if (lines.some(line => line.startsWith('data:'))) void sync();
+        const events = buffer.split(/\r?\n\r?\n/);
+        buffer = events.pop() ?? '';
+        for (const event of events) {
+          const lines = event.split(/\r?\n/);
+          if (!lines.some(line => line.trim() === 'event: dirty')) continue;
+          const raw = lines.find(line => line.startsWith('data:'))?.slice(5).trim();
+          let kind: string | undefined;
+          try { kind = raw ? JSON.parse(raw)?.kind : undefined; } catch { /* legacy event */ }
+          if (!kind || kind === 'note') void sync();
+        }
       }
     } catch (error) {
       if (!abort.signal.aborted) console.warn('[note-sync] SSE disconnected:', error);
@@ -144,33 +168,62 @@ export function createNoteSyncController(options: NoteSyncControllerOptions): {
   };
 
   const resume = () => {
-    if (!canRun()) return;
+    if (!canConnect()) return;
+    startPolling();
     void sync();
     void openStream();
   };
   const suspend = () => {
+    stopPolling();
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
     streamAbort?.abort();
     streamAbort = null;
   };
+  const markActivity = () => {
+    if (stopped) return;
+    const wasIdle = !recentlyActive;
+    recentlyActive = true;
+    if (idleTimer) clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => {
+      idleTimer = null;
+      recentlyActive = false;
+      stopPolling();
+    }, idleMs);
+    if (wasIdle) resume();
+    else startPolling();
+  };
   const onVisibility = () => document.visibilityState === 'visible' ? resume() : suspend();
   const onOnline = () => resume();
+  const onOffline = () => suspend();
 
-  const poll = setInterval(() => { void sync(); }, pollMs);
   window.addEventListener('focus', resume);
   window.addEventListener('online', onOnline);
+  window.addEventListener('offline', onOffline);
+  window.addEventListener('keydown', markActivity);
+  window.addEventListener('pointerdown', markActivity);
+  window.addEventListener('pointermove', markActivity);
   document.addEventListener('visibilitychange', onVisibility);
   const unsubscribeOnline = options.subscribeOnline?.(resume);
+  markActivity();
   resume();
 
   return {
     dispose: () => {
       stopped = true;
-      clearInterval(poll);
+      stopPolling();
+      if (idleTimer) clearTimeout(idleTimer);
       if (reconnectTimer) clearTimeout(reconnectTimer);
       streamAbort?.abort();
       unsubscribeOnline?.();
       window.removeEventListener('focus', resume);
       window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
+      window.removeEventListener('keydown', markActivity);
+      window.removeEventListener('pointerdown', markActivity);
+      window.removeEventListener('pointermove', markActivity);
       document.removeEventListener('visibilitychange', onVisibility);
     },
     syncNow: () => sync(),

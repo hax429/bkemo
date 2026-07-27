@@ -78,7 +78,9 @@ export async function latestNoteChangeCursor(
   return latest?.id ?? 0;
 }
 
-export type NoteDirtyListener = () => void;
+export type AccountEventKind = 'note' | 'draft';
+export type AccountEvent = { kind: AccountEventKind };
+export type NoteDirtyListener = (event: AccountEvent) => void;
 
 /** Process-local wake-up channel. The PostgreSQL journal remains authoritative. */
 export class NoteSyncHub {
@@ -95,8 +97,8 @@ export class NoteSyncHub {
     };
   }
 
-  publish(accountId: number): void {
-    for (const listener of this.listeners.get(accountId) ?? []) listener();
+  publish(accountId: number, event: AccountEvent = { kind: 'note' }): void {
+    for (const listener of this.listeners.get(accountId) ?? []) listener(event);
   }
 
   listenerCount(accountId: number): number {
@@ -108,5 +110,10 @@ export const noteSyncHub = new NoteSyncHub();
 
 export function publishNoteDirty(accountId: number | string | null | undefined): void {
   const normalized = Number(accountId);
-  if (Number.isInteger(normalized) && normalized > 0) noteSyncHub.publish(normalized);
+  if (Number.isInteger(normalized) && normalized > 0) noteSyncHub.publish(normalized, { kind: 'note' });
+}
+
+export function publishDraftDirty(accountId: number | string | null | undefined): void {
+  const normalized = Number(accountId);
+  if (Number.isInteger(normalized) && normalized > 0) noteSyncHub.publish(normalized, { kind: 'draft' });
 }

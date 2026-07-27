@@ -5,7 +5,7 @@ import { BlinkoStore } from "@/store/blinkoStore";
 import { UserStore } from "@/store/user";
 import { NoteType } from "@shared/lib/types";
 import { parseTaskSyntax } from "@/lib/taskSyntax";
-import { extractNoteLinkIds, noteLinkTitle } from "@/lib/noteLinks";
+import { noteLinkTitle } from "@/lib/noteLinks";
 import { toUpsertAttachment } from "@/lib/attachments";
 import { useAttachments, PendingAttachments } from "@/components/bkemo/useAttachments";
 import { useEffect, useRef, useState } from "react";
@@ -14,9 +14,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { emit, listen } from "@tauri-apps/api/event";
 import { useTranslation } from "react-i18next";
 import { loadPrefs } from "@/lib/bkemoSettings";
-import { deliverQuickNote } from "@/lib/quicknoteSubmit";
-
-const QUICKNOTE_DRAFT_KEY = 'bkemo.quicknoteDraft';
+import { useSharedDraft } from "@/lib/useSharedDraft";
 
 const QuickNotePage = observer(() => {
   const blinko = RootStore.Get(BlinkoStore);
@@ -26,7 +24,7 @@ const QuickNotePage = observer(() => {
   const [sending, setSending] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
-  const [draft, setDraft] = useState(() => localStorage.getItem(QUICKNOTE_DRAFT_KEY) ?? '');
+  const shared = useSharedDraft();
   const att = useAttachments();
   const containerRef = useRef<HTMLDivElement>(null);
   const lastHeightRef = useRef<number>(0);
@@ -217,42 +215,19 @@ const QuickNotePage = observer(() => {
 
     setSending(true);
     try {
-      let queuedOffline = false;
-      await deliverQuickNote({
-        // Call the mutation itself instead of PromiseState.call(), which catches
-        // server/auth errors and otherwise makes a failed save look successful.
-        save: async () => {
-          const saved = await blinko.upsertNote.function({
-            content: parsed.content,
-            type: parsed.isTodo ? NoteType.TODO : NoteType.BLINKO,
-            references: extractNoteLinkIds(parsed.content),
-            attachments: att.items.map(toUpsertAttachment),
-            // Priority tags (`#important` / `#urgent`) apply to any memo.
-            isImportant: !!parsed.isImportant,
-            isUrgent: !!parsed.isUrgent,
-            ...(parsed.isTodo ? { dueDate: parsed.dueDate ?? null } : {}),
-            showToast: false,
-          });
-          queuedOffline = !!(saved as any)?.isOffline;
-          if (isInTauri() && saved) {
-            await emit('native-note-changed', saved);
-          }
-          return saved;
-        },
-        clear: () => {
-          editorRef.current?.clear();
-          setDraft('');
-          localStorage.removeItem(QUICKNOTE_DRAFT_KEY);
-          att.clear();
-        },
-        hide: async () => {
-          if (queuedOffline) {
-            setSaveNotice('Saved locally · waiting to sync');
-            return;
-          }
-          await closeWindow();
-        },
+      shared.update({
+        content: parsed.content,
+        type: parsed.isTodo ? NoteType.TODO : NoteType.BLINKO,
+        isImportant: !!parsed.isImportant,
+        isUrgent: !!parsed.isUrgent,
+        dueDate: parsed.isTodo && parsed.dueDate ? parsed.dueDate.toISOString() : null,
       });
+      const saved = await shared.finalize(att.items.map(toUpsertAttachment));
+      if (!saved) throw new Error(shared.error || 'Draft could not be saved yet');
+      if (isInTauri()) await emit('native-note-changed', saved);
+      editorRef.current?.clear();
+      att.clear();
+      await closeWindow();
     } catch (error) {
       console.error('Quick note save failed:', error);
       setSaveError(error instanceof Error ? error.message : String(error));
@@ -291,15 +266,23 @@ const QuickNotePage = observer(() => {
       </button>
       <TiptapEditor
         ref={editorRef}
-        value={draft}
+        value={shared.draft.content}
+        editable={!shared.locked}
         placeholder={`${t('quicknote.title') || 'Quick memo'} · / for commands, ⌘↵ to save`}
         autofocus
         onSubmit={send}
         onDropFiles={(files) => { void att.addFiles(files); }}
         onChange={(markdown) => {
-          setDraft(markdown);
-          if (markdown) localStorage.setItem(QUICKNOTE_DRAFT_KEY, markdown);
-          else localStorage.removeItem(QUICKNOTE_DRAFT_KEY);
+          const parsed = parseTaskSyntax(markdown);
+          shared.update({
+            content: markdown,
+            ...(parsed.isTodo ? { type: NoteType.TODO } : {}),
+            ...(parsed.isImportant ? { isImportant: true } : {}),
+            ...(parsed.isUrgent ? { isUrgent: true } : {}),
+            ...(parsed.dueDate !== undefined
+              ? { dueDate: parsed.dueDate ? parsed.dueDate.toISOString() : null }
+              : {}),
+          });
         }}
         getTags={() => blinko.tagList.value?.pathTags ?? []}
         getNotes={async (q) => {
@@ -307,6 +290,19 @@ const QuickNotePage = observer(() => {
           return list.filter((n) => n.id != null).map((n) => ({ id: n.id!, title: noteLinkTitle(n.content) }));
         }}
       />
+      {shared.locked && (
+        <div className="h-stack" style={{ gap: 8, marginTop: 8, color: 'var(--fg-2)', fontSize: 11 }}>
+          <span>Editing on another device.</span>
+          <button className="bk-native-button is-ghost is-small" onClick={() => { void shared.takeOver(); }}>Take over</button>
+        </div>
+      )}
+      {shared.recovery && (
+        <div className="h-stack" style={{ gap: 8, marginTop: 8, color: 'var(--important)', fontSize: 11 }}>
+          <span>Offline version preserved.</span>
+          <button className="bk-native-button is-ghost is-small" onClick={shared.restoreRecovery}>Restore</button>
+          <button className="bk-native-button is-ghost is-small" onClick={shared.dismissRecovery}>Dismiss</button>
+        </div>
+      )}
       {saveError && (
         <div
           role="alert"

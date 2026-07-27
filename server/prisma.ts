@@ -3,6 +3,7 @@
  * @see https://www.prisma.io/docs/support/help-articles/nextjs-prisma-client-dev-practices
  */
 import { PrismaClient } from '@prisma/client';
+import { runtimeDatabaseUrl } from './lib/runtimeDatabaseUrl';
 
 const prismaGlobal = globalThis as typeof globalThis & {
   prisma?: PrismaClient;
@@ -14,7 +15,7 @@ export const prisma: PrismaClient =
     process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
     datasources: {
       db: {
-        url: process.env.DATABASE_URL
+        url: runtimeDatabaseUrl()
       }
     }
   });

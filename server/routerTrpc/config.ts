@@ -11,6 +11,7 @@ import { normalizeStorageSettings, testStorageConnection, type StorageSettings }
 import { recordStorageActivity } from '../lib/storageActivity';
 import { decryptStorageCredential, encryptStorageCredential } from '../lib/storageCredentialEncryption';
 import { verifyActiveSetup } from '../lib/activeSetupVerification';
+import { fetchNeonCuUsage } from '../lib/neonCuUsage';
 
 const storageSettingsSchema = z.discriminatedUnion('provider', [
   z.object({
@@ -28,6 +29,12 @@ const storageSettingsSchema = z.discriminatedUnion('provider', [
     forcePathStyle: z.boolean().optional(),
   }),
 ]);
+
+const neonCuSettingsSchema = z.object({
+  orgId: z.string().trim().min(1).max(60).regex(/^[a-z0-9-]+$/, 'Invalid Neon organization ID'),
+  projectId: z.string().trim().min(1).max(100).regex(/^[a-z0-9-]+$/, 'Invalid Neon project ID'),
+  apiKey: z.string().trim().max(512).optional(),
+});
 
 function storageConfigEntries(settings: StorageSettings): Array<[string, unknown]> {
   if (settings.provider === 'local') {
@@ -75,6 +82,27 @@ function storageConnectionError(error: unknown): TRPCError {
 }
 
 let activeSetupVerification: ReturnType<typeof verifyActiveSetup> | null = null;
+let neonCuUsageCache: { expiresAt: number; value: Awaited<ReturnType<typeof fetchNeonCuUsage>> } | null = null;
+
+async function neonCuCredentials() {
+  const rows = await prisma.config.findMany({
+    where: { key: { in: ['neonOrgId', 'neonProjectId', 'neonApiKey'] }, userId: null },
+    orderBy: { id: 'desc' },
+  });
+  const values = new Map<string, string>();
+  for (const row of rows) {
+    if (values.has(row.key)) continue;
+    const config = row.config as { value?: unknown } | null;
+    values.set(row.key, String(config?.value ?? ''));
+  }
+  const storedApiKey = values.get('neonApiKey') || '';
+  return {
+    orgId: values.get('neonOrgId') || process.env.NEON_ORG_ID || '',
+    projectId: values.get('neonProjectId') || process.env.NEON_PROJECT_ID || '',
+    apiKey: storedApiKey ? decryptStorageCredential(storedApiKey) : process.env.NEON_API_KEY || '',
+    stored: Boolean(values.get('neonOrgId') || values.get('neonProjectId') || storedApiKey),
+  };
+}
 
 async function activeStorageSettings(): Promise<StorageSettings> {
   const stored = await getGlobalConfig({ useAdmin: true });
@@ -148,6 +176,7 @@ export const getGlobalConfig = async ({ ctx, useAdmin = false }: { ctx?: Context
     const hasSecretKey = Boolean(savedSecret);
     delete globalConfig.s3AccessKeyId;
     delete globalConfig.s3AccessKeySecret;
+    delete globalConfig.neonApiKey;
     delete globalConfig.scheduledBackupPassphrase;
     globalConfig.s3CredentialsConfigured = hasAccessKey && hasSecretKey;
     globalConfig.s3AccessKeyIdMasked = hasAccessKey ? maskedAccessKey(savedAccessKey) : '';
@@ -200,6 +229,70 @@ export const configRouter = router({
     .output(ZConfigSchema)
     .query(async function ({ ctx }) {
       return await getGlobalConfig({ ctx })
+    }),
+  neonCuSettings: authProcedure
+    .use(demoAuthMiddleware)
+    .use(superAdminAuthMiddleware)
+    .input(z.void())
+    .query(async () => {
+      const settings = await neonCuCredentials();
+      return {
+        orgId: settings.orgId,
+        projectId: settings.projectId,
+        apiKeyConfigured: Boolean(settings.apiKey),
+        storedInPortal: settings.stored,
+      };
+    }),
+  saveNeonCuSettings: authProcedure
+    .use(demoAuthMiddleware)
+    .use(superAdminAuthMiddleware)
+    .input(neonCuSettingsSchema)
+    .mutation(async ({ input }) => {
+      const current = await neonCuCredentials();
+      const apiKey = input.apiKey || current.apiKey;
+      if (!apiKey) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Enter a Neon API key' });
+      const entries: Array<[string, string]> = [
+        ['neonOrgId', input.orgId],
+        ['neonProjectId', input.projectId],
+        ['neonApiKey', encryptStorageCredential(apiKey)],
+      ];
+      await prisma.$transaction(async (tx) => {
+        for (const [key, value] of entries) {
+          await tx.config.deleteMany({ where: { key, userId: null } });
+          await tx.config.create({ data: { key, config: { type: 'string', value } } });
+        }
+      });
+      neonCuUsageCache = null;
+      return { ok: true };
+    }),
+  clearNeonCuSettings: authProcedure
+    .use(demoAuthMiddleware)
+    .use(superAdminAuthMiddleware)
+    .input(z.void())
+    .mutation(async () => {
+      await prisma.config.deleteMany({
+        where: { key: { in: ['neonOrgId', 'neonProjectId', 'neonApiKey'] }, userId: null },
+      });
+      neonCuUsageCache = null;
+      return { ok: true };
+    }),
+  neonCuUsage: authProcedure
+    .use(demoAuthMiddleware)
+    .use(superAdminAuthMiddleware)
+    .input(z.void())
+    .query(async () => {
+      if (neonCuUsageCache && neonCuUsageCache.expiresAt > Date.now()) return neonCuUsageCache.value;
+      try {
+        const settings = await neonCuCredentials();
+        const value = await fetchNeonCuUsage(settings);
+        neonCuUsageCache = { value, expiresAt: Date.now() + 5 * 60_000 };
+        return value;
+      } catch (error) {
+        throw new TRPCError({
+          code: 'BAD_GATEWAY',
+          message: error instanceof Error ? error.message : 'Could not load Neon CU usage',
+        });
+      }
     }),
   update: authProcedure
     .meta({ openapi: { method: 'POST', path: '/v1/config/update', summary: 'Update user config', protect: true, tags: ['Config'] } })

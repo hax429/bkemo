@@ -118,19 +118,20 @@ describe('note journal migration', () => {
 describe('note sync hub', () => {
   test('publishes only to the matching account and unsubscribes cleanly', () => {
     const hub = new NoteSyncHub();
-    let accountOneSignals = 0;
+    const accountOneKinds: string[] = [];
     let accountTwoSignals = 0;
-    const unsubscribe = hub.subscribe(1, () => accountOneSignals++);
+    const unsubscribe = hub.subscribe(1, (event) => accountOneKinds.push(event.kind));
     hub.subscribe(2, () => accountTwoSignals++);
 
+    hub.publish(1, { kind: 'draft' });
     hub.publish(1);
-    expect(accountOneSignals).toBe(1);
+    expect(accountOneKinds).toEqual(['draft', 'note']);
     expect(accountTwoSignals).toBe(0);
     expect(hub.listenerCount(1)).toBe(1);
 
     unsubscribe();
     hub.publish(1);
-    expect(accountOneSignals).toBe(1);
+    expect(accountOneKinds).toEqual(['draft', 'note']);
     expect(hub.listenerCount(1)).toBe(0);
   });
 });

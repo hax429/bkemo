@@ -6,14 +6,9 @@ import fs from 'fs';
 import authRoutes from './routerExpress/auth';
 import { configureSession } from './routerExpress/auth/config';
 
-// pg-boss job scheduling
-import { stopPgBoss } from './lib/pgBoss';
-import { getPgBoss } from './lib/pgBoss';
 import { ArchiveJob } from './jobs/archivejob';
 import { BackupJob } from './jobs/backupJob';
-import { RebuildEmbeddingJob } from './jobs/rebuildEmbeddingJob';
-import { RecommandJob } from './jobs/recommandJob';
-import { AIScheduledTaskJob } from './jobs/aiScheduledTaskJob';
+import { stopAllScheduleTimers } from './jobs/baseScheduleJob';
 import { registerBackgroundJobLifecycle } from './lib/jobLifecycle';
 import { resumeAttachmentMigrationJobs } from './lib/attachmentStorageMigration';
 import { isDatabaseWriteLocked, recoverInterruptedDatabaseMigrationJobs } from './lib/databaseMigration';
@@ -55,13 +50,13 @@ process.on('unhandledRejection', (reason, promise) => {
 
 process.on('SIGTERM', async () => {
   console.log('SIGTERM received, shutting down gracefully...');
-  await stopPgBoss();
+  await stopAllScheduleTimers();
   process.exit(0);
 });
 
 process.on('SIGINT', async () => {
   console.log('SIGINT received, shutting down gracefully...');
-  await stopPgBoss();
+  await stopAllScheduleTimers();
   process.exit(0);
 });
 
@@ -71,20 +66,14 @@ process.on('exit', (code) => {
 
 /**
  * Initialize all scheduled jobs
- * This sets up pg-boss and registers all job workers
+ * Timers run in-process and perform no database polling between due times.
  */
 async function initializeJobs() {
   try {
-    console.log('Initializing pg-boss scheduled jobs...');
-    
-    await getPgBoss();
+    console.log('Initializing low-cost scheduled jobs...');
     await ArchiveJob.initialize();
     await BackupJob.initialize();
-    await RebuildEmbeddingJob.initialize();
-    await RecommandJob.initialize();
-    await AIScheduledTaskJob.initialize();
     await resumeAttachmentMigrationJobs();
-    
     console.log('All scheduled jobs initialized successfully');
   } catch (error) {
     console.error('Failed to initialize scheduled jobs:', error);
@@ -92,7 +81,7 @@ async function initializeJobs() {
   }
 }
 
-registerBackgroundJobLifecycle({ start: initializeJobs, pause: stopPgBoss });
+registerBackgroundJobLifecycle({ start: initializeJobs, pause: stopAllScheduleTimers });
 
 // Server configuration
 const app = express();

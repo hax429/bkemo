@@ -41,8 +41,8 @@ export function createNoteSyncRouter(
     res.flushHeaders?.();
     res.write('event: ready\ndata: {}\n\n');
 
-    const unsubscribe = hub.subscribe(accountId, () => {
-      if (!res.writableEnded) res.write('event: dirty\ndata: {}\n\n');
+    const unsubscribe = hub.subscribe(accountId, (event) => {
+      if (!res.writableEnded) res.write(`event: dirty\ndata: ${JSON.stringify(event)}\n\n`);
     });
     const keepalive = setInterval(() => {
       if (!res.writableEnded) res.write(': keepalive\n\n');

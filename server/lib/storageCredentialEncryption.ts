@@ -4,7 +4,7 @@ const PREFIX = 'bkemo-secret:v1:';
 
 function encryptionKey() {
   const secret = process.env.BKEMO_CONFIG_ENCRYPTION_KEY || process.env.JWT_SECRET || process.env.NEXTAUTH_SECRET;
-  if (!secret) throw new Error('Set BKEMO_CONFIG_ENCRYPTION_KEY or JWT_SECRET before saving S3 credentials');
+  if (!secret) throw new Error('Set BKEMO_CONFIG_ENCRYPTION_KEY or JWT_SECRET before saving encrypted credentials');
   return createHash('sha256').update(secret).digest();
 }
 

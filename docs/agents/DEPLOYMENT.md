@@ -22,9 +22,9 @@ edit -> local server -> focused checks -> user acceptance
 |---|---|---|
 | Local | `/Users/hax429/Developer/bkemo` | Development and acceptance testing |
 | Local app | `http://localhost:1111` | Full web/backend process |
-| Database | Neon PostgreSQL | Preferred development and production data |
-| Attachments | Cloudflare R2 | Preferred object storage (`objectStorage=s3`) |
-| Local bootstrap DB | PostgreSQL on port `5433` | Fallback only before Neon attach |
+| Database | Neon PostgreSQL | Production and explicit hosted integration tests |
+| Attachments | Cloudflare R2 | Preferred production object storage (`objectStorage=s3`) |
+| Local bootstrap DB | PostgreSQL on port `5433` | Default development database |
 | Source | `github.com/hax429/bkemo`, normally `main` | Code delivered to production |
 | Production host | SSH alias `Oracle` | Ubuntu server |
 | Production checkout | `/home/ubuntu/services/notes/bkemo` | Source-built live checkout |
@@ -36,6 +36,20 @@ Production is a source deployment, not a bkemo Docker image. Neon and R2 hold
 application data and attachments; the checkout still uses `.blinko` for plugins,
 vectors, dumps, and any remaining local files. On the current host that path may
 resolve through a symlink, so inspect the target before maintenance.
+
+The production Neon compute should use the pooled endpoint, `0.25–1 CU`
+autoscaling, and five-minute scale to zero. The runtime adds
+`connection_limit=2` when no explicit pooled limit is configured. Keep the
+organization spending alert near $5/month; do not use a hard project quota that
+can suspend bkemo for the rest of a billing period.
+
+The superadmin Storage screen shows completed daily CU-hours and a linear
+calendar-month estimate. Configure its Neon organization ID, project ID, and
+personal API key beside the monitor; the key is encrypted in the site config
+and never returned to the browser. `NEON_API_KEY`, `NEON_ORG_ID`, and
+`NEON_PROJECT_ID` remain supported as server-environment fallbacks. The panel
+caches Neon's consumption-history response for five minutes. Neon exposes this
+history only on eligible paid plans.
 
 ## 1. Develop locally
 
@@ -52,9 +66,12 @@ Other supported modes (local bootstrap database only; never for attached Neon):
 ./scripts/run-dev.sh --stop    # stop local PostgreSQL
 ```
 
-When Neon is already attached through the development-only workflow, the
+Local PostgreSQL is the normal path. When Neon is explicitly attached through
+the development-only integration-test workflow, the
 launcher skips local Postgres, runs `prisma migrate deploy` against the direct
-Neon endpoint, and keeps existing accounts. Configure Cloudflare R2 in
+Neon endpoint, and keeps existing accounts. This requires
+`BKEMO_DEV_USE_NEON=true`; without it, the launcher refuses the remote URL.
+Configure Cloudflare R2 in
 Settings → Storage, then use Verify active setup.
 
 `./scripts/run-dev.sh` intentionally remains in the foreground. If the user

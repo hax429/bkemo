@@ -17,7 +17,7 @@ import { CommentsSection, CardFeedback } from './CommentsSection';
 import { MultiSelectBar } from './MultiSelectBar';
 import { isTask, isDone } from '@/lib/taskFilters';
 import { parseTaskSyntax, stripLoneCheckbox } from '@/lib/taskSyntax';
-import { extractNoteLinkIds, noteLinkTitle } from '@/lib/noteLinks';
+import { noteLinkTitle } from '@/lib/noteLinks';
 import { eventBus } from '@/lib/event';
 import { toUpsertAttachment } from '@/lib/attachments';
 import { useAttachments, PendingAttachments } from './useAttachments';
@@ -28,6 +28,7 @@ import { queryNotesFromCache } from '@/lib/noteCache';
 import { Icon } from '@/components/Common/Iconify/icons';
 import { invoke } from '@tauri-apps/api/core';
 import { isDesktop, isInTauri } from '@/lib/tauriHelper';
+import { useSharedDraft } from '@/lib/useSharedDraft';
 
 const MAIN_WINDOW_PIN_KEY = 'bkemo.mainWindowPinned';
 
@@ -82,27 +83,31 @@ const composerPill = (active: boolean, color: string): React.CSSProperties => ({
 const Composer = observer(function Composer({ onExpand }: { onExpand?: (draft: Note) => void }) {
   const blinko = RootStore.Get(BlinkoStore);
   const ref = useRef<TiptapEditorHandle>(null);
-  const [content, setContent] = useState('');
+  const shared = useSharedDraft();
   const [sending, setSending] = useState(false);
-  const [isTodo, setIsTodo] = useState(false);
-  const [important, setImportant] = useState(false);
-  const [urgent, setUrgent] = useState(false);
-  const [due, setDue] = useState(''); // yyyy-mm-dd, optional
   const [focused, setFocused] = useState(false);
   const att = useAttachments();
+  const content = shared.draft.content;
+  const isTodo = shared.draft.type === NoteType.TODO;
+  const important = shared.draft.isImportant;
+  const urgent = shared.draft.isUrgent;
+  const due = shared.draft.dueDate ? dayjs(shared.draft.dueDate).format('YYYY-MM-DD') : '';
 
-  const reset = () => { setImportant(false); setUrgent(false); setDue(''); setIsTodo(false); att.clear(); };
+  const reset = () => { att.clear(); };
 
   // Live-reflect inline task syntax (`- [ ]` checkbox, `due:…`) in the toolbar so
   // the user sees the memo turning into a task as they type.
   const onEditorChange = (md: string) => {
-    setContent(md);
     const parsed = parseTaskSyntax(md);
-    if (parsed.isTodo && !isTodo) setIsTodo(true);
-    if (parsed.isImportant && !important) setImportant(true);
-    if (parsed.isUrgent && !urgent) setUrgent(true);
-    if (parsed.dueDate) setDue(dayjs(parsed.dueDate).format('YYYY-MM-DD'));
-    else if (parsed.dueDate === null) setDue('');
+    shared.update({
+      content: md,
+      ...(parsed.isTodo ? { type: NoteType.TODO } : {}),
+      ...(parsed.isImportant ? { isImportant: true } : {}),
+      ...(parsed.isUrgent ? { isUrgent: true } : {}),
+      ...(parsed.dueDate !== undefined
+        ? { dueDate: parsed.dueDate ? parsed.dueDate.toISOString() : null }
+        : {}),
+    });
   };
 
   const send = async () => {
@@ -122,21 +127,18 @@ const Composer = observer(function Composer({ onExpand }: { onExpand?: (draft: N
       : (due ? dayjs(due).endOf('day').toDate() : null);
     setSending(true);
     try {
-      await blinko.upsertNote.call({
+      shared.update({
         content: parsed.content,
-        // A To-do with no due date is still a task — it lands in the Inbox lane.
         type: todo ? NoteType.TODO : NoteType.BLINKO,
-        // Persist [[memo]] links as references so the link graph mirrors the body.
-        references: extractNoteLinkIds(parsed.content),
-        attachments: att.items.map(toUpsertAttachment),
         isImportant: flagImportant,
         isUrgent: flagUrgent,
-        // A due date only applies to tasks (and itself makes a memo a task).
-        dueDate: todo ? dueDate : null,
+        dueDate: todo && dueDate ? dueDate.toISOString() : null,
       });
-      ref.current?.clear();
-      setContent('');
-      reset();
+      const saved = await shared.finalize(att.items.map(toUpsertAttachment));
+      if (saved) {
+        ref.current?.clear();
+        reset();
+      }
     } finally {
       setSending(false);
     }
@@ -157,9 +159,6 @@ const Composer = observer(function Composer({ onExpand }: { onExpand?: (draft: N
       __draftAttachments: att.items,
     } as unknown as Note;
     onExpand?.(draft);
-    ref.current?.clear();
-    setContent('');
-    reset();
   };
 
   const showChrome = focused || content.trim().length > 0 || att.items.length > 0 || att.uploading > 0;
@@ -185,6 +184,7 @@ const Composer = observer(function Composer({ onExpand }: { onExpand?: (draft: N
       <TiptapEditor
         ref={ref}
         value={content}
+        editable={!shared.locked}
         placeholder="Throw a thought in here…  ( -[] makes a task · due:today / due:06/25/26 sets a date )"
         onChange={onEditorChange}
         onSubmit={send}
@@ -197,6 +197,19 @@ const Composer = observer(function Composer({ onExpand }: { onExpand?: (draft: N
           return list.filter((n) => n.id != null).map((n) => ({ id: n.id!, title: noteLinkTitle(n.content) }));
         }}
       />
+      {shared.locked && (
+        <div className="h-stack" style={{ gap: 8, marginTop: 8, color: 'var(--fg-2)', fontSize: 11 }}>
+          <span>This draft is being edited on another device.</span>
+          <button className="bk-native-button is-ghost is-small" onClick={() => { void shared.takeOver(); }}>Take over</button>
+        </div>
+      )}
+      {shared.recovery && (
+        <div className="h-stack" style={{ gap: 8, marginTop: 8, color: 'var(--important)', fontSize: 11 }}>
+          <span>An offline version was preserved.</span>
+          <button className="bk-native-button is-ghost is-small" onClick={shared.restoreRecovery}>Restore</button>
+          <button className="bk-native-button is-ghost is-small" onClick={shared.dismissRecovery}>Dismiss</button>
+        </div>
+      )}
       {att.fileInput}
       <PendingAttachments items={att.items} uploading={att.uploading} onRemove={att.remove} />
       {showChrome && (
@@ -271,7 +284,7 @@ const Composer = observer(function Composer({ onExpand }: { onExpand?: (draft: N
             {/* Todo Type Toggle */}
             <button
               onMouseDown={(e) => e.preventDefault()}
-              onClick={() => setIsTodo((v) => !v)}
+              onClick={() => shared.update({ type: isTodo ? NoteType.BLINKO : NoteType.TODO })}
               style={{
                 width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6,
                 color: isTodo ? 'var(--accent)' : 'var(--fg-2)',
@@ -286,7 +299,7 @@ const Composer = observer(function Composer({ onExpand }: { onExpand?: (draft: N
             {/* Urgent & Important status toggles */}
             <button
               onMouseDown={(e) => e.preventDefault()}
-              onClick={() => setImportant((v) => !v)}
+              onClick={() => shared.update({ isImportant: !important })}
               style={{
                 width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6,
                 color: important ? 'var(--important)' : 'var(--fg-2)',
@@ -299,7 +312,7 @@ const Composer = observer(function Composer({ onExpand }: { onExpand?: (draft: N
             </button>
             <button
               onMouseDown={(e) => e.preventDefault()}
-              onClick={() => setUrgent((v) => !v)}
+              onClick={() => shared.update({ isUrgent: !urgent })}
               style={{
                 width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6,
                 color: urgent ? 'var(--urgent)' : 'var(--fg-2)',
@@ -314,15 +327,15 @@ const Composer = observer(function Composer({ onExpand }: { onExpand?: (draft: N
             {isTodo && (
               <label className="h-stack" style={{ gap: 6, fontSize: 11.5, color: 'var(--fg-2)', fontFamily: 'var(--font-mono)', marginLeft: 6 }}>
                 <span>due</span>
-                <input type="date" value={due} onChange={(e) => setDue(e.target.value)} style={{ background: 'var(--bg)', color: 'var(--fg)', border: '1px solid var(--border-2)', borderRadius: 'var(--radius, 6px)', padding: '2px 6px', fontSize: 11.5, fontFamily: 'inherit' }} />
-                {due ? <span onClick={() => setDue('')} style={{ cursor: 'pointer', color: 'var(--fg-3)' }}>clear</span> : <span style={{ color: 'var(--fg-3)' }}>→ inbox</span>}
+                <input type="date" value={due} onChange={(e) => shared.update({ dueDate: e.target.value ? dayjs(e.target.value).endOf('day').toISOString() : null })} style={{ background: 'var(--bg)', color: 'var(--fg)', border: '1px solid var(--border-2)', borderRadius: 'var(--radius, 6px)', padding: '2px 6px', fontSize: 11.5, fontFamily: 'inherit' }} />
+                {due ? <span onClick={() => shared.update({ dueDate: null })} style={{ cursor: 'pointer', color: 'var(--fg-3)' }}>clear</span> : <span style={{ color: 'var(--fg-3)' }}>→ inbox</span>}
               </label>
             )}
           </div>
 
           {/* Right Action Button */}
           {(() => {
-            const canSend = !sending && att.uploading === 0 && (content.trim().length > 0 || att.items.length > 0);
+            const canSend = !sending && !shared.locked && att.uploading === 0 && (content.trim().length > 0 || att.items.length > 0);
             return (
               <button
                 onClick={send}

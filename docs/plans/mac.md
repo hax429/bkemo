@@ -111,9 +111,12 @@ Do not merge the iOS SwiftUI app into this plan. Do not revive Tauri iOS for mac
 1. If hidden, ⌃W shows and focuses the rounded capture panel.
 2. If visible, ⌃W hides it.
 3. Escape and × also hide it.
-4. Hiding never clears content; the draft survives app quit and rebuild.
-5. A confirmed server save clears the draft. Offline creates clear only after
-   entering the pending-sync queue and remain visible in the main stream.
+4. Hiding never clears content; the account-scoped draft survives app quit and
+   is shared with the normal web composer.
+5. Changes persist locally immediately and autosave to the server two seconds
+   after typing stops. Only explicit Save creates a memo and clears the draft.
+6. While offline, editing remains local; final Save waits for connectivity
+   rather than turning the compose draft into a saved note.
 
 ---
 

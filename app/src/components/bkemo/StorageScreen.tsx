@@ -6,6 +6,7 @@ import { RootStore } from '@/store';
 import { BlinkoStore } from '@/store/blinkoStore';
 import { UserStore } from '@/store/user';
 import { DatabaseMigrationPanel } from './DatabaseMigrationPanel';
+import { NeonCuMonitor } from './NeonCuMonitor';
 
 type Provider = 'local' | 's3';
 type StorageForm = {
@@ -440,6 +441,8 @@ export const StorageScreen = observer(function StorageScreen() {
           <ProviderCard active={databaseProvider === 'neon'} selected={chosenDatabase === 'neon'} icon="tabler:cloud-network" title="Neon PostgreSQL" description="Use a Neon direct connection for migration and its pooled connection for the production application." onClick={() => setSelectedDatabase('neon')} />
         </div>
       </div> : null}
+
+      {user.isSuperAdmin && chosenDatabase === 'neon' ? <NeonCuMonitor /> : null}
 
       {user.isSuperAdmin && (chosenDatabase !== databaseProvider || activeDatabaseTransfer) ? <DatabaseMigrationPanel target={databasePanelTarget} onActivityChange={loadActivity} /> : null}
 

@@ -9,7 +9,6 @@ import { TiptapEditor, type TiptapEditorHandle } from '@/components/TiptapEditor
 import { isDone, isTask } from '@/lib/taskFilters';
 import { parseTaskSyntax } from '@/lib/taskSyntax';
 import { extractNoteLinkIds, noteLinkTitle } from '@/lib/noteLinks';
-import { UserStore } from '@/store/user';
 import { loadPrefs } from '@/lib/bkemoSettings';
 import { api } from '@/lib/trpc';
 import { eventBus } from '@/lib/event';
@@ -19,6 +18,7 @@ import { useAttachments, PendingAttachments } from './useAttachments';
 import { AttachmentList } from './AttachmentList';
 import { ShareImageSheet } from './ShareImage';
 import { NoteAIThread } from './ai/AIThread';
+import { useSharedDraft } from '@/lib/useSharedDraft';
 
 const pill = (active: boolean, color: string): React.CSSProperties => ({
   padding: '4px 10px', borderRadius: 100, fontSize: 12, fontFamily: 'var(--font-mono)', cursor: 'pointer',
@@ -94,7 +94,8 @@ const SubtaskRow = observer(function SubtaskRow({ subtask, onOpen, onRefresh }: 
 /** Edit a single memo/task: content (TipTap) + due date + important/urgent + done. */
 export const NoteModal = observer(function NoteModal({ note, onClose, startFullscreen }: { note: Note; onClose: () => void; startFullscreen?: boolean }) {
   const blinko = RootStore.Get(BlinkoStore);
-  const user = RootStore.Get(UserStore);
+  const isNew = !note.id;
+  const shared = useSharedDraft(isNew);
   const ref = useRef<TiptapEditorHandle>(null);
   const [isTodo, setIsTodo] = useState(note.type === NoteType.TODO || isTask(note));
   const [important, setImportant] = useState(!!note.isImportant);
@@ -103,6 +104,12 @@ export const NoteModal = observer(function NoteModal({ note, onClose, startFulls
   const [done, setDone] = useState(isDone(note));
   const [saving, setSaving] = useState(false);
   const [updateTicker, setUpdateTicker] = useState(0);
+  const currentIsTodo = isNew ? shared.draft.type === NoteType.TODO : isTodo;
+  const currentImportant = isNew ? shared.draft.isImportant : important;
+  const currentUrgent = isNew ? shared.draft.isUrgent : urgent;
+  const currentDue = isNew && shared.draft.dueDate
+    ? dayjs(shared.draft.dueDate).format('YYYY-MM-DD')
+    : due;
   const readOnlyOffline = !!note.id && !blinko.isOnline;
   // Existing notes open in details (read). New / expanded drafts open in full-page edit.
   const [reading, setReading] = useState(() => {
@@ -206,16 +213,28 @@ export const NoteModal = observer(function NoteModal({ note, onClose, startFulls
     if (saving || readOnlyOffline) return;
     const parsed = parseTaskSyntax(ref.current?.getMarkdown() ?? note.content ?? '');
     // Inline syntax can promote a memo to a task or set/clear its due date.
-    const todo = isTodo || parsed.isTodo;
+    const todo = currentIsTodo || parsed.isTodo;
     // Priority flags apply to any memo (task or not); toolbar buttons or the
     // `#important` / `#urgent` tags set them.
-    const flagImportant = important || !!parsed.isImportant;
-    const flagUrgent = urgent || !!parsed.isUrgent;
+    const flagImportant = currentImportant || !!parsed.isImportant;
+    const flagUrgent = currentUrgent || !!parsed.isUrgent;
     const dueValue = parsed.dueDate !== undefined
       ? parsed.dueDate
-      : (due ? dayjs(due).endOf('day').toDate() : null);
+      : (currentDue ? dayjs(currentDue).endOf('day').toDate() : null);
     setSaving(true);
     try {
+      if (isNew) {
+        shared.update({
+          content: parsed.content,
+          type: todo ? NoteType.TODO : NoteType.BLINKO,
+          isImportant: flagImportant,
+          isUrgent: flagUrgent,
+          dueDate: todo && dueValue ? dueValue.toISOString() : null,
+        });
+        const created = await shared.finalize(att.items.map(toUpsertAttachment));
+        if (created) onClose();
+        return;
+      }
       await blinko.upsertNote.call({
         id: note.id,
         content: parsed.content,
@@ -243,14 +262,11 @@ export const NoteModal = observer(function NoteModal({ note, onClose, startFulls
     onClose();
   };
 
-  // Closing a NEW note that has content saves it as a draft instead of
-  // discarding (so expanding to the full-page editor never loses your writing).
+  // Closing a new editor only hides it. The shared compose draft remains local
+  // and server-synced until the user explicitly presses Save.
   const handleClose = () => {
     if (saving) return;
-    const md = ref.current?.getMarkdown()?.trim() ?? '';
-    const hasContent = md.length > 0 || att.items.length > 0;
-    if (!note.id && hasContent) save();
-    else onClose();
+    onClose();
   };
 
   const prefs = loadPrefs();
@@ -364,7 +380,8 @@ export const NoteModal = observer(function NoteModal({ note, onClose, startFulls
           <div className="bk-article-edit" style={{ maxWidth: 760, margin: '0 auto', width: '100%' }}>
           <TiptapEditor
             ref={ref}
-            value={note.content ?? ''}
+            value={isNew ? shared.draft.content : (note.content ?? '')}
+            editable={!isNew || !shared.locked}
             autofocus
             onSubmit={save}
             onDropFiles={(files) => { void att.addFiles(files); }}
@@ -372,11 +389,23 @@ export const NoteModal = observer(function NoteModal({ note, onClose, startFulls
               setUpdateTicker((v) => v + 1);
               setLinkIds(extractNoteLinkIds(md));
               const parsed = parseTaskSyntax(md);
-              if (parsed.isTodo && !isTodo) setIsTodo(true);
-              if (parsed.isImportant && !important) setImportant(true);
-              if (parsed.isUrgent && !urgent) setUrgent(true);
-              if (parsed.dueDate) setDue(dayjs(parsed.dueDate).format('YYYY-MM-DD'));
-              else if (parsed.dueDate === null) setDue('');
+              if (isNew) {
+                shared.update({
+                  content: md,
+                  ...(parsed.isTodo ? { type: NoteType.TODO } : {}),
+                  ...(parsed.isImportant ? { isImportant: true } : {}),
+                  ...(parsed.isUrgent ? { isUrgent: true } : {}),
+                  ...(parsed.dueDate !== undefined
+                    ? { dueDate: parsed.dueDate ? parsed.dueDate.toISOString() : null }
+                    : {}),
+                });
+              } else {
+                if (parsed.isTodo && !isTodo) setIsTodo(true);
+                if (parsed.isImportant && !important) setImportant(true);
+                if (parsed.isUrgent && !urgent) setUrgent(true);
+                if (parsed.dueDate) setDue(dayjs(parsed.dueDate).format('YYYY-MM-DD'));
+                else if (parsed.dueDate === null) setDue('');
+              }
             }}
             getTags={() => blinko.tagList.value?.pathTags ?? []}
             getNotes={async (q) => {
@@ -386,6 +415,19 @@ export const NoteModal = observer(function NoteModal({ note, onClose, startFulls
                 .map((n) => ({ id: n.id!, title: noteLinkTitle(n.content) }));
             }}
           />
+          {isNew && shared.locked && (
+            <div className="h-stack" style={{ gap: 8, marginTop: 10, color: 'var(--fg-2)', fontSize: 12 }}>
+              <span>This draft is being edited on another device.</span>
+              <button className="bk-native-button is-ghost is-small" onClick={() => { void shared.takeOver(); }}>Take over</button>
+            </div>
+          )}
+          {isNew && shared.recovery && (
+            <div className="h-stack" style={{ gap: 8, marginTop: 10, color: 'var(--important)', fontSize: 12 }}>
+              <span>An offline version was preserved.</span>
+              <button className="bk-native-button is-ghost is-small" onClick={shared.restoreRecovery}>Restore</button>
+              <button className="bk-native-button is-ghost is-small" onClick={shared.dismissRecovery}>Dismiss</button>
+            </div>
+          )}
           {/* Already-attached files + pending uploads. */}
           <AttachmentList attachments={(note as any).attachments} />
           {att.fileInput}
@@ -530,30 +572,36 @@ export const NoteModal = observer(function NoteModal({ note, onClose, startFulls
 
           <span style={{ width: 1, height: 16, background: 'var(--border-2)', margin: '0 4px' }} />
 
-          <span onClick={() => setIsTodo((v) => !v)} style={pill(isTodo, 'var(--accent)')}>☑ to-do</span>
-          {isTodo && (
+          <span
+            onClick={() => isNew ? shared.update({ type: currentIsTodo ? NoteType.BLINKO : NoteType.TODO }) : setIsTodo((v) => !v)}
+            style={pill(currentIsTodo, 'var(--accent)')}
+          >☑ to-do</span>
+          {currentIsTodo && (
             <>
               <label className="h-stack" style={{ gap: 6, fontSize: 12, color: 'var(--fg-2)' }}>
                 <span style={{ fontFamily: 'var(--font-mono)' }}>due</span>
                 <input
                   type="date"
-                  value={due}
-                  onChange={(e) => setDue(e.target.value)}
+                  value={currentDue}
+                  onChange={(e) => {
+                    if (isNew) shared.update({ dueDate: e.target.value ? dayjs(e.target.value).endOf('day').toISOString() : null });
+                    else setDue(e.target.value);
+                  }}
                   style={{ background: 'var(--bg-2)', color: 'var(--fg)', border: '1px solid var(--border-2)', borderRadius: 'var(--radius)', padding: '4px 8px', fontSize: 12, fontFamily: 'inherit' }}
                 />
-                {due ? <span onClick={() => setDue('')} style={{ cursor: 'pointer', color: 'var(--fg-3)' }}>clear</span> : <span style={{ color: 'var(--fg-3)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>→ inbox</span>}
+                {currentDue ? <span onClick={() => isNew ? shared.update({ dueDate: null }) : setDue('')} style={{ cursor: 'pointer', color: 'var(--fg-3)' }}>clear</span> : <span style={{ color: 'var(--fg-3)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>→ inbox</span>}
               </label>
-              <span onClick={() => setImportant((v) => !v)} style={pill(important, 'var(--important)')}>! important</span>
-              <span onClick={() => setUrgent((v) => !v)} style={pill(urgent, 'var(--urgent)')}>^ urgent</span>
-              <label className="h-stack" style={{ gap: 6, fontSize: 12, color: 'var(--fg-2)', cursor: 'pointer' }}>
+              <span onClick={() => isNew ? shared.update({ isImportant: !currentImportant }) : setImportant((v) => !v)} style={pill(currentImportant, 'var(--important)')}>! important</span>
+              <span onClick={() => isNew ? shared.update({ isUrgent: !currentUrgent }) : setUrgent((v) => !v)} style={pill(currentUrgent, 'var(--urgent)')}>^ urgent</span>
+              {!isNew && <label className="h-stack" style={{ gap: 6, fontSize: 12, color: 'var(--fg-2)', cursor: 'pointer' }}>
                 <input type="checkbox" checked={done} onChange={(e) => setDone(e.target.checked)} style={{ accentColor: 'var(--accent)' }} />
                 done
-              </label>
+              </label>}
             </>
           )}
           <span className="spacer" />
           {note.id && <button onClick={trash} style={{ background: 'transparent', border: '1px solid #5C2A2A', color: '#E0696B', padding: '5px 12px', borderRadius: 'var(--radius)', fontSize: 12 }}>Trash</button>}
-          <button onClick={save} disabled={saving} style={{ background: 'var(--accent)', border: 'none', color: '#fff', padding: '5px 14px', borderRadius: 'var(--radius)', fontSize: 12, fontWeight: 500, opacity: saving ? 0.6 : 1 }}>Save · ⌘↵</button>
+          <button onClick={save} disabled={saving || (isNew && shared.locked)} style={{ background: 'var(--accent)', border: 'none', color: '#fff', padding: '5px 14px', borderRadius: 'var(--radius)', fontSize: 12, fontWeight: 500, opacity: saving || (isNew && shared.locked) ? 0.6 : 1 }}>Save · ⌘↵</button>
         </div>
       </div>
       )}

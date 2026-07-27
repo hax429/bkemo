@@ -26,6 +26,7 @@ import { fontRouter } from './font';
 import { reactionRouter } from './reaction';
 import { accessTokenRouter } from './accessToken';
 import { databaseMigrationRouter } from './databaseMigration';
+import { draftRouter } from './draft';
 export const appRouter = router({
   ai: aiRouter,
   notes: noteRouter,
@@ -48,6 +49,7 @@ export const appRouter = router({
   reaction: reactionRouter,
   accessTokens: accessTokenRouter,
   databaseMigration: databaseMigrationRouter,
+  draft: draftRouter,
 });
 
 export const createCaller = t.createCallerFactory(appRouter);

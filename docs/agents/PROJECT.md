@@ -49,7 +49,9 @@ capture windows and shared settings still import them.
   cached reads, and queued offline creates.
 - On macOS, the Tauri app registers Control+W by default for quick capture.
   The shortcut toggles a rounded `/quicknote` capture panel without discarding
-  its persisted draft. Escape and × hide it; Command+Enter saves.
+  its persisted draft. Web capture and macOS Quick Note share one account-scoped
+  draft that saves locally immediately and to the server after two idle seconds;
+  it becomes a memo only on explicit Save. Escape and × hide it.
 - macOS stores only the bearer token in Keychain (`keyring`); each Tauri window
   hydrates its session from Keychain. Profile metadata remains in app data so
   cached notes and offline creation work without a connection.
@@ -61,8 +63,11 @@ capture windows and shared settings still import them.
   pending-sync badge and replay when connectivity returns.
 - Open web, macOS, and iOS clients reconcile note changes through an authenticated
   server-sent-event signal backed by a durable per-account change cursor. A
-  10-second foreground poll catches disconnects and server restarts; returning
-  to a visible/active client forces an immediate catch-up.
+  60-second recently-active poll catches disconnects and server restarts, stops
+  after five minutes without keyboard/pointer activity, and catches up
+  immediately on focus/activity. SSE stays connected without querying the
+  database. Draft events are consumed only by web and macOS; iOS sees finalized
+  notes only.
 - The Dock icon is present while the main window is active and hidden while the
   app runs in the background. The top-right menu bar icon is optional as long
   as the global shortcut remains enabled. Desktop auto-update is intentionally
@@ -87,8 +92,10 @@ Important implementation anchors:
 - `server/routerTrpc/note.ts` — note/task queries and mutations.
 - `app/src/store/blinkoStore.tsx` — online queries, Dexie fallback, and offline
   operation merging/replay.
-- `app/src/lib/noteSync.ts` — foreground SSE lifecycle, durable polling fallback,
+- `app/src/lib/noteSync.ts` — SSE lifecycle, idle-aware durable polling fallback,
   and cache reconciliation for web and Tauri.
+- `app/src/lib/useSharedDraft.ts` — local-first web/macOS draft ownership,
+  autosave, recovery, and typed draft events.
 - `app/src/components/TiptapEditor/` — markdown-backed editor.
 - `app/src/lib/taskSyntax.ts` and `app/src/lib/noteLinks.ts` — inline task and
   memo-link parsing.
@@ -97,8 +104,9 @@ Important implementation anchors:
 - `app/src/lib/blinkoEndpoint.ts` — remote API endpoint used by Tauri clients.
 - `app/src/components/BlinkoSettings/TaskSetting.tsx` — Settings → Schedule Task
   (archive + scheduled `.bk` backup UI).
-- `server/jobs/backupJob.ts` / `server/jobs/archivejob.ts` — pg-boss scheduled
-  `.bk` backup (retain 7) and auto-archive workers.
+- `server/jobs/backupJob.ts` / `server/jobs/archivejob.ts` — bounded in-process
+  schedules for `.bk` backup (retain 7) and auto-archive; no database polling
+  occurs between due times.
 - `server/lib/bkemoTransfer.ts` — portable `.bk` / markdown / JSON transfer.
 
 ## Data and API conventions
@@ -118,8 +126,11 @@ Important implementation anchors:
 
 ## Local development
 
-The repository expects Bun 1.2.8 or newer and Node 20 or newer. The preferred
-development data plane is Neon PostgreSQL plus Cloudflare R2 for attachments.
+The repository expects Bun 1.2.8 or newer and Node 20 or newer. Normal
+development uses local PostgreSQL and local attachment storage. Use an explicit,
+auto-suspending Neon development branch plus Cloudflare R2 only for integration
+testing that requires the hosted data plane; never point local development at
+the production branch.
 The full local app process runs on `http://localhost:1111`.
 
 ```bash
@@ -128,10 +139,12 @@ bun run prisma:generate
 ./scripts/run-dev.sh
 ```
 
-`./scripts/run-dev.sh` is a foreground launcher. When `.env` points at an
-approved Neon development branch (`.bkemo/dev-existing-neon-attach.json`), it
-uses that database and skips local Postgres. Otherwise it bootstraps local
-PostgreSQL on port `5433` so you can attach Neon and configure R2 from
+`./scripts/run-dev.sh` is a foreground launcher. It bootstraps local PostgreSQL
+on port `5433` when `.env` uses the local URL. A `.env` that points at an
+approved Neon development branch (`.bkemo/dev-existing-neon-attach.json`) is
+accepted only when `BKEMO_DEV_USE_NEON=true`; otherwise the launcher stops
+instead of consuming remote compute accidentally. You can attach Neon and
+configure R2 from
 Settings → Storage (`BKEMO_DEV_ALLOW_EXISTING_NEON=true`, then Verify active
 setup). `--reset` and `--stop` apply only to that local bootstrap database.
 

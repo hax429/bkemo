@@ -1,4 +1,5 @@
 import { PgBoss } from 'pg-boss';
+import { runtimeDatabaseUrl } from './runtimeDatabaseUrl';
 
 let boss: PgBoss | null = null;
 
@@ -8,7 +9,7 @@ let boss: PgBoss | null = null;
  */
 export async function getPgBoss(): Promise<PgBoss> {
   if (!boss) {
-    const connectionString = process.env.DATABASE_URL;
+    const connectionString = runtimeDatabaseUrl();
     
     if (!connectionString) {
       throw new Error('DATABASE_URL environment variable is not set');

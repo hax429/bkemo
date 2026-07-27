@@ -173,7 +173,8 @@ function AppRoutes() {
       // Bootstrap establishes a race-safe server cursor, then the existing
       // cache-first views perform one full reconciliation.
       onBootstrap: () => { blinkoStore.updateTicker++; },
-      pollMs: 10_000,
+      pollMs: 60_000,
+      idleMs: 5 * 60_000,
     });
     const onSyncNow = () => { void controller.syncNow(); };
     eventBus.on('bkemo:sync-now', onSyncNow);

@@ -41,6 +41,7 @@ model accounts {
   aiScheduledTasks aiScheduledTask[]
   accessTokens     accessToken[]
   noteChanges      noteChange[]
+  composeDraft     composeDraft?
 }
 
 // Named, scope-limited API access tokens (GitHub-PAT style). The actual bearer
@@ -242,6 +243,36 @@ model noteChange {
   account accounts @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   @@index([accountId, id])
+}
+
+model composeDraft {
+  id             Int       @id @default(autoincrement())
+  accountId      Int       @unique
+  content        String    @default("") @db.Text
+  type           Int       @default(0)
+  isImportant    Boolean   @default(false)
+  isUrgent       Boolean   @default(false)
+  dueDate        DateTime? @db.Timestamptz(6)
+  revision       Int       @default(1)
+  writerId       String?   @db.VarChar(128)
+  leaseExpiresAt DateTime? @db.Timestamptz(6)
+  createdAt      DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime  @updatedAt @db.Timestamptz(6)
+
+  account accounts @relation(fields: [accountId], references: [id], onDelete: Cascade)
+}
+
+model systemSchedule {
+  id         Int       @id @default(autoincrement())
+  name       String    @unique @db.VarChar(128)
+  cron       String    @db.VarChar(128)
+  timezone   String    @default("UTC") @db.VarChar(64)
+  enabled    Boolean   @default(false)
+  lastRunAt  DateTime? @db.Timestamptz(6)
+  lastStatus String?   @db.VarChar(32)
+  lastOutput Json?     @db.Json
+  createdAt  DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt  DateTime  @updatedAt @db.Timestamptz(6)
 }
 
 model reaction {

@@ -9,7 +9,6 @@ import { unlink } from 'fs/promises';
 import { FileService } from '../lib/files';
 import path from 'path';
 import fs from 'fs';
-import { getPgBoss } from '../lib/pgBoss';
 import { prisma } from '../prisma';
 import { TRPCError } from '@trpc/server';
 import {
@@ -154,72 +153,29 @@ export const taskRouter = router({
     .input(z.void())
     .output(z.array(taskInfoSchema))
     .query(async () => {
-      const boss = await getPgBoss();
-      const schedules = await boss.getSchedules();
-      const passphraseReady = await hasScheduledBackupPassphrase();
+      const [schedules, passphraseReady, backupStatus] = await Promise.all([
+        prisma.systemSchedule.findMany({
+          where: { name: { in: [ARCHIVE_BLINKO_TASK_NAME, DBBAK_TASK_NAME] } },
+        }),
+        hasScheduledBackupPassphrase(),
+        prisma.cache.findUnique({ where: { key: BACKUP_STATUS_CACHE_KEY } }),
+      ]);
+      const byName = new Map(schedules.map((schedule) => [schedule.name, schedule]));
 
-      const results = await Promise.all(schedules.map(async (s) => {
-        let lastRun: Date | null = null;
-        let output: any = null;
-
-        try {
-          const lastJob = await prisma.$queryRaw<{ completed_on: Date | null }[]>`
-            SELECT "completed_on"
-            FROM pgboss.job
-            WHERE name = ${s.name} AND state = 'completed'
-            ORDER BY "completed_on" DESC
-            LIMIT 1
-          `;
-          if (lastJob.length > 0 && lastJob[0].completed_on) {
-            lastRun = lastJob[0].completed_on;
-          }
-        } catch {
-          // pgboss tables might not exist yet
-        }
-
-        if (s.name === DBBAK_TASK_NAME) {
-          const cached = await prisma.cache.findUnique({ where: { key: BACKUP_STATUS_CACHE_KEY } });
-          if (cached?.value) output = cached.value;
-        }
-
+      return [ARCHIVE_BLINKO_TASK_NAME, DBBAK_TASK_NAME].map((name) => {
+        const schedule = byName.get(name);
         return {
-          name: s.name,
-          schedule: s.cron,
-          timezone: (s as any).timezone || (s.data as any)?.timezone || 'UTC',
-          lastRun,
-          isRunning: true,
-          output,
-          hasPassphrase: s.name === DBBAK_TASK_NAME ? passphraseReady : undefined,
+          name,
+          schedule: schedule?.cron ?? '0 0 * * *',
+          timezone: schedule?.timezone ?? 'UTC',
+          lastRun: schedule?.lastRunAt ?? null,
+          isRunning: schedule?.enabled ?? false,
+          output: name === DBBAK_TASK_NAME
+            ? (backupStatus?.value ?? schedule?.lastOutput ?? null)
+            : (schedule?.lastOutput ?? null),
+          hasPassphrase: name === DBBAK_TASK_NAME ? passphraseReady : undefined,
         };
-      }));
-
-      // Always surface backup/archive rows even when stopped, so the UI can show enable controls.
-      const known = new Set(results.map((row) => row.name));
-      if (!known.has(ARCHIVE_BLINKO_TASK_NAME)) {
-        results.push({
-          name: ARCHIVE_BLINKO_TASK_NAME,
-          schedule: '0 0 * * *',
-          timezone: 'UTC',
-          lastRun: null,
-          isRunning: false,
-          output: null,
-          hasPassphrase: undefined,
-        });
-      }
-      if (!known.has(DBBAK_TASK_NAME)) {
-        const cached = await prisma.cache.findUnique({ where: { key: BACKUP_STATUS_CACHE_KEY } });
-        results.push({
-          name: DBBAK_TASK_NAME,
-          schedule: '0 0 * * *',
-          timezone: 'UTC',
-          lastRun: null,
-          isRunning: false,
-          output: cached?.value ?? null,
-          hasPassphrase: passphraseReady,
-        });
-      }
-
-      return results.filter((row) => row.name === ARCHIVE_BLINKO_TASK_NAME || row.name === DBBAK_TASK_NAME);
+      });
     }),
 
   upsertTask: authProcedure.use(requireManageSite)
