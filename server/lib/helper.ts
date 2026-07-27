@@ -109,34 +109,72 @@ export async function generateFeed(userId: number, origin: string, rows: number 
   return feed;
 }
 
-let isLoading = false
+const PLACEHOLDER_JWT_SECRET = 'my_ultra_secure_nextauth_secret';
+let cachedJwtSecret: string | null = null;
+let jwtSecretLoad: Promise<string> | null = null;
 
+function explicitJwtSecret() {
+  const secret = process.env.JWT_SECRET;
+  if (!secret || secret === PLACEHOLDER_JWT_SECRET) return null;
+  return secret;
+}
+
+/**
+ * Resolve the JWT signing secret once per process and cache it.
+ *
+ * Order: JWT_SECRET env → DB config → NEXTAUTH_SECRET env → generate.
+ * Caching matters for Neon scale-to-zero: after the first resolve, JWT
+ * verification no longer needs a live database connection.
+ */
 export const getNextAuthSecret = async () => {
-  const configKey = 'JWT_SECRET';
-  let secret = process.env.JWT_SECRET;
-  if (isLoading) {
-    return secret!
+  if (cachedJwtSecret) return cachedJwtSecret;
+
+  const fromEnv = explicitJwtSecret();
+  if (fromEnv) {
+    cachedJwtSecret = fromEnv;
+    return fromEnv;
   }
-  if (!secret || secret === 'my_ultra_secure_nextauth_secret') {
-    const savedSecret = await prisma.config.findFirst({
-      where: { key: configKey }
-    });
-    if (savedSecret) {
-      // @ts-ignore
-      secret = savedSecret.config.value as string;
-    } else {
+
+  if (!jwtSecretLoad) {
+    jwtSecretLoad = (async () => {
+      const configKey = 'JWT_SECRET';
+      try {
+        const savedSecret = await prisma.config.findFirst({ where: { key: configKey } });
+        if (savedSecret) {
+          // @ts-ignore
+          const value = savedSecret.config.value as string;
+          if (value) {
+            cachedJwtSecret = value;
+            return value;
+          }
+        }
+      } catch (error) {
+        const fallback = process.env.NEXTAUTH_SECRET;
+        if (fallback && fallback !== PLACEHOLDER_JWT_SECRET) {
+          console.warn('JWT secret DB lookup failed; using NEXTAUTH_SECRET fallback:', error);
+          cachedJwtSecret = fallback;
+          return fallback;
+        }
+        jwtSecretLoad = null;
+        throw error;
+      }
+
+      const fallback = process.env.NEXTAUTH_SECRET;
+      if (fallback && fallback !== PLACEHOLDER_JWT_SECRET) {
+        cachedJwtSecret = fallback;
+        return fallback;
+      }
+
       const newSecret = crypto.randomBytes(32).toString('base64');
       await prisma.config.create({
-        data: {
-          key: configKey,
-          config: { value: newSecret }
-        }
+        data: { key: configKey, config: { value: newSecret } },
       });
-      secret = newSecret;
-    }
+      cachedJwtSecret = newSecret;
+      return newSecret;
+    })();
   }
-  isLoading = false
-  return secret;
+
+  return jwtSecretLoad;
 }
 
 export const generateApiToken = async (user: { id: number, name: string, role: string }, permissions?: string[]) => {

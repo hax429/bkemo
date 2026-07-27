@@ -226,7 +226,9 @@ For a new systemd host, the required shape is:
    `DATABASE_URL` and Cloudflare R2 for attachments (configured in app storage
    settings after first boot).
 2. Clone `hax429/bkemo` and create a production `.env` with Neon `DATABASE_URL`,
-   `NEXTAUTH_SECRET`, `NEXTAUTH_URL`, `TRUST_PROXY=1`, and secure-cookie settings.
+   `JWT_SECRET` (or `NEXTAUTH_SECRET` as bootstrap fallback), `NEXTAUTH_URL`,
+   `TRUST_PROXY=1`, and secure-cookie settings. Prefer an explicit `JWT_SECRET`
+   so token verification does not need a live database after Neon scales to zero.
 3. Run `bun install`, Prisma generation/migrations, `bun run build:web`, and
    `bun run build:seed`.
 4. Ensure `server/public` resolves to `dist/public` and create the required

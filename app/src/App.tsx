@@ -16,7 +16,7 @@ import { getTokenData, setNavigate } from '@/components/Auth/auth-client';
 import { BlinkoStore } from '@/store/blinkoStore';
 import { useAndroidShortcuts } from '@/lib/hooks';
 import { useInitialHotkeySetup } from '@/hooks/useInitialHotkeySetup';
-import { isInTauri, isDesktop } from "@/lib/tauriHelper";
+import { isInTauri, isDesktop, isMacOS } from "@/lib/tauriHelper";
 import { listen } from "@tauri-apps/api/event";
 import QuickNotePage from "./pages/quicknote";
 import { useQuicknoteHotkey } from "./hooks/useQuicknoteHotkey";
@@ -106,7 +106,11 @@ function AppRoutes() {
         if (tokenData) {
           userStore.tokenData.value = tokenData;
           userStore.isSetup = true;
-        } else {
+          return;
+        }
+        // Web bootstrap always returns null — never wipe the localStorage session.
+        // Only a missing macOS Keychain token means the native app is logged out.
+        if (isInTauri() && isMacOS()) {
           userStore.tokenData.value = null;
           userStore.isSetup = false;
         }
