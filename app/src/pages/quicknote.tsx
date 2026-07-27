@@ -267,7 +267,6 @@ const QuickNotePage = observer(() => {
       <TiptapEditor
         ref={editorRef}
         value={shared.draft.content}
-        editable={!shared.locked}
         placeholder={`${t('quicknote.title') || 'Quick memo'} · / for commands, ⌘↵ to save`}
         autofocus
         onSubmit={send}
@@ -290,17 +289,11 @@ const QuickNotePage = observer(() => {
           return list.filter((n) => n.id != null).map((n) => ({ id: n.id!, title: noteLinkTitle(n.content) }));
         }}
       />
-      {shared.locked && (
-        <div className="h-stack" style={{ gap: 8, marginTop: 8, color: 'var(--fg-2)', fontSize: 11 }}>
-          <span>Editing on another device.</span>
-          <button className="bk-native-button is-ghost is-small" onClick={() => { void shared.takeOver(); }}>Take over</button>
-        </div>
-      )}
-      {shared.recovery && (
-        <div className="h-stack" style={{ gap: 8, marginTop: 8, color: 'var(--important)', fontSize: 11 }}>
-          <span>Offline version preserved.</span>
-          <button className="bk-native-button is-ghost is-small" onClick={shared.restoreRecovery}>Restore</button>
-          <button className="bk-native-button is-ghost is-small" onClick={shared.dismissRecovery}>Dismiss</button>
+      {shared.recoverable && (
+        <div className="h-stack" style={{ gap: 8, marginTop: 8, color: 'var(--fg-3)', fontSize: 11 }}>
+          <span>Recover draft</span>
+          <button className="bk-native-button is-ghost is-small" onClick={shared.restoreRecoverable}>Restore</button>
+          <button className="bk-native-button is-ghost is-small" onClick={shared.dismissRecoverable}>Dismiss</button>
         </div>
       )}
       {saveError && (

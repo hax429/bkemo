@@ -77,7 +77,13 @@ pub fn setup_system_tray(app: &AppHandle) -> Result<TrayIcon, Box<dyn std::error
                     }
                 }
                 "quit" => {
-                    app.exit(0);
+                    let _ = app.emit("draft-flush-before-quit", ());
+                    // Give webviews a brief window to keepalive-flush the local draft.
+                    let handle = app.clone();
+                    std::thread::spawn(move || {
+                        std::thread::sleep(std::time::Duration::from_millis(350));
+                        handle.exit(0);
+                    });
                 }
                 _ => {}
             }

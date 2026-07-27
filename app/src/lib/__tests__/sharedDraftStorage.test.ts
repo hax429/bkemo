@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, test } from 'vitest';
 import { NoteType } from '@shared/lib/types';
 import {
-  clearDraftRecovery,
+  clearLegacyDraftArtifacts,
   clearLocalSharedDraft,
   emptySharedDraft,
-  loadDraftRecovery,
+  loadDismissedServerUpdatedAt,
   loadLocalSharedDraft,
-  saveDraftRecovery,
+  saveDismissedServerUpdatedAt,
   saveLocalSharedDraft,
 } from '@/lib/sharedDraftStorage';
 
@@ -19,7 +19,6 @@ describe('shared draft local storage', () => {
     const draft = loadLocalSharedDraft('42');
 
     expect(draft.content).toBe('private draft');
-    expect(draft.pending).toBe(true);
     expect(localStorage.getItem('bkemo.quicknoteDraft')).toBeNull();
     expect(loadLocalSharedDraft('42').content).toBe('private draft');
     expect(loadLocalSharedDraft('7').content).toBe('');
@@ -30,12 +29,10 @@ describe('shared draft local storage', () => {
       ...emptySharedDraft(),
       content: 'first',
       type: NoteType.TODO,
-      pending: true,
     });
     saveLocalSharedDraft('2', {
       ...emptySharedDraft(),
       content: 'second',
-      pending: true,
     });
 
     expect(loadLocalSharedDraft('1').content).toBe('first');
@@ -44,15 +41,12 @@ describe('shared draft local storage', () => {
     expect(loadLocalSharedDraft('1').content).toBe('');
   });
 
-  test('preserves and clears an offline conflict recovery copy', () => {
-    const recovery = saveDraftRecovery('42', {
-      ...emptySharedDraft(),
-      content: 'offline version',
-      pending: true,
-    });
+  test('tracks dismissed server snapshots and clears legacy recovery keys', () => {
+    localStorage.setItem('bkemo.sharedDraftRecovery:42', '{"id":"x"}');
+    saveDismissedServerUpdatedAt('42', '2026-07-27T00:00:00.000Z');
 
-    expect(loadDraftRecovery('42')).toEqual(recovery);
-    clearDraftRecovery('42');
-    expect(loadDraftRecovery('42')).toBeNull();
+    expect(loadDismissedServerUpdatedAt('42')).toBe('2026-07-27T00:00:00.000Z');
+    clearLegacyDraftArtifacts('42');
+    expect(localStorage.getItem('bkemo.sharedDraftRecovery:42')).toBeNull();
   });
 });

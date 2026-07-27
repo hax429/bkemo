@@ -113,8 +113,11 @@ Do not merge the iOS SwiftUI app into this plan. Do not revive Tauri iOS for mac
 3. Escape and × also hide it.
 4. Hiding never clears content; the account-scoped draft survives app quit and
    is shared with the normal web composer.
-5. Changes persist locally immediately and autosave to the server two seconds
-   after typing stops. Only explicit Save creates a memo and clears the draft.
+5. Changes persist locally as you type. Neon receives a disaster snapshot only
+   when the macOS app quits or a browser tab closes — not while typing, and not
+   when the window is merely hidden. Missing a few last keystrokes is acceptable.
+   Only explicit Save creates a memo and clears the draft. A quiet Recover
+   control appears on another device; drafts are never auto-filled.
 6. While offline, editing remains local; final Save waits for connectivity
    rather than turning the compose draft into a saved note.
 

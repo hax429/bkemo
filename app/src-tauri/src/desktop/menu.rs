@@ -20,6 +20,7 @@ const FILES_ID: &str = "navigate/files";
 const ANALYTICS_ID: &str = "navigate/analytics";
 const AI_ID: &str = "navigate/ai";
 const HELP_ID: &str = "help/bkemo";
+const QUIT_ID: &str = "app/quit";
 const FORMAT_BOLD_ID: &str = "edit/bold";
 const FORMAT_ITALIC_ID: &str = "edit/italic";
 const FORMAT_UNDERLINE_ID: &str = "edit/underline";
@@ -94,6 +95,9 @@ pub fn setup_application_menu(app: &AppHandle) -> tauri::Result<()> {
     let settings = MenuItemBuilder::with_id(SETTINGS_ID, "Settings…")
         .accelerator("CmdOrCtrl+,")
         .build(app)?;
+    let quit = MenuItemBuilder::with_id(QUIT_ID, "Quit bkemo")
+        .accelerator("CmdOrCtrl+Q")
+        .build(app)?;
     let app_menu = SubmenuBuilder::new(app, "bkemo")
         .about(Some(AboutMetadata::default()))
         .separator()
@@ -105,7 +109,7 @@ pub fn setup_application_menu(app: &AppHandle) -> tauri::Result<()> {
         .hide_others()
         .show_all()
         .separator()
-        .quit()
+        .item(&quit)
         .build()?;
 
     let new_note = MenuItemBuilder::with_id(NEW_NOTE_ID, "New Note")
@@ -203,6 +207,14 @@ pub fn setup_application_menu(app: &AppHandle) -> tauri::Result<()> {
     app.set_menu(menu)?;
 
     app.on_menu_event(|app, event| match event.id().as_ref() {
+        QUIT_ID => {
+            let _ = app.emit("draft-flush-before-quit", ());
+            let handle = app.clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_millis(350));
+                handle.exit(0);
+            });
+        }
         NEW_NOTE_ID => {
             if let Some(window) = show_main(app) {
                 let _ = window.emit("native-new-note", ());

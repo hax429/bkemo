@@ -50,8 +50,11 @@ capture windows and shared settings still import them.
 - On macOS, the Tauri app registers Control+W by default for quick capture.
   The shortcut toggles a rounded `/quicknote` capture panel without discarding
   its persisted draft. Web capture and macOS Quick Note share one account-scoped
-  draft that saves locally immediately and to the server after two idle seconds;
-  it becomes a memo only on explicit Save. Escape and × hide it.
+  draft that saves locally as you type and snapshots to Neon only when the
+  browser tab closes or the macOS app quits (not when a window is merely
+  hidden). Closing never auto-fills another device; a quiet “Recover draft”
+  action appears only when a different server snapshot exists. Explicit Save
+  creates a memo and clears the draft. Escape and × hide Quick Note.
 - macOS stores only the bearer token in Keychain (`keyring`); each Tauri window
   hydrates its session from Keychain. Profile metadata remains in app data so
   cached notes and offline creation work without a connection.
@@ -66,8 +69,7 @@ capture windows and shared settings still import them.
   60-second recently-active poll catches disconnects and server restarts, stops
   after five minutes without keyboard/pointer activity, and catches up
   immediately on focus/activity. SSE stays connected without querying the
-  database. Draft events are consumed only by web and macOS; iOS sees finalized
-  notes only.
+  database. Compose drafts are not live-synced over SSE.
 - The Dock icon is present while the main window is active and hidden while the
   app runs in the background. The top-right menu bar icon is optional as long
   as the global shortcut remains enabled. Desktop auto-update is intentionally
@@ -94,8 +96,8 @@ Important implementation anchors:
   operation merging/replay.
 - `app/src/lib/noteSync.ts` — SSE lifecycle, idle-aware durable polling fallback,
   and cache reconciliation for web and Tauri.
-- `app/src/lib/useSharedDraft.ts` — local-first web/macOS draft ownership,
-  autosave, recovery, and typed draft events.
+- `app/src/lib/useSharedDraft.ts` — local-as-you-type compose draft, close-only
+  Neon snapshot, and opt-in recover.
 - `app/src/components/TiptapEditor/` — markdown-backed editor.
 - `app/src/lib/taskSyntax.ts` and `app/src/lib/noteLinks.ts` — inline task and
   memo-link parsing.

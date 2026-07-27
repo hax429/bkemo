@@ -184,7 +184,6 @@ const Composer = observer(function Composer({ onExpand }: { onExpand?: (draft: N
       <TiptapEditor
         ref={ref}
         value={content}
-        editable={!shared.locked}
         placeholder="Throw a thought in here…  ( -[] makes a task · due:today / due:06/25/26 sets a date )"
         onChange={onEditorChange}
         onSubmit={send}
@@ -197,17 +196,11 @@ const Composer = observer(function Composer({ onExpand }: { onExpand?: (draft: N
           return list.filter((n) => n.id != null).map((n) => ({ id: n.id!, title: noteLinkTitle(n.content) }));
         }}
       />
-      {shared.locked && (
-        <div className="h-stack" style={{ gap: 8, marginTop: 8, color: 'var(--fg-2)', fontSize: 11 }}>
-          <span>This draft is being edited on another device.</span>
-          <button className="bk-native-button is-ghost is-small" onClick={() => { void shared.takeOver(); }}>Take over</button>
-        </div>
-      )}
-      {shared.recovery && (
-        <div className="h-stack" style={{ gap: 8, marginTop: 8, color: 'var(--important)', fontSize: 11 }}>
-          <span>An offline version was preserved.</span>
-          <button className="bk-native-button is-ghost is-small" onClick={shared.restoreRecovery}>Restore</button>
-          <button className="bk-native-button is-ghost is-small" onClick={shared.dismissRecovery}>Dismiss</button>
+      {shared.recoverable && (
+        <div className="h-stack" style={{ gap: 8, marginTop: 8, color: 'var(--fg-3)', fontSize: 11 }}>
+          <span>Recover draft</span>
+          <button className="bk-native-button is-ghost is-small" onClick={shared.restoreRecoverable}>Restore</button>
+          <button className="bk-native-button is-ghost is-small" onClick={shared.dismissRecoverable}>Dismiss</button>
         </div>
       )}
       {att.fileInput}
@@ -335,7 +328,7 @@ const Composer = observer(function Composer({ onExpand }: { onExpand?: (draft: N
 
           {/* Right Action Button */}
           {(() => {
-            const canSend = !sending && !shared.locked && att.uploading === 0 && (content.trim().length > 0 || att.items.length > 0);
+            const canSend = !sending && att.uploading === 0 && (content.trim().length > 0 || att.items.length > 0);
             return (
               <button
                 onClick={send}

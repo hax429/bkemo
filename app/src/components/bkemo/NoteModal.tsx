@@ -381,7 +381,6 @@ export const NoteModal = observer(function NoteModal({ note, onClose, startFulls
           <TiptapEditor
             ref={ref}
             value={isNew ? shared.draft.content : (note.content ?? '')}
-            editable={!isNew || !shared.locked}
             autofocus
             onSubmit={save}
             onDropFiles={(files) => { void att.addFiles(files); }}
@@ -415,17 +414,11 @@ export const NoteModal = observer(function NoteModal({ note, onClose, startFulls
                 .map((n) => ({ id: n.id!, title: noteLinkTitle(n.content) }));
             }}
           />
-          {isNew && shared.locked && (
-            <div className="h-stack" style={{ gap: 8, marginTop: 10, color: 'var(--fg-2)', fontSize: 12 }}>
-              <span>This draft is being edited on another device.</span>
-              <button className="bk-native-button is-ghost is-small" onClick={() => { void shared.takeOver(); }}>Take over</button>
-            </div>
-          )}
-          {isNew && shared.recovery && (
-            <div className="h-stack" style={{ gap: 8, marginTop: 10, color: 'var(--important)', fontSize: 12 }}>
-              <span>An offline version was preserved.</span>
-              <button className="bk-native-button is-ghost is-small" onClick={shared.restoreRecovery}>Restore</button>
-              <button className="bk-native-button is-ghost is-small" onClick={shared.dismissRecovery}>Dismiss</button>
+          {isNew && shared.recoverable && (
+            <div className="h-stack" style={{ gap: 8, marginTop: 10, color: 'var(--fg-3)', fontSize: 12 }}>
+              <span>Recover draft</span>
+              <button className="bk-native-button is-ghost is-small" onClick={shared.restoreRecoverable}>Restore</button>
+              <button className="bk-native-button is-ghost is-small" onClick={shared.dismissRecoverable}>Dismiss</button>
             </div>
           )}
           {/* Already-attached files + pending uploads. */}
@@ -601,7 +594,7 @@ export const NoteModal = observer(function NoteModal({ note, onClose, startFulls
           )}
           <span className="spacer" />
           {note.id && <button onClick={trash} style={{ background: 'transparent', border: '1px solid #5C2A2A', color: '#E0696B', padding: '5px 12px', borderRadius: 'var(--radius)', fontSize: 12 }}>Trash</button>}
-          <button onClick={save} disabled={saving || (isNew && shared.locked)} style={{ background: 'var(--accent)', border: 'none', color: '#fff', padding: '5px 14px', borderRadius: 'var(--radius)', fontSize: 12, fontWeight: 500, opacity: saving || (isNew && shared.locked) ? 0.6 : 1 }}>Save · ⌘↵</button>
+          <button onClick={save} disabled={saving} style={{ background: 'var(--accent)', border: 'none', color: '#fff', padding: '5px 14px', borderRadius: 'var(--radius)', fontSize: 12, fontWeight: 500, opacity: saving ? 0.6 : 1 }}>Save · ⌘↵</button>
         </div>
       </div>
       )}

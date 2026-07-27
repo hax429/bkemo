@@ -2,6 +2,7 @@ import { NoteType } from '@shared/lib/types';
 
 const LEGACY_QUICKNOTE_KEY = 'bkemo.quicknoteDraft';
 const CLIENT_ID_KEY = 'bkemo.sharedDraftClientId';
+const DISMISSED_KEY_PREFIX = 'bkemo.sharedDraftDismissed:';
 
 export type SharedDraftFields = {
   content: string;
@@ -12,15 +13,7 @@ export type SharedDraftFields = {
 };
 
 export type LocalSharedDraft = SharedDraftFields & {
-  revision: number;
   updatedAt: string;
-  pending: boolean;
-};
-
-export type DraftRecovery = {
-  id: string;
-  savedAt: string;
-  draft: LocalSharedDraft;
 };
 
 export const emptySharedDraft = (): LocalSharedDraft => ({
@@ -29,13 +22,11 @@ export const emptySharedDraft = (): LocalSharedDraft => ({
   isImportant: false,
   isUrgent: false,
   dueDate: null,
-  revision: 0,
   updatedAt: new Date(0).toISOString(),
-  pending: false,
 });
 
 const draftKey = (accountId: string | number) => `bkemo.sharedDraft:${accountId}`;
-const recoveryKey = (accountId: string | number) => `bkemo.sharedDraftRecovery:${accountId}`;
+const dismissedKey = (accountId: string | number) => `${DISMISSED_KEY_PREFIX}${accountId}`;
 
 function parse<T>(raw: string | null): T | null {
   if (!raw) return null;
@@ -47,11 +38,21 @@ function parse<T>(raw: string | null): T | null {
 }
 
 export function loadLocalSharedDraft(accountId: string | number): LocalSharedDraft {
-  const scoped = parse<LocalSharedDraft>(localStorage.getItem(draftKey(accountId)));
-  if (scoped) return scoped;
+  const scoped = parse<LocalSharedDraft & { revision?: number; pending?: boolean }>(
+    localStorage.getItem(draftKey(accountId)),
+  );
+  if (scoped) {
+    return {
+      content: scoped.content ?? '',
+      type: scoped.type ?? NoteType.BLINKO,
+      isImportant: !!scoped.isImportant,
+      isUrgent: !!scoped.isUrgent,
+      dueDate: scoped.dueDate ?? null,
+      updatedAt: scoped.updatedAt ?? new Date(0).toISOString(),
+    };
+  }
 
-  // One-time migration from the old, account-agnostic Quick Note key. Removing
-  // it prevents a later account from seeing the previous account's text.
+  // One-time migration from the old, account-agnostic Quick Note key.
   const legacy = localStorage.getItem(LEGACY_QUICKNOTE_KEY);
   localStorage.removeItem(LEGACY_QUICKNOTE_KEY);
   if (!legacy) return emptySharedDraft();
@@ -60,7 +61,6 @@ export function loadLocalSharedDraft(accountId: string | number): LocalSharedDra
     ...emptySharedDraft(),
     content: legacy,
     updatedAt: new Date().toISOString(),
-    pending: true,
   };
   saveLocalSharedDraft(accountId, migrated);
   return migrated;
@@ -82,20 +82,20 @@ export function getSharedDraftClientId(): string {
   return id;
 }
 
-export function saveDraftRecovery(accountId: string | number, draft: LocalSharedDraft): DraftRecovery {
-  const recovery: DraftRecovery = {
-    id: globalThis.crypto?.randomUUID?.() ?? `recovery-${Date.now()}`,
-    savedAt: new Date().toISOString(),
-    draft: { ...draft, pending: true },
-  };
-  localStorage.setItem(recoveryKey(accountId), JSON.stringify(recovery));
-  return recovery;
+/** Remember a dismissed server snapshot so it is not offered again until it changes. */
+export function loadDismissedServerUpdatedAt(accountId: string | number): string | null {
+  return localStorage.getItem(dismissedKey(accountId));
 }
 
-export function loadDraftRecovery(accountId: string | number): DraftRecovery | null {
-  return parse<DraftRecovery>(localStorage.getItem(recoveryKey(accountId)));
+export function saveDismissedServerUpdatedAt(accountId: string | number, updatedAt: string): void {
+  localStorage.setItem(dismissedKey(accountId), updatedAt);
 }
 
-export function clearDraftRecovery(accountId: string | number): void {
-  localStorage.removeItem(recoveryKey(accountId));
+export function clearDismissedServerUpdatedAt(accountId: string | number): void {
+  localStorage.removeItem(dismissedKey(accountId));
+}
+
+/** Remove leftover keys from the previous live-sync draft implementation. */
+export function clearLegacyDraftArtifacts(accountId: string | number): void {
+  localStorage.removeItem(`bkemo.sharedDraftRecovery:${accountId}`);
 }
