@@ -1,6 +1,5 @@
 import { Icon } from '@/components/Common/Iconify/icons';
-import { Button, DropdownTrigger, DropdownItem, DropdownMenu, Dropdown, Tooltip } from "@heroui/react";
-import { useTranslation } from "react-i18next";
+import { Tooltip } from "@heroui/react";
 import { observer } from "mobx-react-lite";
 
 type IProps = {
@@ -38,47 +37,3 @@ export const ItemWithTooltip = observer(({ content, toolTipContent }: { content:
       </div>
     </Tooltip>
 })
-
-
-interface SelectDropdownProps {
-  value?: string
-  placeholder?: string
-  icon?: string
-  options: Array<{
-    key: string
-    label: string
-  }>
-  onChange: (value: string) => void | Promise<void>
-}
-export const SelectDropdown = ({
-  value,
-  placeholder,
-  icon,
-  options,
-  onChange
-}: SelectDropdownProps) => {
-  const { t } = useTranslation()
-  return (
-    <Dropdown>
-      <DropdownTrigger>
-        <Button
-          variant='flat'
-          startContent={icon && <Icon icon={icon} width="20" height="20" />}
-        >
-          {t(value as string) || placeholder}
-        </Button>
-      </DropdownTrigger>
-      <DropdownMenu
-        aria-label="Selection"
-        onAction={async (key) => {
-          await onChange(key.toString())
-        }}
-        selectedKeys={[value || '']}
-      >
-        {options.map(option => (
-          <DropdownItem key={option.key}>{option.label}</DropdownItem>
-        ))}
-      </DropdownMenu>
-    </Dropdown>
-  )
-}

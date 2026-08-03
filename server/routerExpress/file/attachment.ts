@@ -2,6 +2,10 @@ import express from 'express';
 import { prisma } from '../../prisma';
 import { getTokenFromRequest } from '../../lib/helper';
 import { stableAttachmentPath } from '../../lib/attachmentPaths';
+import { attachmentIsGuestAvatar } from '../../lib/guestAvatarPaths';
+import { isOpenPublicShare } from '../../lib/notePublicAccess';
+import { verifyShareFileToken } from '../../lib/shareFileToken';
+import { noteHasSharePassword } from '../../lib/sharePassword';
 
 const router = express.Router();
 
@@ -13,17 +17,31 @@ router.get('/:portableId/file', async (req, res) => {
   const portableId = req.params.portableId;
   const attachment = await prisma.attachments.findUnique({
     where: { portableId },
-    include: { note: { select: { isShare: true, accountId: true } } },
+    include: {
+      note: {
+        select: {
+          isShare: true,
+          accountId: true,
+          sharePassword: true,
+          shareExpiryDate: true,
+        },
+      },
+    },
   });
   if (!attachment) return res.status(404).json({ error: 'Attachment not found' });
 
   const token = await getTokenFromRequest(req);
   const stablePath = stableAttachmentPath(attachment.portableId);
-  const [avatar, guestAvatar] = await Promise.all([
-    prisma.accounts.findFirst({ where: { image: stablePath }, select: { id: true } }),
-    prisma.comments.findFirst({ where: { guestAvatar: stablePath }, select: { id: true } }),
-  ]);
-  const publiclyReadable = attachment.isShare || attachment.note?.isShare || !!avatar || !!guestAvatar;
+  const avatar = await prisma.accounts.findFirst({ where: { image: stablePath }, select: { id: true } });
+  const noteIsOpenPublic = !!(attachment.note && isOpenPublicShare(attachment.note));
+  const shareFileToken = typeof req.query.shareFileToken === 'string' ? req.query.shareFileToken : '';
+  const shareTokenOk = verifyShareFileToken(shareFileToken, attachment.noteId ?? -1);
+  const attachmentPublic = !!attachment.isShare && !(attachment.note && noteHasSharePassword(attachment.note.sharePassword));
+  const publiclyReadable = attachmentPublic
+    || noteIsOpenPublic
+    || !!avatar
+    || attachmentIsGuestAvatar(attachment)
+    || (!!attachment.noteId && shareTokenOk);
   const owned = !!token && (
     token.role === 'superadmin'
     || attachment.accountId === Number(token.id)
@@ -37,6 +55,7 @@ router.get('/:portableId/file', async (req, res) => {
   // Browser image/audio elements authenticate with the existing same-origin
   // query token because they cannot attach an Authorization header.
   if (typeof req.query.token === 'string') query.set('token', req.query.token);
+  if (shareFileToken) query.set('shareFileToken', shareFileToken);
   const suffix = query.size ? `?${query.toString()}` : '';
   res.set('Cache-Control', 'private, no-store');
   return res.redirect(307, `${attachment.path}${suffix}`);

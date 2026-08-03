@@ -1,5 +1,11 @@
 # bkemo MCP Server — Design (planned)
 
+> **Historical plan (2026-07-31):** this stdio/REST-adapter design was not the
+> implementation that shipped. The current OAuth-protected Streamable HTTP
+> contract is documented in [`../agents/MCP.md`](../agents/MCP.md), and its
+> audited design record is
+> [`../../agents/plan/mcp-integration.md`](../../agents/plan/mcp-integration.md).
+
 Expose bkemo to LLM agents (Claude Desktop, Claude Code, the API) as an **MCP
 server** that wraps the **REST API you already built** — the `trpc-to-openapi`
 surface at `/api/v1/*` gated by **scoped access tokens**. No new backend: the MCP

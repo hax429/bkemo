@@ -1,4 +1,5 @@
 import { router, authProcedure, requireManageSite } from '../middleware';
+import { redactModelWithProvider } from '../lib/aiSecretRedaction';
 import { z } from 'zod';
 import { AiService } from '@server/aiServer';
 import { prisma } from '../prisma';
@@ -274,7 +275,7 @@ export const aiRouter = router({
       return await AiService.AIComment(input)
     }),
 
-  rebuildEmbeddingStart: authProcedure
+  rebuildEmbeddingStart: authProcedure.use(requireManageSite)
     .input(z.object({
       force: z.boolean().optional(),
       incremental: z.boolean().optional(),
@@ -285,21 +286,21 @@ export const aiRouter = router({
       return { success: true };
     }),
 
-  rebuildEmbeddingResume: authProcedure
+  rebuildEmbeddingResume: authProcedure.use(requireManageSite)
     .mutation(async () => {
       await requireEmbeddingModel();
       await RebuildEmbeddingJob.ResumeRebuild();
       return { success: true };
     }),
 
-  rebuildEmbeddingRetryFailed: authProcedure
+  rebuildEmbeddingRetryFailed: authProcedure.use(requireManageSite)
     .mutation(async () => {
       await requireEmbeddingModel();
       await RebuildEmbeddingJob.RetryFailedNotes();
       return { success: true };
     }),
 
-  rebuildEmbeddingStop: authProcedure
+  rebuildEmbeddingStop: authProcedure.use(requireManageSite)
     .mutation(async () => {
       await RebuildEmbeddingJob.StopRebuild();
       return { success: true };
@@ -444,7 +445,7 @@ export const aiRouter = router({
       }
     }),
 
-  getAllProviders: authProcedure
+  getAllProviders: authProcedure.use(requireManageSite)
     .query(async () => {
       return await AiModelFactory.getAllAiProviders();
     }),
@@ -494,7 +495,7 @@ export const aiRouter = router({
       });
     }),
 
-  getAllModels: authProcedure
+  getAllModels: authProcedure.use(requireManageSite)
     .query(async () => {
       return await prisma.aiModels.findMany({
         include: { provider: true },
@@ -502,7 +503,7 @@ export const aiRouter = router({
       });
     }),
 
-  getModelsByProvider: authProcedure
+  getModelsByProvider: authProcedure.use(requireManageSite)
     .input(z.object({
       providerId: z.number()
     }))
@@ -519,7 +520,8 @@ export const aiRouter = router({
       capability: z.string()
     }))
     .query(async ({ input }) => {
-      return await AiModelFactory.getAiModelsByCapability(input.capability);
+      const models = await AiModelFactory.getAiModelsByCapability(input.capability);
+      return models.map(redactModelWithProvider);
     }),
 
   createModel: authProcedure.use(requireManageSite)

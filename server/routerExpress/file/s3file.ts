@@ -7,6 +7,11 @@ import mime from "mime-types";
 import { getTokenFromRequest } from "../../lib/helper";
 import { prisma } from "../../prisma";
 import { stableAttachmentPath } from '../../lib/attachmentPaths';
+import { attachmentIsGuestAvatar, pathIsGuestAvatarStorage } from '../../lib/guestAvatarPaths';
+import { hardenFileContentType } from '../../lib/safeFileResponse';
+import { isOpenPublicShare } from '../../lib/notePublicAccess';
+import { verifyShareFileToken } from '../../lib/shareFileToken';
+import { noteHasSharePassword } from '../../lib/sharePassword';
 
 const router = express.Router();
 
@@ -137,47 +142,48 @@ router.get(/.*/, async (req: Request, res: Response) => {
             note: {
               select: {
                 isShare: true,
-                accountId: true
+                accountId: true,
+                sharePassword: true,
+                shareExpiryDate: true,
               }
             }
           }
         });
 
-        // Security fix: If file is not in database, deny access (prevent access to unregistered files)
-        if (!myFile) {
+        // Security fix: If file is not in database, deny unless dedicated guest-avatar storage
+        const isGuestAvatarFile = pathIsGuestAvatarStorage(fullPath) || attachmentIsGuestAvatar(myFile);
+        const noteIsOpenPublic = !!(myFile?.note && isOpenPublicShare(myFile.note));
+        const shareFileToken = typeof req.query.shareFileToken === 'string' ? req.query.shareFileToken : '';
+        const shareTokenOk = !!(myFile?.noteId && verifyShareFileToken(shareFileToken, myFile.noteId));
+        if (!myFile && !isGuestAvatarFile) {
           return res.status(404).json({ error: "File not found" });
         }
 
         if (!token) {
-          if (myFile.note?.isShare) {
-            // Public shared file, allow access
+          const attachmentPublic = !!myFile?.isShare && !(myFile.note && noteHasSharePassword(myFile.note.sharePassword));
+          if (noteIsOpenPublic || isGuestAvatarFile || attachmentPublic || shareTokenOk) {
+            // Public shared / guest avatar file
           } else {
-            const stablePath = stableAttachmentPath(myFile.portableId);
+            const stablePath = myFile ? stableAttachmentPath(myFile.portableId) : '';
             const isAvatar = await prisma.accounts.findFirst({
-              where: { image: { in: ['/api/s3file/' + fullPath, stablePath] } }
+              where: { image: { in: ['/api/s3file/' + fullPath, stablePath].filter(Boolean) } }
             });
-            const isGuestAvatar = !isAvatar && await prisma.comments.findFirst({
-              where: { guestAvatar: { in: ['/api/s3file/' + fullPath, stablePath] } }
-            });
-            if (!isAvatar && !isGuestAvatar) {
+            if (!isAvatar) {
               return res.status(401).json({ error: "Unauthorized" });
             }
           }
-        } else {
-          // Check if user owns the file or the note containing the file
+        } else if (myFile) {
           const isOwner = myFile.accountId === Number(token.id) || 
                           myFile.note?.accountId === Number(token.id) ||
                           token.role === 'superadmin';
+          const attachmentPublic = !!myFile.isShare && !(myFile.note && noteHasSharePassword(myFile.note.sharePassword));
           
-          if (!myFile.note?.isShare && !isOwner) {
+          if (!noteIsOpenPublic && !isOwner && !isGuestAvatarFile && !attachmentPublic && !shareTokenOk) {
             const stablePath = stableAttachmentPath(myFile.portableId);
             const isAvatar = await prisma.accounts.findFirst({
               where: { image: { in: ['/api/s3file/' + fullPath, stablePath] } }
             });
-            const isGuestAvatar = !isAvatar && await prisma.comments.findFirst({
-              where: { guestAvatar: { in: ['/api/s3file/' + fullPath, stablePath] } }
-            });
-            if (!isAvatar && !isGuestAvatar) {
+            if (!isAvatar) {
               return res.status(401).json({ error: "Unauthorized" });
             }
           }
@@ -222,10 +228,15 @@ router.get(/.*/, async (req: Request, res: Response) => {
       }
     }
     //@important if @aws-sdk/client-s3 is not 3.693.0, has 403 error
+    const hardened = hardenFileContentType(String(mime.lookup(fullPath) || 'application/octet-stream'), fullPath);
     const command = new GetObjectCommand({
       Bucket: config.s3Bucket,
       Key: decodeURIComponent(fullPath),
-      ResponseCacheControl: `public, max-age=${CACHE_DURATION}, immutable`
+      ResponseCacheControl: `public, max-age=${CACHE_DURATION}, immutable`,
+      ...(hardened.forceAttachment ? {
+        ResponseContentType: 'application/octet-stream',
+        ResponseContentDisposition: `attachment; filename="${encodeURIComponent(fullPath.split('/').pop() || 'file')}"`,
+      } : {}),
     });
 
     const signedUrl = await getSignedUrl(s3ClientInstance as any, command as any, {

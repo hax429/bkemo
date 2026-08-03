@@ -17,6 +17,10 @@ import { authProcedure, demoAuthMiddleware, publicProcedure, router, requireShar
 import { getBkemoSiteId } from '@server/lib/bkemoTransfer';
 import { latestNoteChangeCursor, publishNoteDirty, readNoteChanges } from '@server/lib/noteSync';
 import { randomBytes } from 'crypto';
+import { hashSharePassword, noteHasSharePassword, verifySharePassword } from '../lib/sharePassword';
+import { isOpenPublicShare } from '../lib/notePublicAccess';
+import { TRPCError } from '@trpc/server';
+import { appendShareFileToken, mintShareFileToken } from '../lib/shareFileToken';
 
 const extractHashtags = (input: string): string[] => {
   const withoutCodeBlocks = input.replace(/```[\s\S]*?```/g, '');
@@ -708,6 +712,9 @@ export const noteRouter = router({
                   content: true,
                   createdAt: true,
                   updatedAt: true,
+                  isShare: true,
+                  sharePassword: true,
+                  shareExpiryDate: true,
                 },
               },
             },
@@ -741,7 +748,7 @@ export const noteRouter = router({
         };
       }
 
-      if (note.sharePassword) {
+      if (noteHasSharePassword(note.sharePassword)) {
         if (!password) {
           return {
             hasPassword: true,
@@ -749,7 +756,10 @@ export const noteRouter = router({
           };
         }
 
-        if (password !== note.sharePassword) {
+        const ok = await verifySharePassword(password, note.sharePassword, async (hashed) => {
+          await prisma.notes.update({ where: { id: note.id }, data: { sharePassword: hashed } });
+        });
+        if (!ok) {
           throw new Error('Password error');
         }
       }
@@ -777,10 +787,51 @@ export const noteRouter = router({
         aiHistory = conversation?.messages ?? [];
       }
 
+      const shareFileToken = noteHasSharePassword(note.sharePassword) && note.shareEncryptedUrl
+        ? mintShareFileToken(note.id, note.shareEncryptedUrl)
+        : '';
+
       return {
-        hasPassword: !!note.sharePassword,
+        hasPassword: noteHasSharePassword(note.sharePassword),
         data: {
           ...note,
+          sharePassword: '',
+          content: (() => {
+            let content = note.content ?? '';
+            if (shareFileToken) {
+              for (const att of note.attachments ?? []) {
+                if (att.path) content = content.split(att.path).join(appendShareFileToken(att.path, shareFileToken));
+                const stable = att.portableId ? `/api/attachment/${att.portableId}/file` : '';
+                if (stable) content = content.split(stable).join(appendShareFileToken(stable, shareFileToken));
+              }
+            }
+            return content;
+          })(),
+          attachments: (note.attachments ?? []).map((att) => (
+            shareFileToken
+              ? { ...att, path: appendShareFileToken(att.path, shareFileToken) }
+              : att
+          )),
+          // Only expose linked note bodies that are themselves open public shares.
+          references: (note.references ?? []).map((ref) => {
+            const linked = ref.toNote;
+            if (!linked || !isOpenPublicShare(linked)) {
+              return {
+                toNoteId: ref.toNoteId,
+                toNote: linked
+                  ? { content: '', createdAt: linked.createdAt, updatedAt: linked.updatedAt }
+                  : null,
+              };
+            }
+            return {
+              toNoteId: ref.toNoteId,
+              toNote: {
+                content: linked.content,
+                createdAt: linked.createdAt,
+                updatedAt: linked.updatedAt,
+              },
+            };
+          }),
           ...(aiHistory ? { aiHistory } : {}),
         },
       };
@@ -789,7 +840,10 @@ export const noteRouter = router({
     .meta({ openapi: { method: 'POST', path: '/v1/note/detail', summary: 'Query note detail', protect: true, tags: ['Note'] } })
     .input(
       z.object({
-        id: z.number(),
+        id: z.number().optional(),
+        portableId: z.string().uuid().optional(),
+      }).refine((value) => value.id != null || !!value.portableId, {
+        message: 'id or portableId is required',
       }),
     )
     .output(
@@ -844,10 +898,11 @@ export const noteRouter = router({
       ]),
     )
     .mutation(async function ({ input, ctx }) {
-      const { id } = input;
+      const { id, portableId } = input;
       return await prisma.notes.findFirst({
         where: {
-          id,
+          ...(id != null ? { id } : {}),
+          ...(portableId ? { portableId } : {}),
           OR: [
             { accountId: Number(ctx.id) },
             { internalShares: { some: { accountId: Number(ctx.id) } } }
@@ -957,7 +1012,7 @@ export const noteRouter = router({
         isShare: note.isShare,
         isTop: note.isTop,
         isReviewed: note.isReviewed,
-        sharePassword: note.sharePassword || '',
+        sharePassword: noteHasSharePassword(note.sharePassword) ? '********' : '',
         shareEncryptedUrl: note.shareEncryptedUrl,
         shareExpiryDate: note.shareExpiryDate,
         accountId: note.accountId,
@@ -1098,6 +1153,7 @@ export const noteRouter = router({
           )
           .default([]),
         id: z.number().optional(),
+        expectedRevision: z.number().int().positive().optional(),
         isArchived: z.union([z.boolean(), z.null()]).default(null),
         isTop: z.union([z.boolean(), z.null()]).default(null),
         isShare: z.union([z.boolean(), z.null()]).default(null),
@@ -1256,8 +1312,8 @@ export const noteRouter = router({
 
         // For shared editors, we need to use a different where clause
         const whereClause = isSharedEditor
-          ? { id }  // Only filter by ID for shared editors
-          : { id, accountId: Number(ctx.id) }; // Filter by ID and accountId for owners
+          ? { id, ...(input.expectedRevision !== undefined && { revision: input.expectedRevision }) }
+          : { id, accountId: Number(ctx.id), ...(input.expectedRevision !== undefined && { revision: input.expectedRevision }) };
 
         const note = await prisma.notes.update({ where: whereClause, data: update });
         if (!isSharedEditor && (isArchived !== null || isRecycle !== null)) {
@@ -1368,7 +1424,12 @@ export const noteRouter = router({
             );
             if (needTobeAddedAttachmentsPath.length != 0) {
               // console.log({ needTobeAddedAttachmentsPath })
-              const attachmentsIds = await prisma.attachments.findMany({ where: { path: { in: needTobeAddedAttachmentsPath } } });
+              const attachmentsIds = await prisma.attachments.findMany({
+                where: {
+                  path: { in: needTobeAddedAttachmentsPath },
+                  accountId: Number(ctx.id),
+                },
+              });
               await prisma.attachments.updateMany({
                 where: { id: { in: attachmentsIds.map((i) => i.id) } },
                 data: { noteId: note.id },
@@ -1389,6 +1450,24 @@ export const noteRouter = router({
         return note;
       } else {
         try {
+          if (input.parentNoteId !== undefined && input.parentNoteId !== null) {
+            const parent = await prisma.notes.findFirst({
+              where: { id: input.parentNoteId, accountId: Number(ctx.id) },
+              select: { id: true },
+            });
+            if (!parent) {
+              throw new TRPCError({ code: 'FORBIDDEN', message: 'Parent note not found' });
+            }
+          }
+          if (references && references.length > 0) {
+            const ownedRefs = await prisma.notes.findMany({
+              where: { id: { in: references }, accountId: Number(ctx.id) },
+              select: { id: true },
+            });
+            if (ownedRefs.length !== references.length) {
+              throw new TRPCError({ code: 'FORBIDDEN', message: 'Referenced note not found' });
+            }
+          }
           const note = await prisma.notes.create({
             data: {
               content: content ?? '',
@@ -1410,7 +1489,12 @@ export const noteRouter = router({
           });
           await handleAddTags(tagTree, undefined, note.id);
           const requestedStoredPaths = await Promise.all(attachments.map((item) => FileService.resolveStoredPath(item.path)));
-          const attachmentsIds = await prisma.attachments.findMany({ where: { path: { in: requestedStoredPaths } } });
+          const attachmentsIds = await prisma.attachments.findMany({
+            where: {
+              path: { in: requestedStoredPaths },
+              accountId: Number(ctx.id),
+            },
+          });
           await prisma.attachments.updateMany({ where: { id: { in: attachmentsIds.map((i) => i.id) } }, data: { noteId: note.id } });
           //add references
           if (references && references.length > 0) {
@@ -1555,12 +1639,13 @@ export const noteRouter = router({
           shareId = await generateShareId();
         }
         const nextIncludeAi = includeAiHistory ?? Boolean(prevMeta.shareIncludeAiHistory);
+        const hashedPassword = await hashSharePassword(password);
         const updated = await prisma.notes.update({
           where: { id },
           data: {
             isShare: true,
             shareEncryptedUrl: shareId,
-            sharePassword: password,
+            sharePassword: hashedPassword,
             shareExpiryDate: expireAt,
             metadata: {
               ...prevMeta,
@@ -1665,6 +1750,20 @@ export const noteRouter = router({
     )
     .mutation(async function ({ input, ctx }) {
       const { noteId, type } = input;
+
+      const owned = await prisma.notes.findFirst({
+        where: {
+          id: noteId,
+          OR: [
+            { accountId: Number(ctx.id) },
+            { internalShares: { some: { accountId: Number(ctx.id) } } },
+          ],
+        },
+        select: { id: true },
+      });
+      if (!owned) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Note not found' });
+      }
 
       if (type === 'references') {
         const references = await prisma.noteReference.findMany({
@@ -1962,6 +2061,13 @@ export const noteRouter = router({
     ))
     .mutation(async function ({ input, ctx }) {
       const { id } = input;
+      const owned = await prisma.notes.findFirst({
+        where: { id, accountId: Number(ctx.id) },
+        select: { id: true },
+      });
+      if (!owned) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Note not found' });
+      }
       // Get users with internal access
       const sharedUsers = await prisma.noteInternalShare.findMany({
         where: { noteId: id },

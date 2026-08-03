@@ -270,7 +270,7 @@ export const pluginRouter = router({
       }
     }),
 
-  installPlugin: authProcedure.input(installPluginSchema.extend({
+  installPlugin: authProcedure.use(requireManageSite).input(installPluginSchema.extend({
     forceReinstall: z.boolean().optional().default(false)
   })).mutation(async ({ input }) => {
     const pluginDir = getPluginDir(input.name);
@@ -303,15 +303,19 @@ export const pluginRouter = router({
       // Use retry mechanism for download
       await downloadWithRetry(releaseUrl, tempZipPath);
 
-      // Extract zip file
+      // Extract zip file (reject zip-slip paths)
       const zipFile = await yauzl.open(tempZipPath);
+      const pluginRoot = path.resolve(pluginDir);
       for await (const entry of zipFile) {
+        const targetPath = path.resolve(pluginDir, entry.filename);
+        if (targetPath !== pluginRoot && !targetPath.startsWith(pluginRoot + path.sep)) {
+          throw new Error(`Invalid plugin archive entry: ${entry.filename}`);
+        }
         if (entry.filename.endsWith('/')) {
-          await fs.mkdir(path.join(pluginDir, entry.filename), { recursive: true });
+          await fs.mkdir(targetPath, { recursive: true });
           continue;
         }
 
-        const targetPath = path.join(pluginDir, entry.filename);
         await fs.mkdir(path.dirname(targetPath), { recursive: true });
 
         const readStream = await entry.openReadStream();
@@ -359,7 +363,7 @@ export const pluginRouter = router({
     return plugins;
   }),
 
-  uninstallPlugin: authProcedure
+  uninstallPlugin: authProcedure.use(requireManageSite)
     .input(
       z.object({
         id: z.number(),

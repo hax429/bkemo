@@ -20,7 +20,7 @@ export function decryptStorageCredential(value: unknown) {
   const stored = String(value ?? '');
   if (!stored || !stored.startsWith(PREFIX)) return stored;
   const [ivValue, tagValue, encryptedValue] = stored.slice(PREFIX.length).split(':');
-  if (!ivValue || !tagValue || !encryptedValue) throw new Error('Saved S3 credential is corrupted');
+  if (!ivValue || !tagValue || !encryptedValue) throw new Error('Saved encrypted credential is corrupted');
   const decipher = createDecipheriv('aes-256-gcm', encryptionKey(), Buffer.from(ivValue, 'base64url'));
   decipher.setAuthTag(Buffer.from(tagValue, 'base64url'));
   return Buffer.concat([decipher.update(Buffer.from(encryptedValue, 'base64url')), decipher.final()]).toString('utf8');

@@ -1,0 +1,72 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "workspaces": {
+    ".": {
+      "entry": [
+        "scripts/**/*.{ts,js,mjs}",
+        "prisma/seed.ts",
+        "prisma/resetpassword.ts",
+        "prisma/seedData.ts"
+      ],
+      "project": ["scripts/**/*.{ts,js,mjs}", "prisma/**/*.{ts,js}"]
+    },
+    "app": {
+      "entry": [
+        "src/main.tsx",
+        "src/**/*.test.{ts,tsx}",
+        "src/**/__tests__/**/*.{ts,tsx}",
+        "vite.config.ts",
+        "src/components/Common/Iconify/buildIcons.js",
+        "tauri-plugin-blinko/src/**/*.{ts,tsx}"
+      ],
+      "project": ["src/**/*.{ts,tsx,js,jsx}", "tauri-plugin-blinko/src/**/*.{ts,tsx}"],
+      "ignore": [
+        "src-tauri/**",
+        "dist/**",
+        "src/components/Common/Iconify/icons.tsx"
+      ],
+      "vite": true
+    },
+    "server": {
+      "entry": [
+        "index.ts",
+        "esbuild.config.ts",
+        "__tests__/**/*.{ts,tsx}",
+        "aiServer/**/*.test.ts",
+        "aiServer/**/__tests__/**/*.ts"
+      ],
+      "project": ["**/*.{ts,tsx}", "!vditor/**", "!public/**"],
+      "ignore": ["vditor/**", "public/**", "**/*.d.ts"]
+    },
+    "shared": {
+      "entry": ["lib/**/*.{ts,tsx}"],
+      "project": ["lib/**/*.{ts,tsx}"]
+    }
+  },
+  "ignore": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/.blinko/**",
+    "**/blinko-types/**",
+    "app/src-tauri/**",
+    "server/vditor/**"
+  ],
+  "ignoreBinaries": ["turbo", "dotenv", "prisma", "tsup", "ncp", "cross-env"],
+  "ignoreDependencies": [
+    "bun-types",
+    "vite-plugin-pwa",
+    "workbox-window",
+    "@heroui/theme",
+    "@tauri-apps/plugin-global-shortcut",
+    "@tauri-apps/plugin-http",
+    "@tauri-apps/plugin-process",
+    "@libsql/core",
+    "@libsql/linux-arm64-gnu",
+    "@libsql/linux-arm64-musl",
+    "@libsql/linux-x64-gnu",
+    "@libsql/linux-x64-musl",
+    "@prisma/engines",
+    "ncp",
+    "dotenv"
+  ]
+}

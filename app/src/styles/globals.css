@@ -142,14 +142,6 @@ body {
   z-index: 10000;
 }
 
-.swiper-3d .swiper-slide-shadow {
-  background: var(--swiper-3d-shadow) !important;
-}
-
-.ͼo.cm-focused .cm-matchingBracket {
-  color: var(--desc);
-}
-
 @keyframes fadeIn {
   from {
     opacity: 0;
@@ -163,7 +155,6 @@ body {
 @layer base {
   :root {
     --font-family: 'Inter', sans-serif;
-    --swiper-3d-shadow: rgba(0, 0, 0, .15);
     --background: hsl(0 0% 100%);
     --foreground: hsl(222.2 47.4% 11.2%);
     --secondbackground: #f8f8f8;
@@ -217,7 +208,6 @@ body {
   }
 
   .dark {
-    --swiper-3d-shadow: rgb(241 241 241 / 15%);
     --background: #0B0B0C;
     --foreground: #E1E1E1;
     --secondbackground: #1C1C1E;
@@ -314,27 +304,6 @@ body {
   display: none;
 }
 
-.mermaid-wrapper {
-  display: flex;
-  justify-content: center;
-  margin: 1rem 0;
-  padding: 1rem;
-  border-radius: 0.5rem;
-}
-
-.markmap-foreign {
-  color: var(--foreground);
-}
-
-.echarts-wrapper {
-  display: flex;
-  justify-content: center;
-  margin: 1rem 0;
-  padding: 1rem;
-  border-radius: 0.5rem;
-  background: var(--secondbackground);
-}
-
 .group[data-focus-visible="true"] .group-data-\[focus-visible\=true\]\:ring-2 {
   --tw-ring-shadow: 0 !important;
 }
@@ -342,8 +311,5 @@ body {
   body {
     padding-top: env(safe-area-inset-top);
     padding-bottom: env(safe-area-inset-bottom);
-  }
-  .vditor {
-    padding-bottom: calc(env(safe-area-inset-bottom) + 8px);
   }
 }

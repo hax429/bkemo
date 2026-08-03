@@ -217,7 +217,8 @@ export const getAiModelConfig = async (type: 'mainModel' | 'embeddingModel' | 'v
       title: model.provider.title,
       provider: model.provider.provider,
       baseURL: model.provider.baseURL,
-      apiKey: model.provider.apiKey
+      // Never expose provider secrets on this public-facing config helper.
+      apiKey: model.provider.apiKey ? '********' : null,
     }
   };
 };

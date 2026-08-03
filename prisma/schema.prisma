@@ -13,22 +13,22 @@ datasource db {
 }
 
 model accounts {
-  id               Int                 @id @default(autoincrement())
-  portableId       String              @unique @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name             String              @default("") @db.VarChar
-  email            String              @default("") @db.VarChar
-  nickname         String              @default("") @db.VarChar
-  password         String              @default("") @db.VarChar
-  image            String              @default("") @db.VarChar
-  apiToken         String              @default("") @db.VarChar
-  description      String              @default("") @db.Text
-  note             Int                 @default(0)
-  role             String              @default("") @db.VarChar
-  loginType        String              @default("") @db.VarChar
-  permissions      Json?               @db.Json
+  id               Int                      @id @default(autoincrement())
+  portableId       String                   @unique @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name             String                   @default("") @db.VarChar
+  email            String                   @default("") @db.VarChar
+  nickname         String                   @default("") @db.VarChar
+  password         String                   @default("") @db.VarChar
+  image            String                   @default("") @db.VarChar
+  apiToken         String                   @default("") @db.VarChar
+  description      String                   @default("") @db.Text
+  note             Int                      @default(0)
+  role             String                   @default("") @db.VarChar
+  loginType        String                   @default("") @db.VarChar
+  permissions      Json?                    @db.Json
   linkAccountId    Int?
-  createdAt        DateTime            @default(now()) @db.Timestamptz(6)
-  updatedAt        DateTime            @updatedAt @db.Timestamptz(6)
+  createdAt        DateTime                 @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime                 @updatedAt @db.Timestamptz(6)
   notes            notes[]
   configs          config[]
   tags             tag[]
@@ -40,8 +40,15 @@ model accounts {
   sharedNotes      noteInternalShare[]
   aiScheduledTasks aiScheduledTask[]
   accessTokens     accessToken[]
-  noteChanges      noteChange[]
-  composeDraft     composeDraft?
+  oauthCodes                 oauthAuthorizationCode[]
+  oauthTokens                oauthToken[]
+  oauthConsents              oauthConsent[]
+  integrationAudit           integrationAudit[]
+  idempotencyKeys            integrationIdempotency[]
+  integrationPairingCodes    integrationPairingCode[]
+  integrationDeviceCreds     integrationDeviceCredential[]
+  noteChanges                noteChange[]
+  composeDraft               composeDraft?
 }
 
 // Named, scope-limited API access tokens (GitHub-PAT style). The actual bearer
@@ -212,6 +219,7 @@ model notes {
   sortOrder         Int                 @default(0)
   createdAt         DateTime            @default(now()) @db.Timestamptz(6)
   updatedAt         DateTime            @updatedAt @db.Timestamptz(6)
+  revision          Int                 @default(1)
   attachments       attachments[]
   tags              tagsToNote[]
   account           accounts?           @relation(fields: [accountId], references: [id])
@@ -521,18 +529,166 @@ model aiScheduledTask {
 }
 
 model mcpServers {
-  id          Int      @id @default(autoincrement())
-  name        String   @db.VarChar(255)
-  description String?  @db.Text
-  type        String   @db.VarChar(50) // "stdio" | "sse" | "streamable-http"
-  command     String?  @db.Text // for stdio: "npx" or full command
-  args        Json?    @db.Json // for stdio: command arguments array
-  url         String?  @db.VarChar(500) // for sse/streamable-http
-  env         Json?    @db.Json // environment variables
-  headers     Json?    @db.Json // HTTP headers for sse/http
-  isEnabled   Boolean  @default(true)
-  createdAt   DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+  id               Int       @id @default(autoincrement())
+  name             String    @db.VarChar(255)
+  description      String?   @db.Text
+  type             String    @db.VarChar(50) // only "streamable-http" is accepted
+  command          String?   @db.Text // legacy field; always cleared by current routes
+  args             Json?     @db.Json // legacy field; always cleared by current routes
+  url              String?   @db.VarChar(500)
+  env              Json?     @db.Json // legacy field; always cleared by current routes
+  headers          Json?     @db.Json
+  allowedTools     Json?     @db.JsonB
+  timeoutMs        Int       @default(30000)
+  maxResultBytes   Int       @default(1048576)
+  secretsEncrypted Boolean   @default(false)
+  lastUsedAt       DateTime? @db.Timestamptz(6)
+  lastStatus       String?   @db.VarChar(32)
+  lastError        String?   @db.Text
+  isEnabled        Boolean   @default(true)
+  createdAt        DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime  @updatedAt @db.Timestamptz(6)
+}
+
+model oauthClient {
+  id                      String                   @id @db.Uuid
+  clientName              String                   @db.VarChar(255)
+  redirectUris            Json                     @db.JsonB
+  grantTypes              Json                     @db.JsonB
+  responseTypes           Json                     @db.JsonB
+  tokenEndpointAuthMethod String                   @default("none") @db.VarChar(64)
+  clientUri               String?                  @db.Text
+  logoUri                 String?                  @db.Text
+  createdAt               DateTime                 @default(now()) @db.Timestamptz(6)
+  updatedAt               DateTime                 @updatedAt @db.Timestamptz(6)
+  authorizationCodes      oauthAuthorizationCode[]
+  tokens                  oauthToken[]
+  consents                oauthConsent[]
+
+  @@index([createdAt])
+}
+
+model oauthAuthorizationCode {
+  id            String      @id @db.Uuid
+  codeHash      String      @unique @db.VarChar(64)
+  clientId      String      @db.Uuid
+  accountId     Int
+  redirectUri   String      @db.Text
+  scopes        Json        @db.JsonB
+  resource      String      @db.Text
+  codeChallenge String      @db.VarChar(128)
+  expiresAt     DateTime    @db.Timestamptz(6)
+  usedAt        DateTime?   @db.Timestamptz(6)
+  createdAt     DateTime    @default(now()) @db.Timestamptz(6)
+  client        oauthClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  account       accounts    @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([clientId, expiresAt])
+  @@index([accountId, createdAt])
+}
+
+model oauthToken {
+  id               String      @id @db.Uuid
+  accessTokenHash  String      @unique @db.VarChar(64)
+  refreshTokenHash String?     @unique @db.VarChar(64)
+  clientId         String      @db.Uuid
+  accountId        Int
+  scopes           Json        @db.JsonB
+  resource         String      @db.Text
+  expiresAt        DateTime    @db.Timestamptz(6)
+  refreshExpiresAt DateTime?   @db.Timestamptz(6)
+  revokedAt        DateTime?   @db.Timestamptz(6)
+  lastUsedAt       DateTime?   @db.Timestamptz(6)
+  createdAt        DateTime    @default(now()) @db.Timestamptz(6)
+  client           oauthClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  account          accounts    @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, createdAt])
+  @@index([clientId, revokedAt])
+}
+
+model oauthConsent {
+  id        String      @id @db.Uuid
+  clientId  String      @db.Uuid
+  accountId Int
+  scopes    Json        @db.JsonB
+  revokedAt DateTime?   @db.Timestamptz(6)
+  createdAt DateTime    @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime    @updatedAt @db.Timestamptz(6)
+  client    oauthClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  account   accounts    @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@unique([accountId, clientId])
+  @@index([clientId])
+}
+
+model integrationIdempotency {
+  id           String   @id @db.Uuid
+  accountId    Int
+  credentialId String   @db.VarChar(128)
+  operation    String   @db.VarChar(80)
+  key          String   @db.VarChar(128)
+  result       Json     @db.JsonB
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+  expiresAt    DateTime @db.Timestamptz(6)
+  account      accounts @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@unique([credentialId, operation, key])
+  @@index([accountId, createdAt])
+  @@index([expiresAt])
+}
+
+model integrationAudit {
+  id           String   @id @db.Uuid
+  accountId    Int
+  credentialId String   @db.VarChar(128)
+  source       String   @db.VarChar(32)
+  operation    String   @db.VarChar(80)
+  outcome      String   @db.VarChar(32)
+  targetId     String?  @db.Uuid
+  durationMs   Int
+  errorCode    String?  @db.VarChar(64)
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+  account      accounts @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, createdAt])
+  @@index([credentialId, createdAt])
+}
+
+// One-time codes issued from Settings → Security for Obsidian device pairing.
+// The raw code is shown once; only the hash is stored.
+model integrationPairingCode {
+  id          String    @id @db.Uuid
+  codeHash    String    @unique @db.VarChar(64)
+  accountId   Int
+  deviceLabel String    @default("") @db.VarChar(80)
+  scopes      Json      @db.JsonB
+  expiresAt   DateTime  @db.Timestamptz(6)
+  usedAt      DateTime? @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  account     accounts  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, createdAt])
+  @@index([expiresAt])
+}
+
+// Revocable opaque device credentials exchanged from pairing codes.
+// Used by the Obsidian companion plugin; never logged in plaintext.
+model integrationDeviceCredential {
+  id          String    @id @db.Uuid
+  tokenHash   String    @unique @db.VarChar(64)
+  accountId   Int
+  deviceLabel String    @default("") @db.VarChar(80)
+  scopes      Json      @db.JsonB
+  preview     String    @default("") @db.VarChar(16)
+  lastUsedAt  DateTime? @db.Timestamptz(6)
+  expiresAt   DateTime? @db.Timestamptz(6)
+  revokedAt   DateTime? @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  account     accounts  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, createdAt])
+  @@index([accountId, revokedAt])
 }
 
 model fonts {

@@ -27,6 +27,8 @@ import { reactionRouter } from './reaction';
 import { accessTokenRouter } from './accessToken';
 import { databaseMigrationRouter } from './databaseMigration';
 import { draftRouter } from './draft';
+import { oauthRouter } from './oauth';
+import { obsidianRouter } from './obsidian';
 export const appRouter = router({
   ai: aiRouter,
   notes: noteRouter,
@@ -50,6 +52,8 @@ export const appRouter = router({
   accessTokens: accessTokenRouter,
   databaseMigration: databaseMigrationRouter,
   draft: draftRouter,
+  oauth: oauthRouter,
+  obsidian: obsidianRouter,
 });
 
 export const createCaller = t.createCallerFactory(appRouter);

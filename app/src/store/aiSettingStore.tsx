@@ -198,12 +198,10 @@ export class AiSettingStore implements Store {
         function: async (data: {
             name: string;
             description?: string;
-            type: 'stdio' | 'sse' | 'streamable-http';
-            command?: string;
-            args?: string[];
+            type: 'streamable-http';
             url?: string;
-            env?: Record<string, string>;
             headers?: Record<string, string>;
+            allowedTools?: string[];
             isEnabled?: boolean;
         }) => {
             await PromiseCall(api.mcpServers.create.mutate(data));
@@ -216,12 +214,10 @@ export class AiSettingStore implements Store {
             id: number;
             name?: string;
             description?: string;
-            type?: 'stdio' | 'sse' | 'streamable-http';
-            command?: string;
-            args?: string[];
+            type?: 'streamable-http';
             url?: string;
-            env?: Record<string, string>;
             headers?: Record<string, string>;
+            allowedTools?: string[];
             isEnabled?: boolean;
         }) => {
             await PromiseCall(api.mcpServers.update.mutate(data));

@@ -27,6 +27,7 @@ import type { BkemoRoute } from './Sidebar';
 import { useMediaQuery } from 'usehooks-ts';
 import { DeveloperAiDebugSettings } from './ai/AIDebugPanel';
 import { HotkeySetting } from '@/components/BlinkoSettings/HotkeySetting';
+import { McpConnectionsScreen } from './McpConnectionsScreen';
 
 const mono: React.CSSProperties = { fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '.06em', color: 'var(--fg-3)', textTransform: 'uppercase' };
 
@@ -43,6 +44,7 @@ const GROUP_OF: Record<string, 'you' | 'system' | 'data'> = {
   storage: 'system',
   desktop: 'system',
   developer: 'system',
+  mcp: 'system',
   data: 'data',
   about: 'data',
 };
@@ -518,7 +520,8 @@ export const SettingsScreen = observer(function SettingsScreen({ prefs, onChange
     ...(user.canManageSite ? [
       { key: 'ai', title: 'AI', icon: 'hugeicons:ai-beautify', requireAdmin: true, component: <AiSetting /> },
       { key: 'task', title: 'Schedule Task', icon: 'tabler:list-check', requireAdmin: true, component: <TaskSetting /> },
-      { key: 'storage', title: 'Storage', icon: 'tabler:database', requireAdmin: true, component: <StorageScreen /> },
+    { key: 'storage', title: 'Storage', icon: 'tabler:database', requireAdmin: true, component: <StorageScreen /> },
+    { key: 'mcp', title: 'MCP', icon: 'tabler:tool', requireAdmin: true, component: <McpConnectionsScreen /> },
     ] : []),
     // Vite DEV only — never listed in production builds.
     ...(isAiDebugAvailable() ? [{

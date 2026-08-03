@@ -1,9 +1,9 @@
 /**
  * Access-token permission scopes for the public API.
  *
- * The server enforces permissions in `authProcedure` by checking that the called
- * tRPC procedure path contains one of the token's permission strings. Each scope
- * here expands to the concrete procedure paths it grants, so a token minted with
+ * The server enforces permissions in `authProcedure` by exact path match (or a
+ * trailing-`.` prefix grant such as `notifications.`). Each scope here expands
+ * to the concrete procedure paths it grants, so a token minted with
  * `notes:read` can only hit the read endpoints, `notes:write` the write ones, etc.
  *
  * Shared between server (minting + the scope catalogue endpoint) and client
@@ -29,7 +29,7 @@ export type AccessScopeDef = {
   id: AccessScope;
   label: string;
   description: string;
-  /** tRPC procedure-path fragments this scope grants (matched as substrings). */
+  /** Exact tRPC procedure paths, or prefix grants ending in `.` (e.g. `notifications.`). */
   paths: string[];
 };
 

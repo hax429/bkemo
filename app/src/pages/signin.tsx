@@ -10,11 +10,13 @@ import { PromiseState } from "@/store/standard/PromiseState";
 import { api, reinitializeTrpcApi } from "@/lib/trpc";
 import { GradientBackground } from "@/components/Common/GradientBackground";
 import { signIn } from "@/components/Auth/auth-client";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Link } from 'react-router-dom';
 import { saveBlinkoEndpoint, getSavedEndpoint, getBlinkoEndpoint } from "@/lib/blinkoEndpoint";
 import ReactMarkdown from 'react-markdown';
 import rehypeRaw from 'rehype-raw';
+import rehypeSanitize from 'rehype-sanitize';
+import { bkemoSanitizeSchema, safeHref } from '@/lib/safeMarkdown';
 import { BlinkoStore } from "@/store/blinkoStore";
 
 type OAuthProvider = {
@@ -34,6 +36,7 @@ export default function Component() {
   const [isTauriEnv, setIsTauriEnv] = useState(false);
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const blinko = RootStore.Get(BlinkoStore);
 
   useEffect(() => {
@@ -77,7 +80,8 @@ export default function Component() {
         }
 
         if (res?.ok) {
-          navigate('/');
+          const returnTo = searchParams.get('returnTo');
+          navigate(returnTo?.startsWith('/') && !returnTo.startsWith('//') ? returnTo : '/');
         }
 
         if (res?.error) {
@@ -243,17 +247,22 @@ export default function Component() {
             <div className="mt-2 text-center max-w-full">
               <div className="text-xs text-default-400 break-words px-4">
                 <ReactMarkdown
-                  rehypePlugins={[rehypeRaw]}
+                  rehypePlugins={[rehypeRaw, [rehypeSanitize, bkemoSanitizeSchema]]}
                   components={{
                     p: ({node, ...props}) => <span {...props} />,
-                    a: ({node, ...props}) => (
-                      <a
-                        {...props}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-default-400 hover:text-default-600 underline"
-                      />
-                    ),
+                    a: ({node, href, ...props}) => {
+                      const safe = safeHref(typeof href === 'string' ? href : undefined);
+                      if (!safe) return <span {...props} />;
+                      return (
+                        <a
+                          {...props}
+                          href={safe}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-default-400 hover:text-default-600 underline"
+                        />
+                      );
+                    },
                     strong: ({node, ...props}) => <strong {...props} />,
                     em: ({node, ...props}) => <em {...props} />,
                     br: ({node, ...props}) => <br {...props} />

@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { prisma } from '../prisma';
 import { router, publicProcedure } from '../middleware';
+import { isOpenPublicShare } from '../lib/notePublicAccess';
 
 /** Resolve the effective reactor id: logged-in account or anonymous guest id. */
 function reactorId(ctxId: string | number | undefined, guestId?: string): string {
@@ -9,13 +10,20 @@ function reactorId(ctxId: string | number | undefined, guestId?: string): string
   return guestId && guestId.trim() ? guestId.trim() : '';
 }
 
-/** A note is reactable if it's publicly shared, or owned by the caller. */
+/**
+ * Guests may only react on open public shares (no password, not expired).
+ * Owners may always react on their own notes.
+ */
 async function assertReactable(noteId: number, ctxId: string | number | undefined) {
-  const note = await prisma.notes.findFirst({ where: { id: noteId }, select: { isShare: true, accountId: true } });
+  const note = await prisma.notes.findFirst({
+    where: { id: noteId },
+    select: { isShare: true, accountId: true, sharePassword: true, shareExpiryDate: true },
+  });
   if (!note) throw new TRPCError({ code: 'NOT_FOUND', message: 'Note not found' });
   const isOwner = ctxId != null && note.accountId === Number(ctxId);
-  if (!note.isShare && !isOwner) {
-    throw new TRPCError({ code: 'FORBIDDEN', message: 'Note is not shared' });
+  if (isOwner) return;
+  if (!isOpenPublicShare(note)) {
+    throw new TRPCError({ code: 'FORBIDDEN', message: 'Note is not publicly reactable' });
   }
 }
 
@@ -25,6 +33,7 @@ export const reactionRouter = router({
     .input(z.object({ noteId: z.number(), guestId: z.string().optional() }))
     .output(z.array(z.object({ emoji: z.string(), count: z.number(), reactedByMe: z.boolean() })))
     .query(async function ({ input, ctx }) {
+      await assertReactable(input.noteId, ctx.id);
       const me = reactorId(ctx.id, input.guestId);
       const rows = await prisma.reaction.findMany({ where: { noteId: input.noteId } });
       const map = new Map<string, { count: number; reactedByMe: boolean }>();

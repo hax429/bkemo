@@ -25,6 +25,7 @@ const SETTINGS_PATHS: Record<string, string> = {
   ai: 'ai',
   task: 'tasks',
   storage: 'storage',
+  mcp: 'mcp',
   desktop: 'desktop',
   developer: 'developer',
   data: 'data',
@@ -44,6 +45,7 @@ export function normalizeBkemoRoute(route: BkemoRoute): BkemoRoute {
 export function routeFromPath(pathname: string): { route: BkemoRoute; known: boolean } {
   if (pathname === '/') return { route: 'home', known: true };
   if (/^\/n\/\d+$/.test(pathname)) return { route: 'home', known: true };
+  if (/^\/note\/[0-9a-f-]{36}$/i.test(pathname)) return { route: 'home', known: true };
   if (pathname === '/settings' || pathname.startsWith('/settings/')) return { route: 'settings', known: true };
   if (pathname.startsWith('/tag/')) return { route: `tag:${decodeURIComponent(pathname.slice(5))}`, known: true };
   const match = Object.entries(ROUTE_PATHS).find(([, path]) => path === pathname);

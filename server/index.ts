@@ -8,6 +8,7 @@ import { configureSession } from './routerExpress/auth/config';
 
 import { ArchiveJob } from './jobs/archivejob';
 import { BackupJob } from './jobs/backupJob';
+import { WeeklyKnowledgeJob } from './jobs/weeklyKnowledgeJob';
 import { stopAllScheduleTimers } from './jobs/baseScheduleJob';
 import { registerBackgroundJobLifecycle } from './lib/jobLifecycle';
 import { resumeAttachmentMigrationJobs } from './lib/attachmentStorageMigration';
@@ -34,6 +35,7 @@ import pluginRouter from './routerExpress/file/plugin';
 import rssRouter from './routerExpress/rss';
 import openaiRouter from './routerExpress/openai';
 import mcpRouter from './routerExpress/mcp';
+import obsidianRouter from './routerExpress/obsidian';
 import { noteSyncRouter } from './routerExpress/noteSync';
 
 // Vite integration
@@ -73,6 +75,7 @@ async function initializeJobs() {
     console.log('Initializing low-cost scheduled jobs...');
     await ArchiveJob.initialize();
     await BackupJob.initialize();
+    await WeeklyKnowledgeJob.initialize();
     await resumeAttachmentMigrationJobs();
     console.log('All scheduled jobs initialized successfully');
   } catch (error) {
@@ -146,6 +149,7 @@ async function setupApiRoutes(app: express.Application) {
   app.use('/api/file/delete', deleteRouter);
   app.use('/api/s3file', s3fileRouter);
   app.use('/api/attachment', attachmentRouter);
+  app.use('/api/v1/obsidian', obsidianRouter);
   
   // Helper function to serve vditor dependencies with gzip compression
   const serveVditorFile = (routePath: string, filePath: string) => {

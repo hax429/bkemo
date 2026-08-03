@@ -1,15 +1,20 @@
 import express from 'express';
 import path from 'path';
 import { createReadStream, statSync } from 'fs';
-import { stat, readFile, mkdir } from 'fs/promises';
+import { stat, readFile } from 'fs/promises';
 import mime from 'mime-types';
-import { UPLOAD_FILE_PATH, TEMP_PATH } from '../../../shared/lib/pathConstant';
+import { UPLOAD_FILE_PATH } from '../../../shared/lib/pathConstant';
 import crypto from 'crypto';
 import sharp from 'sharp';
 import { prisma } from '../../prisma';
 import { getTokenFromRequest } from '../../lib/helper';
 import { FileService } from '../../lib/files';
 import { stableAttachmentPath } from '../../lib/attachmentPaths';
+import { attachmentIsGuestAvatar, pathIsGuestAvatarStorage } from '../../lib/guestAvatarPaths';
+import { hardenFileContentType } from '../../lib/safeFileResponse';
+import { isOpenPublicShare } from '../../lib/notePublicAccess';
+import { verifyShareFileToken } from '../../lib/shareFileToken';
+import { noteHasSharePassword } from '../../lib/sharePassword';
 
 const router = express.Router();
 const STREAM_THRESHOLD = 5 * 1024 * 1024;
@@ -131,40 +136,50 @@ router.get(/.*/, async (req, res) => {
           note: {
             select: {
               isShare: true,
-              accountId: true
+              accountId: true,
+              sharePassword: true,
+              shareExpiryDate: true,
             }
           }
         }
       });
-      // console.log('myFile', myFile);
 
+      const stablePath = myFile ? stableAttachmentPath(myFile.portableId) : '';
+      const candidatePaths = ['/api/file/' + fullPath, stablePath].filter(Boolean) as string[];
+      const isGuestAvatarFile = pathIsGuestAvatarStorage(fullPath) || attachmentIsGuestAvatar(myFile);
+      const noteIsOpenPublic = !!(myFile?.note && isOpenPublicShare(myFile.note));
+      const shareFileToken = typeof req.query.shareFileToken === 'string' ? req.query.shareFileToken : '';
+      const shareTokenOk = !!(myFile?.noteId && verifyShareFileToken(shareFileToken, myFile.noteId));
+
+      // Unregistered files are not readable (except dedicated guest-avatar storage).
+      if (!myFile && !isGuestAvatarFile) {
+        return res.status(404).json({ error: "File not found" });
+      }
 
       if (!token) {
-        if (myFile?.note?.isShare) {
+        const attachmentPublic = !!myFile?.isShare && !(myFile.note && noteHasSharePassword(myFile.note.sharePassword));
+        if (noteIsOpenPublic || isGuestAvatarFile || attachmentPublic || shareTokenOk) {
+          // public
         } else {
-          const stablePath = myFile ? stableAttachmentPath(myFile.portableId) : '';
           const isAvatar = await prisma.accounts.findFirst({
-            where: { image: { in: ['/api/file/' + fullPath, stablePath].filter(Boolean) } }
+            where: { image: { in: candidatePaths } }
           });
-          const isGuestAvatar = !isAvatar && await prisma.comments.findFirst({
-            where: { guestAvatar: { in: ['/api/file/' + fullPath, stablePath].filter(Boolean) } }
-          });
-          if (!isAvatar && !isGuestAvatar) {
+          if (!isAvatar) {
             return res.status(401).json({ error: "Unauthorized" });
           }
         }
-      }
-
-      if (myFile && (!myFile?.note?.isShare && Number(token?.id) != myFile?.note?.accountId && !myFile?.accountId)) {
-        const stablePath = stableAttachmentPath(myFile.portableId);
-        const isAvatar = await prisma.accounts.findFirst({
-          where: { image: { in: ['/api/file/' + fullPath, stablePath] } }
-        });
-        const isGuestAvatar = !isAvatar && await prisma.comments.findFirst({
-          where: { guestAvatar: { in: ['/api/file/' + fullPath, stablePath] } }
-        });
-        if (!isAvatar && !isGuestAvatar) {
-          return res.status(401).json({ error: "Unauthorized" });
+      } else if (myFile) {
+        const isOwner = myFile.accountId === Number(token.id)
+          || myFile.note?.accountId === Number(token.id)
+          || token.role === 'superadmin';
+        const attachmentPublic = !!myFile.isShare && !(myFile.note && noteHasSharePassword(myFile.note.sharePassword));
+        if (!noteIsOpenPublic && !isOwner && !isGuestAvatarFile && !attachmentPublic && !shareTokenOk) {
+          const isAvatar = await prisma.accounts.findFirst({
+            where: { image: { in: candidatePaths } }
+          });
+          if (!isAvatar) {
+            return res.status(401).json({ error: "Unauthorized" });
+          }
         }
       }
     } catch (error) {
@@ -237,14 +252,16 @@ router.get(/.*/, async (req, res) => {
     const contentType = mime.lookup(filePath) || "application/octet-stream";
     const encodedFilename = encodeURIComponent(fullPath).replace(/['()]/g, (char) => '%' + char.charCodeAt(0).toString(16));
     const fallbackFilename = `file${path.extname(fullPath)}`;
+    const hardened = hardenFileContentType(String(contentType), fullPath);
 
     res.set({
-      "Content-Type": contentType,
+      "Content-Type": hardened.contentType,
       "ETag": etag,
-      "Cache-Control": "public, max-age=3600"
+      "Cache-Control": "public, max-age=3600",
+      "X-Content-Type-Options": "nosniff",
     });
 
-    if (isDownload) {
+    if (isDownload || hardened.forceAttachment) {
       res.set("Content-Disposition", `attachment; filename="${fallbackFilename}"; filename*=UTF-8''${encodedFilename}`);
     }
 

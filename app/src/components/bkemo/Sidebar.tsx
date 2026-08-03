@@ -116,7 +116,7 @@ export const Sidebar = observer(function Sidebar({ activeRoute, onNav, onNewMemo
   const tagsToShow = showMore ? tree : tree.slice(0, 3);
 
   return (
-    <div style={{ width: 248, height: '100%', flexShrink: 0, position: 'relative', background: 'color-mix(in srgb, var(--bg) 60%, #000 6%)', borderRight: '1px solid var(--border)' }}>
+    <div className="bk-nav-rail" style={{ width: 248, height: '100%', flexShrink: 0, position: 'relative', background: 'color-mix(in srgb, var(--bg) 60%, #000 6%)', borderRight: '1px solid var(--border)' }}>
       {isInTauri() && isMacOS() && (
         <div
           data-tauri-drag-region

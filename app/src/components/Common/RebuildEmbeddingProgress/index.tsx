@@ -28,7 +28,7 @@ function statusLabel(status: string, t: (key: string) => string) {
   return '';
 }
 
-export const ImportProgress = observer(({ force }: { force: boolean }) => {
+const ImportProgress = observer(({ force }: { force: boolean }) => {
   const { t } = useTranslation();
   const blinko = RootStore.Get(BlinkoStore);
   const theme = dialogThemeAttrs();

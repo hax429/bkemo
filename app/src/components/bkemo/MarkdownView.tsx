@@ -2,11 +2,13 @@ import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
+import rehypeSanitize from 'rehype-sanitize';
 import { PrismAsyncLight as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { renderMemoBody } from './renderMemoBody';
 import { NOTE_LINK_HREF_RE } from '@/lib/noteLinks';
 import { expandBkemoMarkSyntax } from '@/lib/bkemoMarkSyntax';
+import { bkemoSanitizeSchema, safeHref } from '@/lib/safeMarkdown';
 import { eventBus } from '@/lib/event';
 import { loadPrefs } from '@/lib/bkemoSettings';
 import '../TiptapEditor/tiptap.css';
@@ -57,7 +59,7 @@ export function MarkdownView({ content, dark: darkProp }: { content: string; dar
     <div className="tiptap-content">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
-        rehypePlugins={[rehypeRaw]}
+        rehypePlugins={[rehypeRaw, [rehypeSanitize, bkemoSanitizeSchema]]}
         components={{
           p: ({ children }) => <p>{hl(children)}</p>,
           // Code blocks render their own container (highlighter) — pass `pre`
@@ -73,7 +75,8 @@ export function MarkdownView({ content, dark: darkProp }: { content: string; dar
           h3: ({ children }) => <h3>{hl(children)}</h3>,
           mark: ({ children }) => <mark className="bk-highlight">{children}</mark>,
           a: ({ href, children }) => {
-            const m = typeof href === 'string' ? href.match(NOTE_LINK_HREF_RE) : null;
+            const safe = safeHref(href);
+            const m = typeof safe === 'string' ? safe.match(NOTE_LINK_HREF_RE) : null;
             if (m) {
               const id = Number(m[1]);
               // Internal memo link: open the target memo instead of navigating.
@@ -86,7 +89,8 @@ export function MarkdownView({ content, dark: darkProp }: { content: string; dar
                 </a>
               );
             }
-            return <a href={href} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>{children}</a>;
+            if (!safe) return <span>{children}</span>;
+            return <a href={safe} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>{children}</a>;
           },
         }}
       >

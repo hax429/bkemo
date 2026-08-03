@@ -29,6 +29,7 @@ import { Icon } from '@/components/Common/Iconify/icons';
 import { invoke } from '@tauri-apps/api/core';
 import { isDesktop, isInTauri } from '@/lib/tauriHelper';
 import { useSharedDraft } from '@/lib/useSharedDraft';
+import { ComposerToolbar } from './ComposerToolbar';
 
 const MAIN_WINDOW_PIN_KEY = 'bkemo.mainWindowPinned';
 
@@ -73,14 +74,15 @@ const TaskCheck = observer(function TaskCheck({ note }: { note: Note }) {
   );
 });
 
-const composerPill = (active: boolean, color: string): React.CSSProperties => ({
-  padding: '3px 9px', borderRadius: 100, fontSize: 11, fontFamily: 'var(--font-mono)', cursor: 'pointer',
-  border: `1px solid ${active ? color : 'var(--border-2)'}`,
-  background: active ? `color-mix(in srgb, ${color} 18%, transparent)` : 'transparent',
-  color: active ? color : 'var(--fg-2)',
-});
-
-const Composer = observer(function Composer({ onExpand }: { onExpand?: (draft: Note) => void }) {
+const Composer = observer(function Composer({
+  onExpand,
+  focusMode,
+  onToggleFocus,
+}: {
+  onExpand?: (draft: Note) => void;
+  focusMode: boolean;
+  onToggleFocus: () => void;
+}) {
   const blinko = RootStore.Get(BlinkoStore);
   const ref = useRef<TiptapEditorHandle>(null);
   const shared = useSharedDraft();
@@ -161,21 +163,24 @@ const Composer = observer(function Composer({ onExpand }: { onExpand?: (draft: N
     onExpand?.(draft);
   };
 
-  const showChrome = focused || content.trim().length > 0 || att.items.length > 0 || att.uploading > 0;
+  const showChrome = focused || content.trim().length > 0 || att.items.length > 0 || att.uploading > 0 || focusMode;
 
   return (
     <div
       {...att.dragProps}
+      className={`bk-composer-shell${focusMode ? ' is-focus-mode' : ''}`}
       style={{
         background: 'var(--bg-2)',
         // Single `border` shorthand (no separate borderColor) to avoid React's
         // shorthand/longhand conflict warning on focus/drag transitions.
-        border: `1px solid ${att.dragOver ? 'var(--accent)' : focused ? 'color-mix(in srgb, var(--accent) 55%, transparent)' : 'var(--border)'}`,
+        border: `1px solid ${att.dragOver ? 'var(--accent)' : focused || focusMode ? 'color-mix(in srgb, var(--accent) 55%, transparent)' : 'var(--border)'}`,
         borderRadius: 'var(--radius-lg, 14px)',
         padding: '16px 20px',
         marginBottom: 20,
-        transition: 'all 0.2s ease-in-out',
-        ...(focused ? {
+        transition: 'border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease',
+        position: 'relative',
+        zIndex: focusMode ? 2 : undefined,
+        ...(focused || focusMode ? {
           boxShadow: '0 0 0 4px var(--accent-soft), 0 12px 30px -10px rgba(0,0,0,0.5)',
           transform: 'translateY(-1px)',
         } : {}),
@@ -207,126 +212,31 @@ const Composer = observer(function Composer({ onExpand }: { onExpand?: (draft: N
       <PendingAttachments items={att.items} uploading={att.uploading} onRemove={att.remove} />
       {showChrome && (
         <div className="h-stack" style={{ gap: 8, marginTop: 12, borderTop: '1px solid var(--border)', paddingTop: 12, justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-          {/* List out everything as small icons/buttons underneath the editor */}
-          <div className="h-stack" style={{ gap: 6, flexWrap: 'wrap', alignItems: 'center', flex: 1 }}>
-            <button
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => ref.current?.editor?.chain().focus().toggleBulletList().run()}
-              style={{
-                width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6,
-                color: ref.current?.editor?.isActive('bulletList') ? 'var(--accent)' : 'var(--fg-2)',
-                background: ref.current?.editor?.isActive('bulletList') ? 'var(--hover)' : 'transparent',
-                fontSize: 14, border: 'none', cursor: 'pointer', transition: 'all 0.12s'
-              }}
-              title="Bulleted List"
-            >
-              •—
-            </button>
-            <button
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => ref.current?.editor?.chain().focus().toggleOrderedList().run()}
-              style={{
-                width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6,
-                color: ref.current?.editor?.isActive('orderedList') ? 'var(--accent)' : 'var(--fg-2)',
-                background: ref.current?.editor?.isActive('orderedList') ? 'var(--hover)' : 'transparent',
-                fontSize: 12, border: 'none', cursor: 'pointer', fontFamily: 'var(--font-mono)', transition: 'all 0.12s'
-              }}
-              title="Numbered List"
-            >
-              1.
-            </button>
-            <button
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => {
-                ref.current?.editor?.chain().focus().run();
-                ref.current?.insert('#');
-              }}
-              style={{
-                width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6,
-                color: 'var(--fg-2)', fontSize: 14, border: 'none', cursor: 'pointer', transition: 'all 0.12s'
-              }}
-              title="Add Tag (#)"
-            >
-              #
-            </button>
-            <button
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={att.openPicker}
-              style={{
-                width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6,
-                color: 'var(--fg-2)', fontSize: 15, border: 'none', cursor: 'pointer', transition: 'all 0.12s'
-              }}
-              title="Attach a file (any type)"
-            >
-              📎
-            </button>
-            <button
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={expand}
-              style={{
-                width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6,
-                color: 'var(--fg-2)', fontSize: 14, border: 'none', cursor: 'pointer', transition: 'all 0.12s'
-              }}
-              title="Expand to full-page (article) editor"
-            >
-              ⤢
-            </button>
-
-            <span style={{ width: 1, height: 16, background: 'var(--border-2)', margin: '0 6px' }} />
-
-            {/* Todo Type Toggle */}
-            <button
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => shared.update({ type: isTodo ? NoteType.BLINKO : NoteType.TODO })}
-              style={{
-                width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6,
-                color: isTodo ? 'var(--accent)' : 'var(--fg-2)',
-                background: isTodo ? 'var(--hover)' : 'transparent',
-                fontSize: 14, border: 'none', cursor: 'pointer', transition: 'all 0.12s'
-              }}
-              title="Toggle to-do task"
-            >
-              ☑
-            </button>
-
-            {/* Urgent & Important status toggles */}
-            <button
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => shared.update({ isImportant: !important })}
-              style={{
-                width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6,
-                color: important ? 'var(--important)' : 'var(--fg-2)',
-                background: important ? 'var(--hover)' : 'transparent',
-                fontSize: 14, border: 'none', cursor: 'pointer', fontWeight: 'bold', transition: 'all 0.12s'
-              }}
-              title="Important status"
-            >
-              !
-            </button>
-            <button
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => shared.update({ isUrgent: !urgent })}
-              style={{
-                width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6,
-                color: urgent ? 'var(--urgent)' : 'var(--fg-2)',
-                background: urgent ? 'var(--hover)' : 'transparent',
-                fontSize: 14, border: 'none', cursor: 'pointer', transition: 'all 0.12s'
-              }}
-              title="Urgent status"
-            >
-              ▲
-            </button>
-
-            {isTodo && (
+          <ComposerToolbar
+            editor={ref.current?.editor}
+            onTag={() => {
+              ref.current?.editor?.chain().focus().run();
+              ref.current?.insert('#');
+            }}
+            onAttach={att.openPicker}
+            onExpand={expand}
+            focusMode={focusMode}
+            onToggleFocus={onToggleFocus}
+            isTodo={isTodo}
+            onToggleTodo={() => shared.update({ type: isTodo ? NoteType.BLINKO : NoteType.TODO })}
+            important={!!important}
+            onToggleImportant={() => shared.update({ isImportant: !important })}
+            urgent={!!urgent}
+            onToggleUrgent={() => shared.update({ isUrgent: !urgent })}
+            afterFlags={isTodo ? (
               <label className="h-stack" style={{ gap: 6, fontSize: 11.5, color: 'var(--fg-2)', fontFamily: 'var(--font-mono)', marginLeft: 6 }}>
                 <span>due</span>
                 <input type="date" value={due} onChange={(e) => shared.update({ dueDate: e.target.value ? dayjs(e.target.value).endOf('day').toISOString() : null })} style={{ background: 'var(--bg)', color: 'var(--fg)', border: '1px solid var(--border-2)', borderRadius: 'var(--radius, 6px)', padding: '2px 6px', fontSize: 11.5, fontFamily: 'inherit' }} />
                 {due ? <span onClick={() => shared.update({ dueDate: null })} style={{ cursor: 'pointer', color: 'var(--fg-3)' }}>clear</span> : <span style={{ color: 'var(--fg-3)' }}>→ inbox</span>}
               </label>
-            )}
-          </div>
+            ) : null}
+          />
 
-          {/* Right Action Button */}
           {(() => {
             const canSend = !sending && att.uploading === 0 && (content.trim().length > 0 || att.items.length > 0);
             return (
@@ -558,11 +468,29 @@ export const Stream = observer(function Stream({ onOpen, onNew, onExpand, tag }:
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [menu, setMenu] = useState<{ x: number; y: number; note: Note } | null>(null);
   const [shareImageNote, setShareImageNote] = useState<Note | null>(null);
+  const [composerFocus, setComposerFocus] = useState(false);
   const [windowPinned, setWindowPinned] = useState(() => {
     try { return localStorage.getItem(MAIN_WINDOW_PIN_KEY) === '1'; } catch { return false; }
   });
   const scrollRef = useRef<HTMLDivElement>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const root = document.querySelector('.bkemo');
+    if (!root) return;
+    if (composerFocus) root.setAttribute('data-composer-focus', '1');
+    else root.removeAttribute('data-composer-focus');
+    return () => root.removeAttribute('data-composer-focus');
+  }, [composerFocus]);
+
+  useEffect(() => {
+    if (!composerFocus) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setComposerFocus(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [composerFocus]);
 
   // Responsive card columns (device-card-columns setting).
   const isMobile = useMediaQuery('(max-width: 767px)');
@@ -798,7 +726,7 @@ export const Stream = observer(function Stream({ onOpen, onNew, onExpand, tag }:
   return (
     <div className="v-stack" style={{ flex: 1, height: '100%', overflow: 'hidden' }}>
       {/* topbar */}
-      <div className="h-stack" style={{ height: 44, padding: '0 14px', borderBottom: '1px solid var(--border)', gap: 10, background: 'var(--bg)' }}>
+      <div className={`h-stack bk-stream-topbar${composerFocus ? ' is-dimmed' : ''}`} style={{ height: 44, padding: '0 14px', borderBottom: '1px solid var(--border)', gap: 10, background: 'var(--bg)' }}>
         <span style={{ color: 'var(--fg)', fontSize: 13, fontWeight: 500 }}>{tag ? '#' : '✦ '}{tag ?? 'Home'}</span>
         <span style={{ color: 'var(--fg-3)' }}>/</span>
         <span style={{ color: 'var(--fg-2)', fontSize: 13 }}>{tag ? 'Project' : 'Stream'}</span>
@@ -836,7 +764,11 @@ export const Stream = observer(function Stream({ onOpen, onNew, onExpand, tag }:
       <div ref={scrollRef} className="bk-scroll" style={{ flex: 1, overflow: 'auto' }}>
         <div style={{ maxWidth: maxW, margin: '0 auto', padding: '20px 20px 48px' }}>
           {showComposer ? (
-            <Composer onExpand={onExpand} />
+            <Composer
+              onExpand={onExpand}
+              focusMode={composerFocus}
+              onToggleFocus={() => setComposerFocus((v) => !v)}
+            />
           ) : (
             <div
               onClick={onNew}
@@ -847,6 +779,7 @@ export const Stream = observer(function Stream({ onOpen, onNew, onExpand, tag }:
               <span>New memo…</span>
             </div>
           )}
+          <div className={`bk-stream-feed${composerFocus ? ' is-dimmed' : ''}`}>
           {loading && notes.length === 0 ? (
             <div style={{ padding: 30, textAlign: 'center', color: 'var(--fg-3)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>Loading…</div>
           ) : groups.length === 0 ? (
@@ -895,6 +828,7 @@ export const Stream = observer(function Stream({ onOpen, onNew, onExpand, tag }:
               )}
             </>
           )}
+          </div>
         </div>
       </div>
 

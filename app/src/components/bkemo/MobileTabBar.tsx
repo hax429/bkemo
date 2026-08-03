@@ -80,7 +80,7 @@ export const MobileTabBar = observer(function MobileTabBar({ activeRoute, onNav,
   return (
     <>
       <div
-        className="h-stack"
+        className="h-stack bk-mobile-tabs"
         style={{
           borderTop: '1px solid var(--border)', padding: '8px 18px max(8px, env(safe-area-inset-bottom))',
           justifyContent: 'space-between', background: 'var(--bg-2)', flexShrink: 0,

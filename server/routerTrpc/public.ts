@@ -13,9 +13,8 @@ import { getGlobalConfig } from './config';
 import { prisma } from '../prisma';
 import * as fs from 'fs';
 import { getWithProxy } from '@server/lib/proxy';
-import path from 'path';
-import pathIsInside from 'path-is-inside';
 import { FileService } from '@server/lib/files';
+import { assertSafeOutboundUrl } from '@server/lib/safeOutboundUrl';
 
 const limit = pLimit(5);
 let refreshTicker = 0;
@@ -155,15 +154,19 @@ export const publicRouter = router({
       ]),
     )
     .query(async function ({ input }) {
+      const safe = await assertSafeOutboundUrl(input.url);
+      if (!safe.ok) {
+        return { title: '', favicon: '', description: '' };
+      }
       return cache.wrap(
-        input.url,
+        safe.url.href,
         async () => {
           try {
             const timeoutPromise = new Promise((_, reject) => {
               setTimeout(() => reject(console.error('timeout')), 5000);
             });
             const fetchPromise = limit(async () => {
-              const result: Metadata = await unfurl(input.url);
+              const result: Metadata = await unfurl(safe.url.href);
               return {
                 title: result?.title ?? '',
                 favicon: result?.favicon ?? '',
@@ -172,7 +175,6 @@ export const publicRouter = router({
             });
             const result: any = await Promise.race([fetchPromise, timeoutPromise]);
             return result;
-            return null
           } catch (error) {
             console.error('Link preview error:', error);
             return {
@@ -260,27 +262,20 @@ export const publicRouter = router({
               }
               throw error;
             }
-          } else if (input.filePath.includes('s3file')) {
+          } else if (input.filePath.includes('/api/s3file/') || input.filePath.includes('/api/attachment/')) {
             try {
-              const response = await fetch(input.filePath);
-              if (!response.ok) {
-                throw new Error(`Failed to get presigned URL: ${response.statusText}`);
+              // Never fetch arbitrary URLs — only read through FileService for known storage paths.
+              if (!input.filePath.startsWith('/api/s3file/') && !input.filePath.startsWith('/api/attachment/')) {
+                throw new TRPCError({ code: 'NOT_FOUND', message: 'File not found' });
               }
-
-              const presignedUrl = response.url;
-              console.log('presignedUrl', { presignedUrl });
-              const fileResponse = await fetch(presignedUrl);
-              if (!fileResponse.ok) {
-                throw new Error(`Failed to fetch file content: ${fileResponse.statusText}`);
-              }
-
-              const arrayBuffer = await fileResponse.arrayBuffer();
-              metadata = await mm.parseBuffer(new Uint8Array(arrayBuffer), {
+              const fileBuffer = await FileService.getFileBuffer(input.filePath);
+              metadata = await mm.parseBuffer(new Uint8Array(fileBuffer), {
                 mimeType: 'audio/mpeg',
               });
-            } catch (error) {
+            } catch (error: any) {
+              if (error instanceof TRPCError) throw error;
               console.error('Failed to get s3 file metadata:', error);
-              throw error;
+              throw new TRPCError({ code: 'NOT_FOUND', message: 'File not found' });
             }
           }
 

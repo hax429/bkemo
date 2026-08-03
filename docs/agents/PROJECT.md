@@ -39,12 +39,21 @@ capture windows and shared settings still import them.
   and 1×/2×/3× export via DOM screenshot. Separate from link share.
 - Settings → Data Transfer exports/imports markdown, JSON, and encrypted
   `.bk` archives. Settings → Schedule Task (site-manage) runs pinned
-  system jobs: auto-archive and scheduled `.bk` backups (S3/R2 when
-  configured, else local; retain last 7; timezone UTC or America/New_York).
-  Legacy `.bko` backups are removed.
+  system jobs: auto-archive, scheduled `.bk` backups (S3/R2 when configured,
+  else local; retain last 7), and a Monday 03:00 America/New_York weekly
+  knowledge export. The knowledge job combines the configured superadmin's
+  notes from the previous completed week into one metadata-rich Markdown file,
+  skips recycle and `exclude_from_ai`, keeps the latest local file, and uploads
+  it to the configured BigModel knowledge base. Legacy `.bko` backups are
+  removed.
 - Use tRPC internally or the scoped-token REST API under `/api`; the OpenAPI spec
   is at `/api/openapi.json`, Swagger at `/api-doc`, and the readable reference at
   `/docs`.
+- Connect MCP clients to `/mcp`, which uses stateless Streamable HTTP and its
+  own audience-bound OAuth 2.1 tokens. Settings -> Security & API manages
+  connected applications. Settings -> MCP connections controls encrypted,
+  allowlisted outbound Streamable HTTP connectors. See
+  [`MCP.md`](./MCP.md).
 - Use the native SwiftUI iOS app and Tauri macOS shell with remote API access,
   cached reads, and queued offline creates.
 - On macOS, the Tauri app registers Control+W by default for quick capture.
@@ -105,11 +114,18 @@ Important implementation anchors:
   design tokens and persisted preferences.
 - `app/src/lib/blinkoEndpoint.ts` — remote API endpoint used by Tauri clients.
 - `app/src/components/BlinkoSettings/TaskSetting.tsx` — Settings → Schedule Task
-  (archive + scheduled `.bk` backup UI).
-- `server/jobs/backupJob.ts` / `server/jobs/archivejob.ts` — bounded in-process
-  schedules for `.bk` backup (retain 7) and auto-archive; no database polling
-  occurs between due times.
+  (archive, scheduled `.bk` backup, and weekly knowledge export UI).
+- `server/jobs/backupJob.ts` / `server/jobs/archivejob.ts` /
+  `server/jobs/weeklyKnowledgeJob.ts` — bounded in-process schedules for `.bk`
+  backup (retain 7), auto-archive, and weekly knowledge export; no database
+  polling occurs between due times.
 - `server/lib/bkemoTransfer.ts` — portable `.bk` / markdown / JSON transfer.
+- `server/lib/integrationGateway.ts` and `server/routerExpress/mcp.ts` —
+  account-scoped MCP operations, OAuth-protected Streamable HTTP transport, and
+  integration audit/idempotency behavior.
+- `server/lib/obsidianPairing.ts`, `server/routerExpress/obsidian.ts`, and
+  `integrations/obsidian/` — Obsidian device pairing plus the private companion
+  plugin scaffold (`/api/v1/obsidian/*`). Source links use `/note/{portableId}`.
 
 ## Data and API conventions
 

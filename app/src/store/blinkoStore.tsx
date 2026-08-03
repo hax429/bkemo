@@ -10,7 +10,7 @@ import { StorageListState } from './standard/StorageListState';
 import i18n from '@/lib/i18n';
 import { api } from '@/lib/trpc';
 import { Attachment, NoteType, type Note } from '@shared/lib/types';
-import { ARCHIVE_BLINKO_TASK_NAME, DBBAK_TASK_NAME } from '@shared/lib/sharedConstant';
+import { ARCHIVE_BLINKO_TASK_NAME, DBBAK_TASK_NAME, WEEKLY_KNOWLEDGE_TASK_NAME } from '@shared/lib/sharedConstant';
 import { makeAutoObservable, runInAction } from 'mobx';
 import { UserStore } from './user';
 import { BaseStore } from './baseStore';
@@ -752,6 +752,10 @@ export class BlinkoStore implements Store {
 
   get ArchiveTask() {
     return this.task.value?.find(i => i.name == ARCHIVE_BLINKO_TASK_NAME)
+  }
+
+  get WeeklyKnowledgeTask() {
+    return this.task.value?.find(i => i.name == WEEKLY_KNOWLEDGE_TASK_NAME)
   }
 
 

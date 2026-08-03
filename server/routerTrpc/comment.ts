@@ -6,6 +6,8 @@ import { commentsSchema, accountsSchema, NotificationType } from '@shared/lib/pr
 import * as crypto from 'crypto';
 import { AiService } from '@server/aiServer';
 import { CreateNotification } from './notification';
+import { isAllowedGuestAvatarReference } from '../lib/guestAvatar';
+import { noteHasSharePassword } from '../lib/sharePassword';
 
 const accountSchema = accountsSchema.pick({
   id: true,
@@ -74,7 +76,7 @@ async function checkNoteAccess(noteId: number, ctx: any): Promise<boolean> {
 
   // Check if note is publicly shared (no password, not expired)
   const isPubliclyShared = note.isShare && 
-    note.sharePassword === '' && 
+    !noteHasSharePassword(note.sharePassword) && 
     (note.shareExpiryDate === null || note.shareExpiryDate > new Date());
 
   if (isPubliclyShared) {
@@ -113,11 +115,11 @@ export const commentRouter = router({
   create: publicProcedure
     .meta({ openapi: { method: 'POST', path: '/v1/comment/create', summary: 'Create a comment', tags: ['Comment'] } })
     .input(z.object({
-      content: z.string(),
+      content: z.string().min(1).max(10000),
       noteId: z.number(),
       parentId: z.number().optional(),
-      guestName: z.string().optional(),
-      guestAvatar: z.string().optional()
+      guestName: z.string().max(64).optional(),
+      guestAvatar: z.string().max(512).optional()
     }))
     .output(z.boolean())
     .mutation(async function ({ input, ctx }) {
@@ -130,6 +132,16 @@ export const commentRouter = router({
           code: 'FORBIDDEN',
           message: 'You do not have permission to comment on this note'
         });
+      }
+
+      if (!ctx.id && guestAvatar) {
+        const allowed = await isAllowedGuestAvatarReference(guestAvatar);
+        if (!allowed) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: 'Invalid guest avatar'
+          });
+        }
       }
 
       const note = await prisma.notes.findFirst({

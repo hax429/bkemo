@@ -33,6 +33,7 @@ import { runTiptapFormat, type FormatCommand } from "@/lib/tiptapFormat";
 const SignInPage = lazy(() => import('./pages/signin'));
 const SignUpPage = lazy(() => import('./pages/signup'));
 const OAuthCallbackPage = lazy(() => import('./pages/oauth-callback'));
+const OAuthAuthorizePage = lazy(() => import('./pages/oauth-authorize'));
 const BkemoPage = lazy(() => import('./pages/bkemo'));
 const PublicMemoPage = lazy(() => import('./pages/m/[id]'));
 
@@ -58,7 +59,8 @@ const ProtectedRoute = ({ children }) => {
 
         if (!tokenData?.user?.id) {
           console.log('No valid token, redirecting to login page');
-          navigate('/signin', { replace: true });
+          const returnTo = `${location.pathname}${location.search}`;
+          navigate(`/signin?returnTo=${encodeURIComponent(returnTo)}`, { replace: true });
         }
       }
 
@@ -314,6 +316,7 @@ function AppRoutes() {
             <Route path="/signin" element={<SignInPage />} />
             <Route path="/signup" element={<SignUpPage />} />
             <Route path="/oauth-callback" element={<OAuthCallbackPage />} />
+            <Route path="/oauth/authorize" element={<ProtectedRoute><OAuthAuthorizePage /></ProtectedRoute>} />
             {/* public share page (comments + reactions) */}
             <Route path="/m/:id" element={<PublicMemoPage />} />
             {/* Tauri quick-capture window */}

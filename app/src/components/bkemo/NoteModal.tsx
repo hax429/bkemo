@@ -19,6 +19,7 @@ import { AttachmentList } from './AttachmentList';
 import { ShareImageSheet } from './ShareImage';
 import { NoteAIThread } from './ai/AIThread';
 import { useSharedDraft } from '@/lib/useSharedDraft';
+import { ComposerToolbar } from './ComposerToolbar';
 
 const pill = (active: boolean, color: string): React.CSSProperties => ({
   padding: '4px 10px', borderRadius: 100, fontSize: 12, fontFamily: 'var(--font-mono)', cursor: 'pointer',
@@ -508,90 +509,42 @@ export const NoteModal = observer(function NoteModal({ note, onClose, startFulls
 
         {/* task controls — convert to a to-do first, then due/priority/done reveal */}
         <div className="h-stack" style={{ gap: 8, padding: '12px 16px', borderTop: '1px solid var(--border)', flexWrap: 'wrap', alignItems: 'center' }}>
-          {/* Block / action chrome — text marks live in the selection bubble. */}
-          <div className="h-stack" style={{ gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-            <button
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => ref.current?.editor?.chain().focus().toggleBulletList().run()}
-              style={{
-                width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6,
-                color: ref.current?.editor?.isActive('bulletList') ? 'var(--accent)' : 'var(--fg-2)',
-                background: ref.current?.editor?.isActive('bulletList') ? 'var(--hover)' : 'transparent',
-                fontSize: 14, border: 'none', cursor: 'pointer', transition: 'all 0.12s'
-              }}
-              title="Bulleted List"
-            >
-              •—
-            </button>
-            <button
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => ref.current?.editor?.chain().focus().toggleOrderedList().run()}
-              style={{
-                width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6,
-                color: ref.current?.editor?.isActive('orderedList') ? 'var(--accent)' : 'var(--fg-2)',
-                background: ref.current?.editor?.isActive('orderedList') ? 'var(--hover)' : 'transparent',
-                fontSize: 12, border: 'none', cursor: 'pointer', fontFamily: 'var(--font-mono)', transition: 'all 0.12s'
-              }}
-              title="Numbered List"
-            >
-              1.
-            </button>
-            <button
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => {
-                ref.current?.editor?.chain().focus().run();
-                ref.current?.insert('#');
-              }}
-              style={{
-                width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6,
-                color: 'var(--fg-2)', fontSize: 14, border: 'none', cursor: 'pointer', transition: 'all 0.12s'
-              }}
-              title="Add Tag (#)"
-            >
-              #
-            </button>
-            <button
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={att.openPicker}
-              style={{
-                width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6,
-                color: 'var(--fg-2)', fontSize: 15, border: 'none', cursor: 'pointer', transition: 'all 0.12s'
-              }}
-              title="Attach a file (any type)"
-            >
-              📎
-            </button>
-          </div>
-
-          <span style={{ width: 1, height: 16, background: 'var(--border-2)', margin: '0 4px' }} />
-
-          <span
-            onClick={() => isNew ? shared.update({ type: currentIsTodo ? NoteType.BLINKO : NoteType.TODO }) : setIsTodo((v) => !v)}
-            style={pill(currentIsTodo, 'var(--accent)')}
-          >☑ to-do</span>
-          {currentIsTodo && (
-            <>
-              <label className="h-stack" style={{ gap: 6, fontSize: 12, color: 'var(--fg-2)' }}>
-                <span style={{ fontFamily: 'var(--font-mono)' }}>due</span>
-                <input
-                  type="date"
-                  value={currentDue}
-                  onChange={(e) => {
-                    if (isNew) shared.update({ dueDate: e.target.value ? dayjs(e.target.value).endOf('day').toISOString() : null });
-                    else setDue(e.target.value);
-                  }}
-                  style={{ background: 'var(--bg-2)', color: 'var(--fg)', border: '1px solid var(--border-2)', borderRadius: 'var(--radius)', padding: '4px 8px', fontSize: 12, fontFamily: 'inherit' }}
-                />
-                {currentDue ? <span onClick={() => isNew ? shared.update({ dueDate: null }) : setDue('')} style={{ cursor: 'pointer', color: 'var(--fg-3)' }}>clear</span> : <span style={{ color: 'var(--fg-3)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>→ inbox</span>}
-              </label>
-              <span onClick={() => isNew ? shared.update({ isImportant: !currentImportant }) : setImportant((v) => !v)} style={pill(currentImportant, 'var(--important)')}>! important</span>
-              <span onClick={() => isNew ? shared.update({ isUrgent: !currentUrgent }) : setUrgent((v) => !v)} style={pill(currentUrgent, 'var(--urgent)')}>^ urgent</span>
-              {!isNew && <label className="h-stack" style={{ gap: 6, fontSize: 12, color: 'var(--fg-2)', cursor: 'pointer' }}>
-                <input type="checkbox" checked={done} onChange={(e) => setDone(e.target.checked)} style={{ accentColor: 'var(--accent)' }} />
-                done
-              </label>}
-            </>
-          )}
+          <ComposerToolbar
+            editor={ref.current?.editor}
+            onTag={() => {
+              ref.current?.editor?.chain().focus().run();
+              ref.current?.insert('#');
+            }}
+            onAttach={att.openPicker}
+            isTodo={currentIsTodo}
+            onToggleTodo={() => isNew ? shared.update({ type: currentIsTodo ? NoteType.BLINKO : NoteType.TODO }) : setIsTodo((v) => !v)}
+            showPriorityAlways={false}
+            important={!!currentImportant}
+            onToggleImportant={() => isNew ? shared.update({ isImportant: !currentImportant }) : setImportant((v) => !v)}
+            urgent={!!currentUrgent}
+            onToggleUrgent={() => isNew ? shared.update({ isUrgent: !currentUrgent }) : setUrgent((v) => !v)}
+            afterFlags={currentIsTodo ? (
+              <>
+                <label className="h-stack" style={{ gap: 6, fontSize: 12, color: 'var(--fg-2)' }}>
+                  <span style={{ fontFamily: 'var(--font-mono)' }}>due</span>
+                  <input
+                    type="date"
+                    value={currentDue}
+                    onChange={(e) => {
+                      if (isNew) shared.update({ dueDate: e.target.value ? dayjs(e.target.value).endOf('day').toISOString() : null });
+                      else setDue(e.target.value);
+                    }}
+                    style={{ background: 'var(--bg-2)', color: 'var(--fg)', border: '1px solid var(--border-2)', borderRadius: 'var(--radius)', padding: '4px 8px', fontSize: 12, fontFamily: 'inherit' }}
+                  />
+                  {currentDue ? <span onClick={() => isNew ? shared.update({ dueDate: null }) : setDue('')} style={{ cursor: 'pointer', color: 'var(--fg-3)' }}>clear</span> : <span style={{ color: 'var(--fg-3)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>→ inbox</span>}
+                </label>
+                {!isNew && <label className="h-stack" style={{ gap: 6, fontSize: 12, color: 'var(--fg-2)', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={done} onChange={(e) => setDone(e.target.checked)} style={{ accentColor: 'var(--accent)' }} />
+                  done
+                </label>}
+              </>
+            ) : null}
+          />
           <span className="spacer" />
           {note.id && <button onClick={trash} style={{ background: 'transparent', border: '1px solid #5C2A2A', color: '#E0696B', padding: '5px 12px', borderRadius: 'var(--radius)', fontSize: 12 }}>Trash</button>}
           <button onClick={save} disabled={saving} style={{ background: 'var(--accent)', border: 'none', color: '#fff', padding: '5px 14px', borderRadius: 'var(--radius)', fontSize: 12, fontWeight: 500, opacity: saving ? 0.6 : 1 }}>Save · ⌘↵</button>

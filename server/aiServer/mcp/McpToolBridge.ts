@@ -199,8 +199,7 @@ export async function getMcpToolsFromServer(serverId: number): Promise<Record<st
 export async function hasMcpServers(): Promise<boolean> {
   const { prisma } = await import('@server/prisma');
   const count = await prisma.mcpServers.count({
-    where: { isEnabled: true }
+    where: { isEnabled: true, type: 'streamable-http' }
   });
   return count > 0;
 }
-

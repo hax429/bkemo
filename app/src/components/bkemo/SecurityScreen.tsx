@@ -44,9 +44,14 @@ export const SecurityScreen = observer(function SecurityScreen() {
   const [creating, setCreating] = useState(false);
   const [created, setCreated] = useState<{ token: string; name: string } | null>(null);
   const [error, setError] = useState('');
+  const [connections, setConnections] = useState<any[]>([]);
+  const [obsidianDevices, setObsidianDevices] = useState<any[]>([]);
+  const [pairingCode, setPairingCode] = useState<{ code: string; expiresAt: string | Date } | null>(null);
+  const [pairingBusy, setPairingBusy] = useState(false);
 
   const apiBase = getBlinkoEndpoint('/api');
   const docsUrl = getBlinkoEndpoint('/docs');
+  const mcpUrl = getBlinkoEndpoint('/mcp');
 
   const load = async () => {
     setLoading(true);
@@ -55,6 +60,16 @@ export const SecurityScreen = observer(function SecurityScreen() {
     finally { setLoading(false); }
   };
   useEffect(() => { load(); }, []);
+  const loadConnections = async () => {
+    try { setConnections(await api.oauth.connections.query() as any[]); }
+    catch (e) { console.error('[security] OAuth connections failed:', e); }
+  };
+  useEffect(() => { loadConnections(); }, []);
+  const loadObsidianDevices = async () => {
+    try { setObsidianDevices(await api.obsidian.listDevices.query() as any[]); }
+    catch (e) { console.error('[security] Obsidian devices failed:', e); }
+  };
+  useEffect(() => { loadObsidianDevices(); }, []);
 
   const toggleScope = (s: AccessScope) => setScopes((prev) => prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]);
 
@@ -92,7 +107,102 @@ export const SecurityScreen = observer(function SecurityScreen() {
         Create scoped access tokens to use the bkemo REST API from scripts and integrations. Each token is shown once — store it safely.
       </div>
 
-      {/* API reference */}
+      <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', background: 'var(--bg-2)', padding: 16, marginBottom: 24 }}>
+        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--fg)', marginBottom: 8 }}>Obsidian companion</div>
+        <div style={{ color: 'var(--fg-2)', fontSize: 12, lineHeight: 1.5, marginBottom: 10 }}>
+          Connect the private Obsidian plugin with a scoped access token (recommended scopes:
+          {' '}<span style={mono}>notes:read notes:write tags:read attachments:read attachments:write</span>
+          ), or issue a one-time pairing code. Pairing codes expire in 10 minutes and can be used once.
+        </div>
+        {pairingCode && (
+          <div style={{ border: '1px solid color-mix(in srgb, var(--accent) 45%, transparent)', background: 'var(--accent-soft)', borderRadius: 'var(--radius)', padding: 12, marginBottom: 12 }}>
+            <div style={{ fontSize: 12.5, color: 'var(--fg)', fontWeight: 600, marginBottom: 6 }}>Pairing code</div>
+            <div className="h-stack" style={{ gap: 8 }}>
+              <code style={{ flex: 1, background: 'var(--bg)', border: '1px solid var(--border-2)', borderRadius: 'var(--radius)', padding: '6px 10px', fontSize: 16, letterSpacing: '0.08em', color: 'var(--fg)', fontFamily: 'var(--font-mono)' }}>{pairingCode.code}</code>
+              <CopyButton text={pairingCode.code} />
+            </div>
+            <div style={{ ...mono, marginTop: 8 }}>expires {dayjs(pairingCode.expiresAt).fromNow()}</div>
+          </div>
+        )}
+        <div className="h-stack" style={{ gap: 8, marginBottom: obsidianDevices.length ? 12 : 0 }}>
+          <button
+            onClick={async () => {
+              setPairingBusy(true);
+              try {
+                const res = await api.obsidian.issuePairingCode.mutate({ deviceLabel: 'Obsidian' }) as any;
+                setPairingCode({ code: res.code, expiresAt: res.expiresAt });
+                await loadObsidianDevices();
+              } catch (e) {
+                console.error('[security] issue pairing code failed:', e);
+              } finally {
+                setPairingBusy(false);
+              }
+            }}
+            disabled={pairingBusy}
+            style={{ background: 'var(--accent)', border: 'none', color: '#fff', padding: '7px 16px', borderRadius: 'var(--radius)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', opacity: pairingBusy ? 0.6 : 1 }}
+          >{pairingBusy ? 'Issuing…' : 'Issue pairing code'}</button>
+        </div>
+        {obsidianDevices.length > 0 && (
+          <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+            <div style={{ ...mono, marginBottom: 8 }}>Paired devices</div>
+            {obsidianDevices.map((device) => (
+              <div key={device.id} className="h-stack" style={{ gap: 10, padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ color: 'var(--fg)', fontSize: 12.5 }}>{device.deviceLabel || 'Obsidian'} <span style={mono}>…{device.preview}</span></div>
+                  <div style={{ ...mono, marginTop: 4 }}>
+                    created {dayjs(device.createdAt).format('MMM D, YYYY')}
+                    {' · '}{device.lastUsedAt ? `last used ${dayjs(device.lastUsedAt).fromNow()}` : 'never used'}
+                  </div>
+                </div>
+                <button
+                  onClick={async () => {
+                    if (!window.confirm(`Revoke ${device.deviceLabel || 'this Obsidian device'}?`)) return;
+                    await api.obsidian.revokeDevice.mutate({ id: device.id });
+                    await loadObsidianDevices();
+                  }}
+                  style={{ background: 'transparent', border: '1px solid #5C2A2A', color: '#E0696B', padding: '5px 12px', borderRadius: 'var(--radius)', fontSize: 12, cursor: 'pointer' }}
+                >Revoke</button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', background: 'var(--bg-2)', padding: 16, marginBottom: 24 }}>
+        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--fg)', marginBottom: 8 }}>MCP server</div>
+        <div style={{ color: 'var(--fg-2)', fontSize: 12, lineHeight: 1.5, marginBottom: 10 }}>
+          Streamable HTTP with OAuth 2.1 and scoped access. Compatible clients discover authorization automatically.
+        </div>
+        <div className="h-stack" style={{ gap: 8 }}>
+          <code style={{ flex: 1, background: 'var(--bg)', border: '1px solid var(--border-2)', borderRadius: 'var(--radius)', padding: '6px 10px', fontSize: 12, color: 'var(--fg)', overflow: 'auto', whiteSpace: 'nowrap' }}>{mcpUrl}</code>
+          <CopyButton text={mcpUrl} />
+        </div>
+        {connections.length > 0 && (
+          <div style={{ marginTop: 16, borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+            <div style={{ ...mono, marginBottom: 8 }}>Connected applications</div>
+            {connections.map((connection) => (
+              <div key={connection.id} className="h-stack" style={{ gap: 10, padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ color: 'var(--fg)', fontSize: 12.5 }}>{connection.client.clientName}</div>
+                  <div className="h-stack" style={{ gap: 5, flexWrap: 'wrap', marginTop: 5 }}>
+                    {(connection.scopes as string[]).map((scope) => <Chip key={scope} tone="var(--accent)">{scope}</Chip>)}
+                  </div>
+                </div>
+                <button
+                  onClick={async () => {
+                    if (!window.confirm(`Disconnect ${connection.client.clientName}?`)) return;
+                    await api.oauth.revoke.mutate({ clientId: connection.client.id });
+                    await loadConnections();
+                  }}
+                  style={{ background: 'transparent', border: '1px solid #5C2A2A', color: '#E0696B', padding: '5px 12px', borderRadius: 'var(--radius)', fontSize: 12, cursor: 'pointer' }}
+                >Disconnect</button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* REST API reference */}
       <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', background: 'var(--bg-2)', padding: 16, marginBottom: 24 }}>
         <div className="h-stack" style={{ gap: 10, marginBottom: 10, alignItems: 'center' }}>
           <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--fg)' }}>REST API</span>

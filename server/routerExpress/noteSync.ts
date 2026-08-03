@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import { createContext, type User } from '../context';
 import { noteSyncHub, type NoteSyncHub } from '../lib/noteSync';
+import { tokenAllowsPath } from '../../shared/lib/tokenPathMatch';
 
 export const NOTE_EVENTS_PATH = '/api/v1/note/events';
 export const NOTE_EVENTS_KEEPALIVE_MS = 15_000;
@@ -27,7 +28,7 @@ export function createNoteSyncRouter(
 
     // Match authProcedure's scoped-token behavior. notes:read expands to the
     // concrete "notes.changes" permission.
-    if (Array.isArray(ctx.permissions) && !ctx.permissions.some((permission) => 'notes.changes'.includes(permission))) {
+    if (Array.isArray(ctx.permissions) && !tokenAllowsPath(ctx.permissions, 'notes.changes')) {
       return res.status(403).json({ error: 'Token cannot read note changes' });
     }
 

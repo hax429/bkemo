@@ -12,6 +12,7 @@ const COMMANDS: Cmd[] = [
   { id: 'bullet', label: 'Bullet list', hint: '-', run: (e, r) => e.chain().focus().deleteRange(r).toggleBulletList().run() },
   { id: 'ordered', label: 'Numbered list', hint: '1.', run: (e, r) => e.chain().focus().deleteRange(r).toggleOrderedList().run() },
   { id: 'task', label: 'To-do list', hint: '[ ]', run: (e, r) => e.chain().focus().deleteRange(r).toggleTaskList().run() },
+  { id: 'strike', label: 'Strikethrough', hint: '~~', run: (e, r) => e.chain().focus().deleteRange(r).toggleStrike().run() },
   { id: 'quote', label: 'Quote', hint: '>', run: (e, r) => e.chain().focus().deleteRange(r).toggleBlockquote().run() },
   { id: 'code', label: 'Code block', hint: '```', run: (e, r) => e.chain().focus().deleteRange(r).toggleCodeBlock().run() },
   { id: 'divider', label: 'Divider', hint: '---', run: (e, r) => e.chain().focus().deleteRange(r).setHorizontalRule().run() },
@@ -28,7 +29,7 @@ export const SlashCommand = Extension.create({
         char: '/',
         startOfLine: false,
         command: ({ editor, range, props }) => (props as Cmd).run(editor, range),
-        items: ({ query }) => COMMANDS.filter((c) => c.label.toLowerCase().includes(query.toLowerCase())).slice(0, 9),
+        items: ({ query }) => COMMANDS.filter((c) => c.label.toLowerCase().includes(query.toLowerCase())).slice(0, 10),
         render: () => makeSuggestionRender({ emptyText: 'No command' }),
       }),
     ];

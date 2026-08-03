@@ -77,19 +77,23 @@ const BkemoPage = observer(function BkemoPage() {
 
   useEffect(() => {
     const noteMatch = location.pathname.match(/^\/n\/(\d+)$/);
-    if (!noteMatch) return;
+    const portableMatch = location.pathname.match(/^\/note\/([0-9a-f-]{36})$/i);
+    if (!noteMatch && !portableMatch) return;
     let cancelled = false;
-    const id = Number(noteMatch[1]);
+    const id = noteMatch ? Number(noteMatch[1]) : undefined;
+    const portableId = portableMatch?.[1];
     const load = async () => {
       try {
         const note = RootStore.Get(BlinkoStore).isOnline
-          ? await api.notes.detail.mutate({ id })
-          : await getNoteFromCache(id);
+          ? await api.notes.detail.mutate(id != null ? { id } : { portableId })
+          : id != null ? await getNoteFromCache(id) : null;
         if (note?.id) await upsertNotesToCache([note as Note]);
-        if (!cancelled && note) setEditing(note as Note);
-        else if (!cancelled) navigate('/', { replace: true });
+        if (!cancelled && note) {
+          setEditing(note as Note);
+          if (portableId && note.id) navigate(`/n/${note.id}`, { replace: true });
+        } else if (!cancelled) navigate('/', { replace: true });
       } catch (error) {
-        const cached = await getNoteFromCache(id);
+        const cached = id != null ? await getNoteFromCache(id) : null;
         if (!cancelled && cached) setEditing(cached);
         else if (!cancelled) navigate('/', { replace: true });
         console.error('[bkemo] direct note load failed:', error);

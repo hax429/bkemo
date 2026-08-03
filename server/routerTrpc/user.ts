@@ -19,9 +19,17 @@ export const userRouter = router({
       }
     })
     .input(z.void())
-    .output(z.array(accountsSchema))
+    .output(z.array(accountsSchema.extend({
+      password: z.string().nullable(),
+      apiToken: z.string().nullable(),
+    })))
     .query(async () => {
-      return await prisma.accounts.findMany()
+      const users = await prisma.accounts.findMany();
+      return users.map((user) => ({
+        ...user,
+        password: user.password ? '********' : null,
+        apiToken: user.apiToken ? '********' : null,
+      }));
     }),
   publicUserList: publicProcedure
     .meta({
@@ -118,11 +126,21 @@ export const userRouter = router({
     })
     .input(z.object({ id: z.number() }))
     .output(z.boolean())
-    .mutation(async ({ input }) => {
-      await prisma.accounts.updateMany({
-        where: { linkAccountId: input.id },
-        data: { linkAccountId: null }
-      })
+    .mutation(async ({ input, ctx }) => {
+      const callerId = Number(ctx.id);
+      // Only unlink accounts that are linked to the caller's account (or allow
+      // the target account itself / superadmin to clear reverse links).
+      if (ctx.role === 'superadmin' || input.id === callerId) {
+        await prisma.accounts.updateMany({
+          where: { linkAccountId: input.id },
+          data: { linkAccountId: null }
+        });
+      } else {
+        await prisma.accounts.updateMany({
+          where: { id: callerId, linkAccountId: input.id },
+          data: { linkAccountId: null }
+        });
+      }
       return true
     }),
   detail: authProcedure
@@ -545,14 +563,10 @@ export const userRouter = router({
           await prisma.accounts.update({ where: { id: targetId }, data: update });
           return true;
         } else {
-          // Creating new user - only allow if no users exist or registration is allowed
-          if (!password) {
-            throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Password is required' });
-          }
-          const passwordHash = await hashPassword(password!);
-          const res = await prisma.accounts.create({ data: { name, password: passwordHash, nickname: name, role: 'user' } });
-          await prisma.accounts.update({ where: { id: res.id }, data: { apiToken: await generateApiToken({ id: res.id, name: name ?? '', role: 'user' }) } });
-          return true;
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: 'Use registration or admin user management to create accounts',
+          });
         }
       })
     }),
@@ -577,10 +591,15 @@ export const userRouter = router({
       }).partial().optional()
     }))
     .output(z.union([z.boolean(), z.any()]))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       return prisma.$transaction(async () => {
         const { id, nickname, name, email, password, permissions } = input
         const cleanEmail = email !== undefined ? email.trim().toLowerCase() : undefined
+        const callerId = Number(ctx.id)
+        const caller = await prisma.accounts.findUnique({ where: { id: callerId } });
+        if (!caller) {
+          throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Current user not found' });
+        }
 
         const update: Prisma.accountsUpdateInput = {}
 
@@ -616,7 +635,13 @@ export const userRouter = router({
           if (nickname) update.nickname = nickname
           // The owner (superadmin) always keeps full permissions — never editable here.
           if (permissions !== undefined && !isOwner(target)) {
-            update.permissions = normalizePermissions(permissions) as unknown as Prisma.InputJsonValue
+            const current = resolvePermissions(target);
+            const next = normalizePermissions({ ...current, ...permissions });
+            // Only the site owner may grant or revoke manageSiteSettings.
+            if (!isOwner(caller)) {
+              next.manageSiteSettings = current.manageSiteSettings;
+            }
+            update.permissions = next as unknown as Prisma.InputJsonValue
           }
           await prisma.accounts.update({ where: { id }, data: update })
           return true
@@ -625,6 +650,10 @@ export const userRouter = router({
             throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Password is required' });
           }
           const passwordHash = await hashPassword(password!)
+          const createPerms = normalizePermissions(permissions);
+          if (!isOwner(caller)) {
+            createPerms.manageSiteSettings = false;
+          }
           const res = await prisma.accounts.create({
             data: {
               name,
@@ -632,7 +661,7 @@ export const userRouter = router({
               password: passwordHash,
               nickname: name,
               role: 'user',
-              permissions: normalizePermissions(permissions) as unknown as Prisma.InputJsonValue
+              permissions: createPerms as unknown as Prisma.InputJsonValue
             }
           })
           await prisma.accounts.update({ where: { id: res.id }, data: { apiToken: await generateApiToken({ id: res.id, name: name ?? '', role: 'user' }) } })
@@ -823,6 +852,13 @@ export const userRouter = router({
         throw new TRPCError({
           code: 'UNAUTHORIZED',
           message: 'password is incorrect'
+        });
+      }
+
+      if (!resolvePermissions(user).enabled) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Account is disabled'
         });
       }
 

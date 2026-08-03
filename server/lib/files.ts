@@ -418,9 +418,9 @@ export class FileService {
 
   static async uploadFileStream(
     {
-      stream, originalName, fileSize, type, accountId = null, metadata
+      stream, originalName, fileSize, type, accountId = null, metadata, pathPrefix
     }: {
-      stream: ReadableStream, originalName: string, fileSize: number, type: string, accountId?: number | null, metadata?: any
+      stream: ReadableStream, originalName: string, fileSize: number, type: string, accountId?: number | null, metadata?: any, pathPrefix?: string
     }) {
     const config = await getGlobalConfig({ useAdmin: true });
     const extension = path.extname(originalName);
@@ -428,6 +428,9 @@ export class FileService {
     const baseName = sanitizeUploadFileName(rawBaseName);
     const displayName = `${baseName}${extension}`;
     const storedFileName = buildStoredFileName(originalName);
+    const prefix = pathPrefix
+      ? `${pathPrefix.replace(/^\/+|\/+$/g, '')}/`
+      : '';
 
     try {
       if (config.objectStorage === 's3') {
@@ -439,7 +442,7 @@ export class FileService {
           customPath = customPath.endsWith('/') ? customPath : customPath + '/';
         }
 
-        const s3Key = `${customPath}${storedFileName}`.replace(/^\//, '');
+        const s3Key = `${customPath}${prefix}${storedFileName}`.replace(/^\//, '');
 
         const passThrough = new PassThrough();
         const nodeReadable = Readable.fromWeb(stream as any);
@@ -493,7 +496,7 @@ export class FileService {
           customPath = customPath.endsWith('/') ? customPath : customPath + '/';
         }
 
-        const relativePath = `${customPath}${storedFileName}`.replace(/^\//, '');
+        const relativePath = `${customPath}${prefix}${storedFileName}`.replace(/^\//, '');
         const fullPath = this.validateAndResolvePath(relativePath);
         await fs.mkdir(path.dirname(fullPath), { recursive: true });
 

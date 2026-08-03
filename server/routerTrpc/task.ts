@@ -2,9 +2,18 @@ import { router, authProcedure, demoAuthMiddleware, requireManageSite } from '@s
 import { z } from 'zod';
 import { BackupJob, BACKUP_STATUS_CACHE_KEY, SCHEDULE_TIMEZONES, hasScheduledBackupPassphrase } from '@server/jobs/backupJob';
 import { ArchiveJob } from '@server/jobs/archivejob';
+import {
+  getWeeklyKnowledgeSettings,
+  getWeeklyKnowledgeStatus,
+  refreshWeeklyKnowledgeDocumentStatus,
+  saveWeeklyKnowledgeSettings,
+  testSavedWeeklyKnowledgeConnection,
+  WEEKLY_KNOWLEDGE_DEFAULT_CRON,
+  WeeklyKnowledgeJob,
+} from '@server/jobs/weeklyKnowledgeJob';
 import { exportMarkdownFiles } from '@server/jobs/exportMarkdownFiles';
 import { UPLOAD_FILE_PATH } from '@shared/lib/pathConstant';
-import { ARCHIVE_BLINKO_TASK_NAME, DBBAK_TASK_NAME } from '@shared/lib/sharedConstant';
+import { ARCHIVE_BLINKO_TASK_NAME, DBBAK_TASK_NAME, WEEKLY_KNOWLEDGE_TASK_NAME } from '@shared/lib/sharedConstant';
 import { unlink } from 'fs/promises';
 import { FileService } from '../lib/files';
 import path from 'path';
@@ -29,6 +38,8 @@ const taskInfoSchema = z.object({
   isRunning: z.boolean(),
   output: z.any().optional(),
   hasPassphrase: z.boolean().optional(),
+  hasApiKey: z.boolean().optional(),
+  knowledgeBaseId: z.string().optional(),
 });
 
 const scheduleTimezoneSchema = z.enum(SCHEDULE_TIMEZONES);
@@ -55,6 +66,34 @@ async function saveBackupPassphrase(passphrase: string): Promise<void> {
 }
 
 export const taskRouter = router({
+  weeklyKnowledgeSettings: authProcedure.use(requireManageSite)
+    .input(z.void())
+    .query(async () => {
+      const settings = await getWeeklyKnowledgeSettings();
+      return {
+        apiKeyConfigured: settings.apiKeyConfigured,
+        knowledgeBaseId: settings.knowledgeBaseId,
+      };
+    }),
+
+  saveWeeklyKnowledgeSettings: authProcedure.use(requireManageSite)
+    .input(z.object({
+      apiKey: z.string().trim().max(512).optional(),
+      knowledgeBaseId: z.string().trim().min(6).max(30),
+    }))
+    .mutation(async ({ input }) => {
+      await saveWeeklyKnowledgeSettings(input);
+      return { success: true };
+    }),
+
+  testWeeklyKnowledgeConnection: authProcedure.use(requireManageSite)
+    .input(z.void())
+    .mutation(async () => testSavedWeeklyKnowledgeConnection()),
+
+  checkWeeklyKnowledgeStatus: authProcedure.use(requireManageSite)
+    .input(z.void())
+    .mutation(async () => refreshWeeklyKnowledgeDocumentStatus()),
+
   exportPortable: authProcedure.use(demoAuthMiddleware)
     .input(z.object({
       format: z.enum(['markdown', 'json', 'bk']),
@@ -153,27 +192,33 @@ export const taskRouter = router({
     .input(z.void())
     .output(z.array(taskInfoSchema))
     .query(async () => {
-      const [schedules, passphraseReady, backupStatus] = await Promise.all([
+      const [schedules, passphraseReady, backupStatus, weeklySettings, weeklyStatus] = await Promise.all([
         prisma.systemSchedule.findMany({
-          where: { name: { in: [ARCHIVE_BLINKO_TASK_NAME, DBBAK_TASK_NAME] } },
+          where: { name: { in: [ARCHIVE_BLINKO_TASK_NAME, DBBAK_TASK_NAME, WEEKLY_KNOWLEDGE_TASK_NAME] } },
         }),
         hasScheduledBackupPassphrase(),
         prisma.cache.findUnique({ where: { key: BACKUP_STATUS_CACHE_KEY } }),
+        getWeeklyKnowledgeSettings(),
+        getWeeklyKnowledgeStatus(),
       ]);
       const byName = new Map(schedules.map((schedule) => [schedule.name, schedule]));
 
-      return [ARCHIVE_BLINKO_TASK_NAME, DBBAK_TASK_NAME].map((name) => {
+      return [ARCHIVE_BLINKO_TASK_NAME, DBBAK_TASK_NAME, WEEKLY_KNOWLEDGE_TASK_NAME].map((name) => {
         const schedule = byName.get(name);
         return {
           name,
-          schedule: schedule?.cron ?? '0 0 * * *',
-          timezone: schedule?.timezone ?? 'UTC',
+          schedule: schedule?.cron ?? (name === WEEKLY_KNOWLEDGE_TASK_NAME ? WEEKLY_KNOWLEDGE_DEFAULT_CRON : '0 0 * * *'),
+          timezone: schedule?.timezone ?? (name === WEEKLY_KNOWLEDGE_TASK_NAME ? 'America/New_York' : 'UTC'),
           lastRun: schedule?.lastRunAt ?? null,
           isRunning: schedule?.enabled ?? false,
           output: name === DBBAK_TASK_NAME
             ? (backupStatus?.value ?? schedule?.lastOutput ?? null)
-            : (schedule?.lastOutput ?? null),
+            : name === WEEKLY_KNOWLEDGE_TASK_NAME
+              ? (weeklyStatus ?? schedule?.lastOutput ?? null)
+              : (schedule?.lastOutput ?? null),
           hasPassphrase: name === DBBAK_TASK_NAME ? passphraseReady : undefined,
+          hasApiKey: name === WEEKLY_KNOWLEDGE_TASK_NAME ? weeklySettings.apiKeyConfigured : undefined,
+          knowledgeBaseId: name === WEEKLY_KNOWLEDGE_TASK_NAME ? weeklySettings.knowledgeBaseId : undefined,
         };
       });
     }),
@@ -185,7 +230,7 @@ export const taskRouter = router({
       timezone: scheduleTimezoneSchema.optional(),
       passphrase: z.string().optional(),
       type: z.enum(['start', 'stop', 'update', 'runNow']),
-      task: z.enum([ARCHIVE_BLINKO_TASK_NAME, DBBAK_TASK_NAME]),
+      task: z.enum([ARCHIVE_BLINKO_TASK_NAME, DBBAK_TASK_NAME, WEEKLY_KNOWLEDGE_TASK_NAME]),
     }))
     .output(z.any())
     .mutation(async ({ input }) => {
@@ -205,6 +250,8 @@ export const taskRouter = router({
             throw new TRPCError({ code: 'BAD_REQUEST', message: 'Set a backup passphrase before running' });
           }
           await BackupJob.TriggerNow();
+        } else if (task === WEEKLY_KNOWLEDGE_TASK_NAME) {
+          await WeeklyKnowledgeJob.TriggerNow();
         } else {
           await ArchiveJob.TriggerNow();
         }
@@ -218,6 +265,12 @@ export const taskRouter = router({
             throw new TRPCError({ code: 'BAD_REQUEST', message: 'Set a backup passphrase before enabling scheduled backup' });
           }
           await BackupJob.Start(cronTime, true, tz);
+        } else if (task === WEEKLY_KNOWLEDGE_TASK_NAME) {
+          const settings = await getWeeklyKnowledgeSettings();
+          if (!settings.apiKeyConfigured || !settings.knowledgeBaseId) {
+            throw new TRPCError({ code: 'BAD_REQUEST', message: 'Save BigModel settings before enabling weekly export' });
+          }
+          await WeeklyKnowledgeJob.Start(cronTime, false, tz);
         } else {
           await ArchiveJob.Start(cronTime, true, tz);
         }
@@ -227,6 +280,8 @@ export const taskRouter = router({
       if (type === 'stop') {
         if (task === DBBAK_TASK_NAME) {
           await BackupJob.Stop();
+        } else if (task === WEEKLY_KNOWLEDGE_TASK_NAME) {
+          await WeeklyKnowledgeJob.Stop();
         } else {
           await ArchiveJob.Stop();
         }
@@ -236,6 +291,8 @@ export const taskRouter = router({
       if (type === 'update' && time) {
         if (task === DBBAK_TASK_NAME) {
           await BackupJob.SetCronTime(time, timezone);
+        } else if (task === WEEKLY_KNOWLEDGE_TASK_NAME) {
+          await WeeklyKnowledgeJob.SetCronTime(time, timezone);
         } else {
           await ArchiveJob.SetCronTime(time, timezone);
         }

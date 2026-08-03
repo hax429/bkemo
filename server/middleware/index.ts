@@ -15,6 +15,7 @@ import { OpenApiMeta } from 'trpc-to-openapi';
 import { prisma } from '../prisma';
 import { resolvePermissions, type PermissionFlag } from '../lib/permissions';
 import { isDatabaseWriteLocked } from '../lib/databaseMigration';
+import { tokenAllowsPath } from '../../shared/lib/tokenPathMatch';
 
 export const t = initTRPC.context<Context>().meta<OpenApiMeta>().create({
   transformer: superjson,
@@ -44,7 +45,7 @@ export const authProcedure = publicProcedure.use(async ({ ctx, next, path }) => 
     })
   }
   if (ctx.permissions && Array.isArray(ctx.permissions)) {
-    const hasPermission = ctx.permissions.some(perm => path?.includes(perm));
+    const hasPermission = tokenAllowsPath(ctx.permissions, path);
     if (!hasPermission) {
       throw new TRPCError({
         code: "FORBIDDEN",

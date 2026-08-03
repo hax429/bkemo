@@ -11,6 +11,7 @@
 
 .tiptap-content.ProseMirror {
   min-height: 90px; /* Cut down starting height to half, auto-growing as text is written */
+  transition: min-height 0.22s ease;
 }
 
 /* Article reader (NoteModal reading mode for long memos): comfortable long-form
@@ -150,6 +151,7 @@
 .tiptap-content ul[data-type="taskList"] li[data-checked="true"] > div {
   color: var(--fg-3, #62666d);
   text-decoration: line-through;
+  opacity: 0.72;
 }
 
 /* GFM task lists rendered by react-markdown (MarkdownView preview).
@@ -168,6 +170,13 @@
 .tiptap-content li.task-list-item input[type="checkbox"] {
   margin-top: 4px;
   accent-color: var(--accent, #5e6ad2);
+}
+.tiptap-content li.task-list-item:has(input:checked) {
+  color: var(--fg-3, #62666d);
+  opacity: 0.72;
+}
+.tiptap-content li.task-list-item:has(input:checked) > :not(input) {
+  text-decoration: line-through;
 }
 
 /* Inline code + code blocks */

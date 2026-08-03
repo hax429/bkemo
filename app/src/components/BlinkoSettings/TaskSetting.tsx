@@ -9,7 +9,7 @@ import dayjs from '@/lib/dayjs';
 import { downloadFromLink } from '@/lib/tauriHelper';
 import { getBlinkoEndpoint } from '@/lib/blinkoEndpoint';
 import { ToastPlugin } from '@/store/module/Toast/Toast';
-import { ARCHIVE_BLINKO_TASK_NAME, DBBAK_TASK_NAME } from '@shared/lib/sharedConstant';
+import { ARCHIVE_BLINKO_TASK_NAME, DBBAK_TASK_NAME, WEEKLY_KNOWLEDGE_TASK_NAME } from '@shared/lib/sharedConstant';
 import { loadPrefs } from '@/lib/bkemoSettings';
 import { _ } from '@/lib/lodash';
 
@@ -22,6 +22,8 @@ type TaskRow = {
   isRunning: boolean;
   output?: any;
   hasPassphrase?: boolean;
+  hasApiKey?: boolean;
+  knowledgeBaseId?: string;
 };
 
 const ARCHIVE_CADENCE = [
@@ -164,6 +166,7 @@ export const TaskSetting = observer(function TaskSetting() {
 
   const archiveTask = blinko.ArchiveTask as TaskRow | undefined;
   const backupTask = blinko.DBTask as TaskRow | undefined;
+  const weeklyTask = blinko.WeeklyKnowledgeTask as TaskRow | undefined;
 
   const [autoArchivedDays, setAutoArchivedDays] = useState('90');
   const [archiveCron, setArchiveCron] = useState('0 0 * * *');
@@ -174,6 +177,8 @@ export const TaskSetting = observer(function TaskSetting() {
   const [customCron, setCustomCron] = useState('0 0 * * *');
   const [passphrase, setPassphrase] = useState('');
   const [confirm, setConfirm] = useState('');
+  const [weeklyApiKey, setWeeklyApiKey] = useState('');
+  const [knowledgeBaseId, setKnowledgeBaseId] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
 
   useEffect(() => {
@@ -204,6 +209,10 @@ export const TaskSetting = observer(function TaskSetting() {
     }
   }, [backupTask?.schedule, backupTask?.timezone]);
 
+  useEffect(() => {
+    if (weeklyTask?.knowledgeBaseId) setKnowledgeBaseId(weeklyTask.knowledgeBaseId);
+  }, [weeklyTask?.knowledgeBaseId]);
+
   const refresh = async () => {
     await blinko.task.call();
   };
@@ -222,6 +231,17 @@ export const TaskSetting = observer(function TaskSetting() {
 
   const effectiveBackupCron = backupCustom ? customCron.trim() : backupCron;
 
+  const saveWeeklySettings = async () => {
+    const id = knowledgeBaseId.trim();
+    if (!id) throw new Error('Enter a knowledge base ID');
+    if (!weeklyTask?.hasApiKey && !weeklyApiKey.trim()) throw new Error('Enter a BigModel API key');
+    await api.task.saveWeeklyKnowledgeSettings.mutate({
+      knowledgeBaseId: id,
+      apiKey: weeklyApiKey.trim() || undefined,
+    });
+    setWeeklyApiKey('');
+  };
+
   return (
     <div
       className="bkemo v-stack"
@@ -237,7 +257,7 @@ export const TaskSetting = observer(function TaskSetting() {
         <div className="bk-ai-setup-kicker" style={{ marginBottom: 8 }}>System</div>
         <div style={{ fontSize: 16, fontWeight: 650, color: 'var(--fg)', marginBottom: 4 }}>Schedule Task</div>
         <div style={{ fontSize: 12.5, color: 'var(--fg-2)', lineHeight: 1.5, maxWidth: 560 }}>
-          Pinned site jobs for archive and encrypted .bk backups. Backups land in object storage when configured, otherwise locally. Last 7 backups are kept.
+          Pinned site jobs for archive, encrypted .bk backups, and a private weekly Markdown export to BigModel knowledge.
         </div>
       </div>
 
@@ -472,6 +492,138 @@ export const TaskSetting = observer(function TaskSetting() {
           <div style={{ color: 'var(--fg-2)', fontSize: 12 }}>
             Latest file: <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5 }}>{backupTask.output.filename}</code>
             {typeof backupTask.output.retained === 'number' ? ` · keeping ${backupTask.output.retained} of ${7}` : null}
+          </div>
+        ) : null}
+      </JobCard>
+
+      <JobCard
+        kicker="Knowledge"
+        title="Weekly knowledge export"
+        description="Combines the configured superadmin's notes from the previous completed New York week into one metadata-rich Markdown file, then uploads it to BigModel. Notes tagged exclude_from_ai are skipped."
+        enabled={Boolean(weeklyTask?.isRunning)}
+        busy={busy === 'weekly-toggle'}
+        onToggle={(next) => withBusy('weekly-toggle', async () => {
+          if (next) await saveWeeklySettings();
+          await api.task.upsertTask.mutate({
+            type: next ? 'start' : 'stop',
+            task: WEEKLY_KNOWLEDGE_TASK_NAME,
+            time: '0 3 * * 1',
+            timezone: 'America/New_York',
+          });
+          RootStore.Get(ToastPlugin).success(next ? 'Weekly export enabled' : 'Weekly export disabled');
+        })}
+        actions={
+          <>
+            <button
+              type="button"
+              className="bk-native-button is-secondary is-small"
+              disabled={busy !== null}
+              onClick={() => withBusy('weekly-save', async () => {
+                await saveWeeklySettings();
+                RootStore.Get(ToastPlugin).success('BigModel settings saved');
+              })}
+            >
+              Save settings
+            </button>
+            <button
+              type="button"
+              className="bk-native-button is-ghost is-small"
+              disabled={busy !== null}
+              onClick={() => withBusy('weekly-test', async () => {
+                await saveWeeklySettings();
+                const result = await api.task.testWeeklyKnowledgeConnection.mutate();
+                RootStore.Get(ToastPlugin).success(`Connected · ${result.documentCount} documents`);
+              })}
+            >
+              Test connection
+            </button>
+            <button
+              type="button"
+              className="bk-native-button is-primary is-small"
+              disabled={busy !== null}
+              onClick={() => withBusy('weekly-run', async () => {
+                await saveWeeklySettings();
+                await api.task.upsertTask.mutate({ type: 'runNow', task: WEEKLY_KNOWLEDGE_TASK_NAME });
+                RootStore.Get(ToastPlugin).success('Weekly export uploaded');
+              })}
+            >
+              Run now
+            </button>
+            {weeklyTask?.output?.documentId ? (
+              <button
+                type="button"
+                className="bk-native-button is-ghost is-small"
+                disabled={busy !== null}
+                onClick={() => withBusy('weekly-status', async () => {
+                  const result = await api.task.checkWeeklyKnowledgeStatus.mutate();
+                  RootStore.Get(ToastPlugin).success(`Status checked · ${result.embeddingStat ?? 'processing'}`);
+                })}
+              >
+                Check status
+              </button>
+            ) : null}
+            {weeklyTask?.output?.filePath ? (
+              <button
+                type="button"
+                className="bk-native-button is-ghost is-small"
+                disabled={busy !== null}
+                onClick={() => downloadFromLink(
+                  getBlinkoEndpoint(weeklyTask.output.filePath),
+                  weeklyTask.output.filename || 'bkemo_week.md',
+                )}
+              >
+                Download latest
+              </button>
+            ) : null}
+          </>
+        }
+      >
+        <div className="bk-ai-form-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))' }}>
+          <Field label="Knowledge base ID" hint="The numeric BigModel knowledge base identifier.">
+            <input
+              value={knowledgeBaseId}
+              onChange={(event) => setKnowledgeBaseId(event.target.value.replace(/\D/g, ''))}
+              placeholder="Knowledge base ID"
+              inputMode="numeric"
+              spellCheck={false}
+            />
+          </Field>
+          <Field label="BigModel API key" hint={weeklyTask?.hasApiKey ? 'Saved securely. Leave blank to keep it.' : 'Required before testing or running.'}>
+            <input
+              type="password"
+              autoComplete="new-password"
+              value={weeklyApiKey}
+              onChange={(event) => setWeeklyApiKey(event.target.value)}
+              placeholder={weeklyTask?.hasApiKey ? '••••••••' : 'Enter API key'}
+              spellCheck={false}
+            />
+          </Field>
+        </div>
+
+        <div className="bk-ai-form-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
+          <Field label="Cadence">
+            <input value="Monday at 03:00" readOnly />
+          </Field>
+          <Field label="Timezone">
+            <input value="America/New_York" readOnly />
+          </Field>
+          <Field label="Privacy tag">
+            <input value="exclude_from_ai" readOnly />
+          </Field>
+        </div>
+
+        <MetaLine task={weeklyTask} />
+        {weeklyTask?.output ? (
+          <div style={{ color: 'var(--fg-2)', fontSize: 12, lineHeight: 1.55 }}>
+            <div>
+              Latest · {weeklyTask.output.noteCount ?? 0} notes
+              {weeklyTask.output.filename ? <> · <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5 }}>{weeklyTask.output.filename}</code></> : null}
+            </div>
+            {weeklyTask.output.documentId ? (
+              <div>Document · <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5 }}>{weeklyTask.output.documentId}</code> · vector status {weeklyTask.output.embeddingStat ?? 'processing'}</div>
+            ) : null}
+            {weeklyTask.output.embeddingFailure?.message ? <div style={{ color: 'var(--urgent)' }}>Vectorization · {weeklyTask.output.embeddingFailure.message}</div> : null}
+            {weeklyTask.output.warning ? <div style={{ color: 'var(--important)' }}>Warning · {weeklyTask.output.warning}</div> : null}
           </div>
         ) : null}
       </JobCard>
