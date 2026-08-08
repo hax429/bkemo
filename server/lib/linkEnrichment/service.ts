@@ -1,5 +1,5 @@
 import { unfurl } from 'unfurl.js';
-import { prisma } from '../prisma';
+import { prisma } from '../../prisma';
 import { FileService } from '../files';
 import { getWithProxy } from '../proxy';
 import { getGlobalConfig } from '@server/routerTrpc/config';
