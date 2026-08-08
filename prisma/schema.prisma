@@ -40,6 +40,7 @@ model accounts {
   sharedNotes      noteInternalShare[]
   aiScheduledTasks aiScheduledTask[]
   accessTokens     accessToken[]
+  accessTokenMisuseIncidents accessTokenMisuseIncident[]
   oauthCodes                 oauthAuthorizationCode[]
   oauthTokens                oauthToken[]
   oauthConsents              oauthConsent[]
@@ -49,15 +50,18 @@ model accounts {
   integrationDeviceCreds     integrationDeviceCredential[]
   noteChanges                noteChange[]
   composeDraft               composeDraft?
+  linkEnrichments            linkEnrichment[]
 }
 
 // Named, scope-limited API access tokens (GitHub-PAT style). The actual bearer
 // credential is a JWT (verified via JWT_SECRET) carrying the expanded permission
 // paths; this row tracks/revokes it by `jti` and stores only a display preview.
+// `platform` binds the intended client surface (soft enforcement + misuse warn).
 model accessToken {
   id         Int       @id @default(autoincrement())
   accountId  Int
   name       String    @default("") @db.VarChar
+  platform   String    @default("api") @db.VarChar(16)
   jti        String    @unique @db.VarChar
   scopes     Json?     @db.Json
   preview    String    @default("") @db.VarChar
@@ -65,9 +69,32 @@ model accessToken {
   expiresAt  DateTime? @db.Timestamptz(6)
   createdAt  DateTime  @default(now()) @db.Timestamptz(6)
 
-  account accounts @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  account  accounts                    @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  misuse   accessTokenMisuseIncident[]
 
   @@index([accountId])
+  @@index([accountId, platform])
+}
+
+// Soft platform-mismatch signal for a managed access token. One open incident
+// per (token, observedPlatform); dismissed rows stay for audit (~90d cleanup).
+model accessTokenMisuseIncident {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  accountId         Int
+  accessTokenId     Int
+  expectedPlatform  String    @db.VarChar(16)
+  observedPlatform  String    @db.VarChar(16)
+  tokenName         String    @default("") @db.VarChar(80)
+  requestCount      Int       @default(1)
+  lastSeenAt        DateTime  @default(now()) @db.Timestamptz(6)
+  createdAt         DateTime  @default(now()) @db.Timestamptz(6)
+  dismissedAt       DateTime? @db.Timestamptz(6)
+
+  account     accounts    @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  accessToken accessToken @relation(fields: [accessTokenId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, dismissedAt])
+  @@index([accessTokenId, observedPlatform])
 }
 
 model attachments {
@@ -232,10 +259,41 @@ model notes {
   internalShares    noteInternalShare[]
   reactions         reaction[]
   conversations     conversation[]
+  linkEnrichments   linkEnrichment[]
 
   @@index([accountId, dueDate])
   @@index([accountId, type])
   @@index([parentNoteId])
+}
+
+// Save-time URL enrichment sidecar (Defuddle markdown + Wayback snapshot).
+// The note body keeps bare URLs; clients upgrade them to bookmark cards.
+model linkEnrichment {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  accountId       Int
+  noteId          Int
+  url             String    @db.VarChar(2048)
+  status          String    @default("pending") @db.VarChar(32)
+  title           String    @default("") @db.VarChar(512)
+  description     String    @default("") @db.Text
+  favicon         String    @default("") @db.VarChar(2048)
+  imageUrl        String    @default("") @db.VarChar(2048)
+  imagePath       String    @default("") @db.VarChar(2048)
+  markdown        String    @default("") @db.Text
+  archiveUrl      String    @default("") @db.VarChar(2048)
+  archiveJobId    String    @default("") @db.VarChar(128)
+  error           String    @default("") @db.Text
+  markdownStatus  String    @default("pending") @db.VarChar(32)
+  archiveStatus   String    @default("pending") @db.VarChar(32)
+  createdAt       DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @db.Timestamptz(6)
+
+  account accounts @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  note    notes    @relation(fields: [noteId], references: [id], onDelete: Cascade)
+
+  @@unique([noteId, url])
+  @@index([accountId, status])
+  @@index([noteId])
 }
 
 // Append-only per-account cursor journal maintained by a PostgreSQL trigger on

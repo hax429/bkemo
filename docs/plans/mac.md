@@ -1,7 +1,7 @@
 # bkemo macOS — Tauri Quick-Capture Shell (Plan)
 
 **Server:** `https://bk.hax429.me`  
-**Stack:** Tauri v2 (`app/src-tauri/`), shared React frontend, `tauri-plugin-global-shortcut`  
+**Stack:** Tauri v2 (`out/macos/`), shared React frontend, `tauri-plugin-global-shortcut`  
 **Last updated:** 2026-07-23  
 **Companion:** [`IOS.md`](./IOS.md) (native SwiftUI; Tauri iOS retired). macOS stays on Tauri.
 
@@ -54,7 +54,7 @@ Speed of capture beats feature parity with the web app. The full bkemo UI remain
 Reuse the existing Tauri desktop shell. No new top-level package.
 
 ```
-app/src-tauri/          Rust: hotkeys, windows, tray
+out/macos/          Rust: hotkeys, windows, tray
 app/src/pages/quicknote.tsx
 app/src/hooks/useInitialHotkeySetup.ts
 app/src/components/BlinkoSettings/HotkeySetting.tsx
@@ -84,7 +84,7 @@ Main-window TipTap/NoteModal is slower (shell, auth chrome, layout) and fights �
 
 | Platform | Client | Capture entry |
 |----------|--------|---------------|
-| iOS | Native SwiftUI (`ios/`) | App icon / widget / share |
+| iOS | Native SwiftUI (`out/ios/`) | App icon / widget / share |
 | macOS | Tauri desktop | ⌃W → `/quicknote` |
 | Web | Vite React | In-app composer / modal |
 
@@ -166,8 +166,8 @@ Align with product offline conventions in `docs/agents/PROJECT.md`:
 
 | Step | Change | Files (expected) |
 |------|--------|------------------|
-| 1 | Platform-specific default `Control+W` on macOS | `app/src-tauri/src/desktop/hotkey.rs`, `shared` `DEFAULT_HOTKEY_CONFIG` / frontend defaults |
-| 2 | Make `toggle_quicknote_window` preserve the mounted draft | `app/src-tauri/src/desktop/window.rs` |
+| 1 | Platform-specific default `Control+W` on macOS | `out/macos/src/desktop/hotkey.rs`, `shared` `DEFAULT_HOTKEY_CONFIG` / frontend defaults |
+| 2 | Make `toggle_quicknote_window` preserve the mounted draft | `out/macos/src/desktop/window.rs` |
 | 3 | Wire shortcut handler + tray quick-note to show/focus | `setup.rs`, `tray.rs` |
 | 4 | Emit frontend event; focus TipTap; memo create-mode; preserve unsaved | `quicknote.tsx` |
 | 5 | Registration failure UI | `HotkeySetting.tsx` (+ optional toast) |
@@ -248,10 +248,10 @@ Align with product offline conventions in `docs/agents/PROJECT.md`:
 ## 11. Files likely to change
 
 ```
-app/src-tauri/src/desktop/hotkey.rs       macOS default Control+W
-app/src-tauri/src/desktop/window.rs       draft-preserving quicknote toggle
-app/src-tauri/src/desktop/setup.rs        shortcut → show/focus
-app/src-tauri/src/desktop/tray.rs         tray → same path
+out/macos/src/desktop/hotkey.rs       macOS default Control+W
+out/macos/src/desktop/window.rs       draft-preserving quicknote toggle
+out/macos/src/desktop/setup.rs        shortcut → show/focus
+out/macos/src/desktop/tray.rs         tray → same path
 app/src/pages/quicknote.tsx               event → focus / draft policy
 app/src/hooks/useInitialHotkeySetup.ts    platform default
 app/src/components/BlinkoSettings/HotkeySetting.tsx
@@ -268,6 +268,6 @@ Do not update `docs/agents/PROJECT.md` until implementation lands (same conventi
 - [`../agents/PROJECT.md`](../agents/PROJECT.md) — product model, Tauri clients, offline conventions
 - [`../agents/UI.md`](../agents/UI.md) — `.bkemo` theme; quicknote should stay on existing tokens
 - [`./IOS.md`](./IOS.md) — native iOS; macOS explicitly out of that plan
-- `app/src-tauri/tauri.conf.json` — `quicknote` window definition
-- `app/src-tauri/src/desktop/hotkey.rs` — register / defaults
+- `out/macos/tauri.conf.json` — `quicknote` window definition
+- `out/macos/src/desktop/hotkey.rs` — register / defaults
 - `app/src/pages/quicknote.tsx` — capture UI

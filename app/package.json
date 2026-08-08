@@ -15,15 +15,13 @@
     "tauri": "tauri",
     "tauri:dev": "RUST_BACKTRACE=1 tauri dev",
     "tauri:build:desktop:local": "tauri build --no-bundle",
-    "tauri:android:dev": "tauri android dev --host",
-    "tauri:android:build": "tauri android build",
     "dev:vite": "vite --host",
-    "tauri:ios:dev": "RUST_BACKTRACE=1 tauri ios dev",
-    "tauri:ios:build": "tauri ios build",
     "tauri:desktop:build": "tauri build",
     "test": "vitest run",
     "test:watch": "vitest",
-    "svg2vectordrawable": "bun add svg2vectordrawable"
+    "test:ui": "vitest run src/components src/test",
+    "test:e2e": "playwright test",
+    "test:e2e:install": "playwright install chromium"
   },
   "dependencies": {
     "@heroui/react": "^2.8.0-beta.1",
@@ -101,6 +99,10 @@
     "@iconify/json": "^2.2.331",
     "@tailwindcss/typography": "^0.5.16",
     "@tauri-apps/cli": "2.5.0",
+    "@testing-library/jest-dom": "^7.0.0",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.3",
+    "@playwright/test": "^1.54.2",
     "@types/react": "^18.3.1",
     "@types/react-dom": "^18.3.1",
     "@types/systemjs": "^6.15.3",
@@ -109,12 +111,12 @@
     "autoprefixer": "^10.4.21",
     "concurrently": "^9.1.2",
     "cross-env": "^7.0.3",
+    "jsdom": "^25.0.1",
     "tailwindcss": "^4.1.4",
     "tailwindcss-animate": "^1.0.7",
     "terser": "^5.34.1",
     "typescript": "~5.6.2",
     "vite": "^6.0.3",
-    "vitest": "^2.1.8",
-    "jsdom": "^25.0.1"
+    "vitest": "^2.1.8"
   }
 }

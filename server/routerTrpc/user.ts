@@ -6,7 +6,8 @@ import { prisma } from '../prisma';
 import { Prisma } from '@prisma/client';
 import { accountsSchema } from '@shared/lib/prismaZodType';
 import { hashPassword, verifyPassword } from '@prisma/seed';
-import { generateTOTP, generateTOTPQRCode, verifyTOTP, generateApiToken } from "@server/lib/helper";
+import { generateTOTP, generateTOTPQRCode, verifyTOTP, generateToken } from "@server/lib/helper";
+import { mintManagedAccessToken } from "@server/lib/accessTokenService";
 import { deleteNotes } from './note';
 import { createSeed } from '@prisma/seedData';
 
@@ -276,9 +277,7 @@ export const userRouter = router({
           })
           await prisma.accounts.update({
             where: { id: res.id },
-            data: {
-              apiToken: await generateApiToken({ id: res.id, name, role: 'superadmin' })
-            }
+            data: { apiToken: '' },
           })
           await prisma.config.create({
             data: {
@@ -322,8 +321,7 @@ export const userRouter = router({
             }
             // Standard user: can view/edit their own memos and share publicly,
             // but no admin power (manageSiteSettings/manageUsers stay false).
-            const res = await prisma.accounts.create({ data: { name, email: cleanEmail, password: passwordHash, nickname: name, role: 'user' } })
-            await prisma.accounts.update({ where: { id: res.id }, data: { apiToken: await generateApiToken({ id: res.id, name, role: 'user' }) } })
+            const res = await prisma.accounts.create({ data: { name, email: cleanEmail, password: passwordHash, nickname: name, role: 'user', apiToken: '' } })
             return true
           }
         }
@@ -333,16 +331,11 @@ export const userRouter = router({
     .meta({ openapi: { method: 'POST', path: '/v1/user/regen-token', summary: 'Regen token', tags: ['User'] } })
     .input(z.void())
     .output(z.boolean())
-    .mutation(async ({ ctx }) => {
-      const user = await prisma.accounts.findFirst({ where: { id: Number(ctx.id) } })
-      if (user) {
-        const token = await generateApiToken({ id: user.id, name: user.name ?? '', role: user.role })
-        console.log('token', token);
-        await prisma.accounts.update({ where: { id: user.id }, data: { apiToken: token } })
-        return true
-      } else {
-        return false
-      }
+    .mutation(async () => {
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: 'Legacy apiToken is retired — create a platform-bound access token in Settings → Security & API',
+      });
     }),
   genLowPermToken: authProcedure
     .meta({ openapi: { method: 'POST', path: '/v1/user/gen-low-perm-token', summary: 'Generate low permission token', tags: ['User'] } })
@@ -356,16 +349,14 @@ export const userRouter = router({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'User not found' });
       }
 
-      const token = await generateApiToken(
-        {
-          id: user.id,
-          name: user.name ?? '',
-          role: user.role,
-        },
-        ['notes.upsert', 'ai.completions', 'users.list', 'users.genTokenByUserId']
-      );
-
-      return { token };
+      const minted = await mintManagedAccessToken({
+        accountId: user.id,
+        name: 'Low permission',
+        platform: 'api',
+        scopes: ['notes:write'],
+        expiresInDays: 90,
+      });
+      return { token: minted.token };
     }),
   genTokenByUserId: authProcedure.use(requireManageUsers)
     .meta({
@@ -410,15 +401,18 @@ export const userRouter = router({
             continue;
           }
 
-          const token = await generateApiToken({
-            id: user.id,
-            name: user.name ?? '',
-            role: user.role
+          const minted = await mintManagedAccessToken({
+            accountId: user.id,
+            name: `Issued for ${user.name || user.id}`,
+            platform: 'api',
+            scopes: ['notes:read', 'notes:write'],
+            expiresInDays: 90,
+            fullApp: true,
           });
 
           results.push({
             userId: user.id,
-            token,
+            token: minted.token,
             name: user.name ?? '',
             success: true
           });
@@ -469,7 +463,7 @@ export const userRouter = router({
       if (!isOwner(caller) && (targetPerms.manageUsers || targetPerms.manageSiteSettings)) {
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Cannot view as another administrator' });
       }
-      const token = await generateApiToken({ id: target.id, name: target.name ?? '', role: target.role });
+      const token = await generateToken(target, true);
       return {
         token,
         id: target.id,
@@ -654,17 +648,17 @@ export const userRouter = router({
           if (!isOwner(caller)) {
             createPerms.manageSiteSettings = false;
           }
-          const res = await prisma.accounts.create({
+          await prisma.accounts.create({
             data: {
               name,
               email: cleanEmail ?? '',
               password: passwordHash,
               nickname: name,
               role: 'user',
+              apiToken: '',
               permissions: createPerms as unknown as Prisma.InputJsonValue
             }
           })
-          await prisma.accounts.update({ where: { id: res.id }, data: { apiToken: await generateApiToken({ id: res.id, name: name ?? '', role: 'user' }) } })
           return true
         }
       })
@@ -862,23 +856,14 @@ export const userRouter = router({
         });
       }
 
-      const token = await generateApiToken({
-        id: user.id,
-        name: user.name ?? '',
-        role: user.role
-      });
-
-      await prisma.accounts.update({
-        where: { id: user.id },
-        data: { apiToken: token }
-      });
+      const token = await generateToken(user, false);
 
       return {
         id: user.id,
         name: user.name ?? '',
         nickname: user.nickname ?? '',
         role: user.role,
-        token: token,
+        token,
         image: user.image,
         loginType: user.loginType ?? ''
       };

@@ -90,11 +90,11 @@ capture windows and shared settings still import them.
 |---|---|---|
 | Web and shared UI | `app/src/` | React 18, TypeScript, Vite, MobX, TipTap |
 | bkemo product UI | `app/src/pages/bkemo/`, `app/src/components/bkemo/` | Main route, navigation, screens, memo/task interaction |
-| Native clients | `app/src-tauri/`, `app/tauri-plugin-blinko/` | Tauri v2, Rust, Swift/Kotlin integrations |
+| Native clients | `out/macos/`, `out/ios/`, `app/tauri-plugin-blinko/` | Tauri macOS shell, SwiftUI iOS app, shared plugin helpers |
 | API and jobs | `server/` | Express, tRPC, REST/OpenAPI, auth, AI, background jobs |
 | Persistence | `prisma/` | Neon PostgreSQL schema and migrations |
 | Attachments | Settings → Storage (`objectStorage`) | Cloudflare R2 (S3-compatible) or local `.blinko/files` |
-| Shared contracts | `shared/`, `blinko-types/` | Cross-package types and utilities |
+| Shared contracts | `shared/` | Cross-package types and utilities |
 
 Important implementation anchors:
 
@@ -124,8 +124,9 @@ Important implementation anchors:
   account-scoped MCP operations, OAuth-protected Streamable HTTP transport, and
   integration audit/idempotency behavior.
 - `server/lib/obsidianPairing.ts`, `server/routerExpress/obsidian.ts`, and
-  `integrations/obsidian/` — Obsidian device pairing plus the private companion
-  plugin scaffold (`/api/v1/obsidian/*`). Source links use `/note/{portableId}`.
+  `out/obsidian/` — Obsidian pairing plus the private **como** companion
+  (`id: como`; bkemo sources + `src/codian/` under one tree;
+  `/api/v1/obsidian/*`). Source links use `/note/{portableId}`.
 
 ## Data and API conventions
 
@@ -136,9 +137,12 @@ Important implementation anchors:
   `==highlight==` (yellow) and `++underline++`.
 - Use tRPC for typed application calls. Add REST/OpenAPI metadata when a route is
   intentionally part of the external API.
-- Scoped access tokens are the external API security boundary. Never expose
-  account administration, provider secrets, or unrestricted user data through a
-  convenience scope.
+- Platform-bound access tokens are the external API security boundary (iOS,
+  macOS, Obsidian, scripts). Web interactive login stays a session JWT. Clients
+  send `X-Bkemo-Platform`; mismatches soft-allow and warn on Mac/Web. Never
+  expose account administration, provider secrets, or unrestricted user data
+  through a convenience scope. See
+  [`../plans/platform-bound-access-tokens.md`](../plans/platform-bound-access-tokens.md).
 - `.env`, `.blinko/`, and database directories contain local or production state
   and must never be committed or replaced during a source update.
 
@@ -181,6 +185,38 @@ bun run test
 bun run build:web
 ./scripts/test-api.sh
 ```
+
+`bun run test` is the fast unit lane. It runs the frontend Vitest suite with
+Testing Library, the backend Bun unit suite, and shared package tests through
+Turbo without building production bundles first. Use the narrower lanes while
+developing:
+
+```bash
+bun --cwd app run test:watch
+bun --cwd server run test:watch
+bun run test:backend:integration
+bun run test:backend:e2e
+```
+
+UI interaction lanes (web React, Obsidian companion DOM, macOS shell):
+
+```bash
+bun run test:ui            # all fast UI lanes
+bun run test:ui:web        # Vitest + Testing Library under `.bkemo`
+bun run test:ui:obsidian   # happy-dom memo-card / attachment UI
+bun run test:ui:mac        # cargo test + shared React platform checks
+bun run test:ui:e2e        # Playwright browser smoke (needs local server)
+```
+
+Component tests should prefer `renderBkemo` from `app/src/test/render.tsx`.
+Obsidian DOM tests import `out/obsidian/src/test/dom.ts` (via `register-dom.ts`).
+Mac shares the React UI with web; shell behavior is covered by `cargo test` in
+`out/macos`.
+
+Backend integration tests may require their documented test environment
+variables. Backend end to end tests require a running local server and database.
+Keep those explicit rather than making the fast unit lane depend on external
+state.
 
 Run focused tests for the area changed. If native Rust code changes, also run
 the relevant `cargo check`/`cargo test` and platform build described in

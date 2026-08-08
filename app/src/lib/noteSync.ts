@@ -30,6 +30,8 @@ type NoteSyncControllerOptions = {
   apply: (payload: NoteSyncPayload) => Promise<unknown>;
   isOnline: () => boolean;
   onBootstrap: () => void;
+  onSecurity?: () => void;
+  platformHeaders?: Record<string, string>;
   subscribeOnline?: (listener: () => void) => () => void;
   pollMs?: number;
   idleMs?: number;
@@ -136,6 +138,7 @@ export function createNoteSyncController(options: NoteSyncControllerOptions): {
         headers: {
           Accept: 'text/event-stream',
           Authorization: `Bearer ${options.token}`,
+          ...(options.platformHeaders ?? {}),
         },
         cache: 'no-store',
         signal: abort.signal,
@@ -156,6 +159,10 @@ export function createNoteSyncController(options: NoteSyncControllerOptions): {
           const raw = lines.find(line => line.startsWith('data:'))?.slice(5).trim();
           let kind: string | undefined;
           try { kind = raw ? JSON.parse(raw)?.kind : undefined; } catch { /* legacy event */ }
+          if (kind === 'security') {
+            options.onSecurity?.();
+            continue;
+          }
           if (!kind || kind === 'note') void sync();
         }
       }

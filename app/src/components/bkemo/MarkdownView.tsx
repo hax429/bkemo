@@ -11,6 +11,8 @@ import { expandBkemoMarkSyntax } from '@/lib/bkemoMarkSyntax';
 import { bkemoSanitizeSchema, safeHref } from '@/lib/safeMarkdown';
 import { eventBus } from '@/lib/event';
 import { loadPrefs } from '@/lib/bkemoSettings';
+import { BookmarkCardReadonly } from '../TiptapEditor/BookmarkCardView';
+import { BARE_URL_RE, normalizeUrl } from '@shared/lib/linkUrls';
 import '../TiptapEditor/tiptap.css';
 
 /** Highlight #tags inside text children while leaving inline markdown elements intact. */
@@ -18,6 +20,23 @@ function hl(children: React.ReactNode): React.ReactNode {
   return React.Children.toArray(children).map((c, i) =>
     typeof c === 'string' ? <React.Fragment key={i}>{renderMemoBody(c)}</React.Fragment> : c,
   );
+}
+
+function isBareUrlParagraph(children: React.ReactNode): string | null {
+  const parts = React.Children.toArray(children);
+  if (parts.length !== 1) return null;
+  const only = parts[0];
+  if (typeof only === 'string') {
+    const trimmed = only.trim();
+    const match = trimmed.match(new RegExp(`^${BARE_URL_RE.source}$`, 'i'));
+    return match ? normalizeUrl(match[0]) : null;
+  }
+  if (React.isValidElement(only) && only.type === 'a') {
+    const href = normalizeUrl(String((only.props as any).href || ''));
+    const text = String((only.props as any).children ?? '').trim();
+    if (href && (!text || normalizeUrl(text) === href || text === href)) return href;
+  }
+  return null;
 }
 
 /**
@@ -52,7 +71,7 @@ function CodeBlock({ className, children, dark }: { className?: string; children
  * (.tiptap-content) so the stream stays visually consistent with editing, and
  * keeps the accent #tag highlighting from the prototype.
  */
-export function MarkdownView({ content, dark: darkProp }: { content: string; dark?: boolean }) {
+export function MarkdownView({ content, dark: darkProp, noteId }: { content: string; dark?: boolean; noteId?: number }) {
   const dark = darkProp ?? loadPrefs().theme !== 'light';
   const body = expandBkemoMarkSyntax(content ?? '');
   return (
@@ -61,7 +80,17 @@ export function MarkdownView({ content, dark: darkProp }: { content: string; dar
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeRaw, [rehypeSanitize, bkemoSanitizeSchema]]}
         components={{
-          p: ({ children }) => <p>{hl(children)}</p>,
+          p: ({ children }) => {
+            const bookmarkHref = isBareUrlParagraph(children);
+            if (bookmarkHref) {
+              return (
+                <div className="bk-bookmark-wrap">
+                  <BookmarkCardReadonly href={bookmarkHref} noteId={noteId} />
+                </div>
+              );
+            }
+            return <p>{hl(children)}</p>;
+          },
           // Code blocks render their own container (highlighter) — pass `pre`
           // through so we don't double-wrap in the default <pre>.
           pre: ({ children }) => <>{children}</>,

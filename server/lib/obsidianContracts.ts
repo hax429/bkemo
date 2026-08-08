@@ -16,6 +16,7 @@ export const OBSIDIAN_SCOPES: AccessScope[] = [
 export const OBSIDIAN_REQUIRED_SCOPE: AccessScope = 'notes:read';
 
 export function scopesForObsidian(scopes: string[]): AccessScope[] {
+  if (scopes.includes('app:full')) return [...OBSIDIAN_SCOPES];
   const allowed = new Set<AccessScope>(OBSIDIAN_SCOPES);
   return scopes.filter((scope): scope is AccessScope => allowed.has(scope as AccessScope));
 }
@@ -205,4 +206,24 @@ export function taskFilterClause(tasksOnly: boolean) {
   return {
     OR: [{ type: NoteType.TODO }, { dueDate: { not: null } }],
   };
+}
+
+/** Device / access credentials stop resolving once revoked or past expiry. */
+export function isCredentialTimeValid(
+  input: { revokedAt?: Date | null; expiresAt?: Date | null },
+  now = new Date(),
+): boolean {
+  if (input.revokedAt) return false;
+  if (input.expiresAt && input.expiresAt <= now) return false;
+  return true;
+}
+
+/** Every Obsidian note/attachment read is scoped to the actor account. */
+export function ownedPortableWhere(accountId: number, portableId: string) {
+  return { portableId, accountId };
+}
+
+/** Conditional writes treat updateMany count !== 1 as a revision conflict. */
+export function revisionWriteMatched(updatedCount: number): boolean {
+  return updatedCount === 1;
 }

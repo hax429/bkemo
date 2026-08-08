@@ -4,7 +4,7 @@
 > implementation that shipped. The current OAuth-protected Streamable HTTP
 > contract is documented in [`../agents/MCP.md`](../agents/MCP.md), and its
 > audited design record is
-> [`../../agents/plan/mcp-integration.md`](../../agents/plan/mcp-integration.md).
+> [`./mcp-integration.md`](./mcp-integration.md).
 
 Expose bkemo to LLM agents (Claude Desktop, Claude Code, the API) as an **MCP
 server** that wraps the **REST API you already built** — the `trpc-to-openapi`

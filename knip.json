@@ -14,14 +14,17 @@
       "entry": [
         "src/main.tsx",
         "src/**/*.test.{ts,tsx}",
+        "src/**/*.ui.test.{ts,tsx}",
         "src/**/__tests__/**/*.{ts,tsx}",
+        "src/test/**/*.{ts,tsx}",
+        "e2e/**/*.{ts,tsx}",
+        "playwright.config.ts",
         "vite.config.ts",
         "src/components/Common/Iconify/buildIcons.js",
         "tauri-plugin-blinko/src/**/*.{ts,tsx}"
       ],
       "project": ["src/**/*.{ts,tsx,js,jsx}", "tauri-plugin-blinko/src/**/*.{ts,tsx}"],
       "ignore": [
-        "src-tauri/**",
         "dist/**",
         "src/components/Common/Iconify/icons.tsx"
       ],
@@ -35,8 +38,8 @@
         "aiServer/**/*.test.ts",
         "aiServer/**/__tests__/**/*.ts"
       ],
-      "project": ["**/*.{ts,tsx}", "!vditor/**", "!public/**"],
-      "ignore": ["vditor/**", "public/**", "**/*.d.ts"]
+      "project": ["**/*.{ts,tsx}", "!public/**"],
+      "ignore": ["public/**", "**/*.d.ts"]
     },
     "shared": {
       "entry": ["lib/**/*.{ts,tsx}"],
@@ -47,9 +50,10 @@
     "**/node_modules/**",
     "**/dist/**",
     "**/.blinko/**",
-    "**/blinko-types/**",
-    "app/src-tauri/**",
-    "server/vditor/**"
+    "out/macos/**",
+    "out/ios/**",
+    "out/obsidian/**",
+    "out/output/**"
   ],
   "ignoreBinaries": ["turbo", "dotenv", "prisma", "tsup", "ncp", "cross-env"],
   "ignoreDependencies": [

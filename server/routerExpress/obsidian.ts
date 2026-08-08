@@ -178,6 +178,48 @@ router.get('/tags', async (req, res) => {
   }
 });
 
+/** Lookup save-time URL enrichment (Defuddle markdown + Wayback URL) for a bookmark. */
+router.get('/link-enrichments', async (req, res) => {
+  try {
+    const actor = await requireActor(req, res);
+    if (!actor) return;
+    const url = typeof req.query.url === 'string' ? req.query.url : '';
+    if (!url) return res.status(400).json(redactIntegrationError('invalid_request'));
+    const notePortableId = typeof req.query.notePortableId === 'string' ? req.query.notePortableId : undefined;
+    let noteId: number | undefined;
+    if (notePortableId) {
+      const note = await prisma.notes.findFirst({
+        where: { portableId: notePortableId, accountId: actor.accountId },
+        select: { id: true },
+      });
+      noteId = note?.id;
+    }
+    const row = await prisma.linkEnrichment.findFirst({
+      where: {
+        accountId: actor.accountId,
+        url,
+        ...(noteId ? { noteId } : {}),
+      },
+      orderBy: { updatedAt: 'desc' },
+    });
+    if (!row) return res.status(404).json(redactIntegrationError('not_found'));
+    return res.json({
+      id: row.id,
+      url: row.url,
+      title: row.title,
+      description: row.description,
+      markdown: row.markdown,
+      archiveUrl: row.archiveUrl,
+      markdownStatus: row.markdownStatus,
+      archiveStatus: row.archiveStatus,
+      status: row.status,
+      error: row.error,
+    });
+  } catch (error) {
+    return sendError(res, error);
+  }
+});
+
 router.get('/attachments/:portableId', async (req, res) => {
   try {
     const actor = await requireActor(req, res);

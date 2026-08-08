@@ -21,6 +21,7 @@ import { hashSharePassword, noteHasSharePassword, verifySharePassword } from '..
 import { isOpenPublicShare } from '../lib/notePublicAccess';
 import { TRPCError } from '@trpc/server';
 import { appendShareFileToken, mintShareFileToken } from '../lib/shareFileToken';
+import { scheduleLinkEnrichmentForNote } from '../lib/linkEnrichment/service';
 
 const extractHashtags = (input: string): string[] => {
   const withoutCodeBlocks = input.replace(/```[\s\S]*?```/g, '');
@@ -788,7 +789,7 @@ export const noteRouter = router({
       }
 
       const shareFileToken = noteHasSharePassword(note.sharePassword) && note.shareEncryptedUrl
-        ? mintShareFileToken(note.id, note.shareEncryptedUrl)
+        ? mintShareFileToken(note.id, note.shareEncryptedUrl, note.sharePassword)
         : '';
 
       return {
@@ -1445,6 +1446,14 @@ export const noteRouter = router({
           AiService.embeddingUpsert({ id: note.id, content: note.content, type: 'update', createTime: note.createdAt!, updatedAt: note.updatedAt });
         }
 
+        if (content != null && note.accountId) {
+          void scheduleLinkEnrichmentForNote({
+            noteId: note.id,
+            accountId: note.accountId,
+            content: note.content,
+          }).catch((err) => console.error('Link enrichment schedule failed:', err));
+        }
+
         SendWebhook({ ...note, attachments }, isRecycle ? 'delete' : 'update', ctx);
         publishNoteDirty(note.accountId);
         return note;
@@ -1570,6 +1579,14 @@ export const noteRouter = router({
             } catch (error) {
               console.error('Failed to start post-processing:', error);
             }
+          }
+
+          if (note.accountId) {
+            void scheduleLinkEnrichmentForNote({
+              noteId: note.id,
+              accountId: note.accountId,
+              content: note.content,
+            }).catch((err) => console.error('Link enrichment schedule failed:', err));
           }
 
           SendWebhook({ ...note, attachments }, 'create', ctx);

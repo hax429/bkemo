@@ -9,6 +9,7 @@ import { FileService } from '@server/lib/files';
 import { getGlobalConfig } from './config';
 import { AiService } from '@server/aiServer';
 import { SendWebhook } from '@server/lib/helper';
+import { scheduleLinkEnrichmentForNote } from '@server/lib/linkEnrichment/service';
 
 const dueDateSchema = z.union([z.date(), z.string().datetime(), z.null()]);
 const draftFieldsSchema = z.object({
@@ -212,6 +213,13 @@ export function createDraftRouter(
             console.error('Draft note post-processing failed:', error);
           });
         }
+        void scheduleLinkEnrichmentForNote({
+          noteId: note.id,
+          accountId,
+          content: note.content,
+        }).catch((error) => {
+          console.error('Draft link enrichment schedule failed:', error);
+        });
         SendWebhook({ ...note, attachments: input.attachments }, 'create', ctx);
         return { ok: true as const, note };
       }),

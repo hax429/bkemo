@@ -1,0 +1,116 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Exact SemVer release version without a v prefix
+        required: true
+        type: string
+      runtime_evidence_sha256:
+        description: SHA-256 of reviewed L5 runtime evidence JSON
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+  artifact-metadata: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment: release
+
+    steps:
+      - name: Checkout protected main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Verify release source
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          git fetch origin main --tags
+          test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
+          if git rev-parse --verify --quiet "refs/tags/$VERSION"; then
+            echo "Release tag already exists: $VERSION" >&2
+            exit 1
+          fi
+          if [[ ! "${{ inputs.runtime_evidence_sha256 }}" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "Runtime evidence SHA-256 must contain 64 lowercase hexadecimal characters." >&2
+            exit 1
+          fi
+
+      - name: Setup Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate release metadata
+        run: node scripts/check-release-version.mjs "${{ inputs.version }}"
+
+      - name: Audit production dependencies
+        run: npm run security:audit
+
+      - name: Check production licenses
+        run: npm run licenses:check
+
+      - name: Scan tracked files and Git history for secrets
+        run: npm run security:secrets
+
+      - name: Run full verification
+        run: npm run verify
+
+      - name: Generate artifact checksums
+        run: sha256sum main.js manifest.json styles.css > SHA256SUMS.txt
+
+      - name: Bind release notes to runtime evidence
+        env:
+          RUNTIME_EVIDENCE_SHA256: ${{ inputs.runtime_evidence_sha256 }}
+        run: |
+          node scripts/generate-release-notes.mjs "${{ inputs.version }}" > RELEASE_NOTES.md
+          {
+            echo
+            echo "## Verification"
+            echo
+            echo "- Commit: $(git rev-parse HEAD)"
+            echo "- Runtime evidence SHA-256: $RUNTIME_EVIDENCE_SHA256"
+            echo
+            echo '```text'
+            cat SHA256SUMS.txt
+            echo '```'
+          } >> RELEASE_NOTES.md
+
+      - name: Generate artifact attestations
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4
+        with:
+          subject-path: |
+            main.js
+            manifest.json
+            styles.css
+            SHA256SUMS.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
+        with:
+          tag_name: ${{ inputs.version }}
+          target_commitish: main
+          body_path: RELEASE_NOTES.md
+          prerelease: ${{ contains(inputs.version, '-') }}
+          files: |
+            main.js
+            manifest.json
+            styles.css
+            SHA256SUMS.txt

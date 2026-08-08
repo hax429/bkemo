@@ -149,6 +149,7 @@ export const publicRouter = router({
           title: z.string(),
           favicon: z.string(),
           description: z.string(),
+          image: z.string(),
         }),
         z.null(),
       ]),
@@ -156,10 +157,10 @@ export const publicRouter = router({
     .query(async function ({ input }) {
       const safe = await assertSafeOutboundUrl(input.url);
       if (!safe.ok) {
-        return { title: '', favicon: '', description: '' };
+        return { title: '', favicon: '', description: '', image: '' };
       }
       return cache.wrap(
-        safe.url.href,
+        `link-preview-v2:${safe.url.href}`,
         async () => {
           try {
             const timeoutPromise = new Promise((_, reject) => {
@@ -167,10 +168,15 @@ export const publicRouter = router({
             });
             const fetchPromise = limit(async () => {
               const result: Metadata = await unfurl(safe.url.href);
+              const image =
+                result?.open_graph?.images?.[0]?.url ||
+                result?.twitter_card?.images?.[0]?.url ||
+                '';
               return {
                 title: result?.title ?? '',
                 favicon: result?.favicon ?? '',
                 description: result?.description ?? '',
+                image: typeof image === 'string' ? image : '',
               };
             });
             const result: any = await Promise.race([fetchPromise, timeoutPromise]);
@@ -181,6 +187,7 @@ export const publicRouter = router({
               title: '',
               favicon: '',
               description: '',
+              image: '',
             };
           }
         },

@@ -7,7 +7,8 @@
  *   API_BASE=… bun scripts/demo-api.ts
  */
 import { prisma } from '../server/prisma';
-import { generateApiToken } from '../server/lib/helper';
+import { mintManagedAccessToken } from '../server/lib/accessTokenService';
+import { APP_FULL_SCOPE } from '../shared/lib/accessTokenPlatform';
 
 const BASE = (process.env.API_BASE || 'http://localhost:1111').replace(/\/$/, '');
 const API = `${BASE}/api`;
@@ -15,7 +16,7 @@ const c = { b: '\x1b[1m', dim: '\x1b[2m', grn: '\x1b[32m', cyan: '\x1b[36m', yel
 let TOKEN = '';
 
 async function call(method: string, path: string, body?: any, token: string | null = TOKEN) {
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = { 'X-Bkemo-Platform': 'api' };
   if (token) headers['Authorization'] = `Bearer ${token}`;
   let payload: string | undefined;
   if (body !== undefined) { headers['Content-Type'] = 'application/json'; payload = JSON.stringify(body); }
@@ -34,7 +35,15 @@ function show(label: string, status: number, json: any) {
 async function main() {
   const acc = await prisma.accounts.findFirst({ orderBy: { id: 'asc' } });
   if (!acc) { console.error('No account found.'); process.exit(1); }
-  TOKEN = await generateApiToken({ id: acc.id, name: acc.name, role: acc.role });
+  const minted = await mintManagedAccessToken({
+    accountId: acc.id,
+    name: 'api-demo',
+    platform: 'api',
+    scopes: [APP_FULL_SCOPE],
+    expiresInDays: 1,
+    fullApp: true,
+  });
+  TOKEN = minted.token;
   console.log(`${c.dim}Acting as account #${acc.id} (${acc.name}) on ${BASE}${c.reset}`);
 
   // ── 1) A rich markdown memo ──

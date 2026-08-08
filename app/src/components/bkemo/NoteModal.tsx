@@ -353,7 +353,7 @@ export const NoteModal = observer(function NoteModal({ note, onClose, startFulls
                   <span style={{ color: 'var(--fg-2)' }}>{linkTitles[parentId] ?? ''}</span>
                 </div>
               )}
-              <MarkdownView content={note.content ?? ''} />
+              <MarkdownView content={note.content ?? ''} noteId={note.id} />
               <AttachmentList attachments={(note as any).attachments} />
               {/* AI stays on details/read only — not in the editing surface. */}
               <NoteAIThread note={note} onOpen={(n) => eventBus.emit('bkemo:open-note', { id: n.id })} />

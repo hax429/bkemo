@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { RootStore } from '@/store/root';
 import { UserStore } from '@/store/user';
+import { bkemoPlatformHeaders } from './bkemoPlatform';
 
 // Create axios instance
 const axiosInstance = axios.create({
@@ -14,6 +15,7 @@ axiosInstance.interceptors.request.use(
     // Get token from UserStore
     const userStore = RootStore.Get(UserStore);
     const token = userStore.tokenData.value?.token;
+    Object.assign(config.headers, bkemoPlatformHeaders());
     
     // If token exists, add it to request headers
     if (token) {

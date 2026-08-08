@@ -13,6 +13,8 @@ matches the work before changing the repository:
   outbound connector policy, configuration, and verification.
 - [`docs/agents/OBSIDIAN.md`](docs/agents/OBSIDIAN.md) — Obsidian companion pairing,
   `/api/v1/obsidian/*` contract, and disposable-vault testing.
+- [`docs/plans/README.md`](docs/plans/README.md) — potential integration roadmap,
+  including MCP hardening, Obsidian sync, and later connectors.
 - [`docs/plans/IOS.md`](docs/plans/IOS.md) — future iOS native, offline, OTA,
   build, and release work.
 - [`docs/plans/mac.md`](docs/plans/mac.md) — macOS Tauri shell; ⌃W → quicknote
@@ -20,15 +22,15 @@ matches the work before changing the repository:
 - [`docs/plans/MCP.md`](docs/plans/MCP.md) — historical MCP server design context.
 - [`docs/plans/bkemo-ai-and-discovery-implementation.md`](docs/plans/bkemo-ai-and-discovery-implementation.md)
   — AI chat and discovery implementation plan.
-- [`agents/plan/README.md`](agents/plan/README.md) — potential integration
-  roadmap, including MCP hardening, Obsidian sync, and later connectors.
+- [`docs/plans/PARSING.md`](docs/plans/PARSING.md) — proposed deterministic
+  attachment parsing into editable Markdown.
 
 Schedule Task (Settings → System) is documented in PROJECT.md: pinned
 auto-archive and scheduled `.bk` backups via pg-boss. AI automations and custom
 scripts on that page are deferred.
 
 Treat `docs/agents/` as current project memory. Treat `docs/plans/` as proposed
-or unfinished feature work. Treat `agents/plan/` as potential roadmap work;
-verify every plan against the source before assuming it exists.
+or unfinished feature work (including the integration roadmap). Verify every
+plan against the source before assuming it exists.
 Do not commit, push, connect to production, or deploy until the user explicitly
 authorizes that action.

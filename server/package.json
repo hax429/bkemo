@@ -7,7 +7,11 @@
     "dev": "bun --env-file ../.env --watch index.ts",
     "prisma:generate": "cd ../prisma && prisma generate",
     "build:web": "bun esbuild.config.ts",
-    "start": "cross-env NODE_ENV=production bun --env-file ../.env ../dist/index.js"
+    "start": "cross-env NODE_ENV=production bun --env-file ../.env ../out/output/index.js",
+    "test": "bun test --env-file ../.env __tests__/unit",
+    "test:watch": "bun test --env-file ../.env --watch __tests__/unit",
+    "test:integration": "bun test --env-file ../.env __tests__/integration",
+    "test:e2e": "bun test --env-file ../.env __tests__/e2e"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^1.2.10",
@@ -45,12 +49,14 @@
     "busboy": "^1.6.0",
     "cors": "^2.8.5",
     "cron": "^4.4.0",
+    "defuddle": "^0.19.2",
     "dotenv": "^16.4.5",
     "express": "^5.1.0",
     "express-mcp-handler": "^0.3.0",
     "feed": "^4.2.2",
     "file-type": "^20.4.1",
     "jsonwebtoken": "^9.0.2",
+    "linkedom": "^0.18.13",
     "music-metadata": "^11.2.0",
     "ncp": "^2.0.0",
     "ollama-ai-provider": "^1.2.0",

@@ -434,7 +434,7 @@ const MemoRow = observer(function MemoRow({ note, onOpen, selected, selectionAct
         )}
         <div style={{ color: done ? 'var(--fg-3)' : 'var(--fg)', textDecoration: done ? 'line-through' : 'none' }}>
           {/* A task's lone body checkbox duplicates the meta-row toggle — hide it. */}
-          <MarkdownView content={task ? stripLoneCheckbox(note.content ?? '') : (note.content ?? '')} />
+          <MarkdownView content={task ? stripLoneCheckbox(note.content ?? '') : (note.content ?? '')} noteId={note.id} />
         </div>
         {collapsed && (
           <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 48, background: 'linear-gradient(transparent, var(--bg-2))', pointerEvents: 'none' }} />

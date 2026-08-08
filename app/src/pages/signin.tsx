@@ -17,6 +17,7 @@ import ReactMarkdown from 'react-markdown';
 import rehypeRaw from 'rehype-raw';
 import rehypeSanitize from 'rehype-sanitize';
 import { bkemoSanitizeSchema, safeHref } from '@/lib/safeMarkdown';
+import { safeReturnTo, stashAuthReturnTo } from '@/lib/authReturnTo';
 import { BlinkoStore } from "@/store/blinkoStore";
 
 type OAuthProvider = {
@@ -80,8 +81,7 @@ export default function Component() {
         }
 
         if (res?.ok) {
-          const returnTo = searchParams.get('returnTo');
-          navigate(returnTo?.startsWith('/') && !returnTo.startsWith('//') ? returnTo : '/');
+          navigate(safeReturnTo(searchParams.get('returnTo')));
         }
 
         if (res?.error) {
@@ -152,6 +152,7 @@ export default function Component() {
                     isLoading={loadingProvider === provider.id}
                     onPress={() => {
                       setLoadingProvider(provider.id);
+                      stashAuthReturnTo(searchParams.get('returnTo'));
                       window.location.href = `${getBlinkoEndpoint()}api/auth/${provider.id}`;
                     }}
                   >

@@ -1030,7 +1030,7 @@ async function restoreBk(
               nickname: source.nickname ?? caller.nickname,
               password: source.password ?? caller.password,
               image: source.image ?? caller.image,
-              apiToken: source.apiToken ?? caller.apiToken,
+              apiToken: '',
               description: source.description ?? caller.description,
               loginType: source.loginType ?? caller.loginType,
               role: 'superadmin',
@@ -1054,7 +1054,7 @@ async function restoreBk(
         role: restoreSiteSettings && source.role === 'admin' ? 'admin' : 'user',
         loginType: source.loginType ?? '',
         permissions: source.permissions ?? null,
-        ...(restoreSiteSettings && source.apiToken ? { apiToken: source.apiToken } : {}),
+        ...(restoreSiteSettings ? { apiToken: '' } : {}),
       };
       const account = existing
         ? await db.accounts.update({ where: { id: existing.id }, data: fields })

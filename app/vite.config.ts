@@ -136,7 +136,7 @@ export default defineConfig({
     }
   },
   build: {
-    outDir: "../dist/public",
+    outDir: "../out/output/public",
     emptyOutDir: true,
     chunkSizeWarningLimit: 2000,
     rollupOptions: {

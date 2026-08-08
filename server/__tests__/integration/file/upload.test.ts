@@ -7,7 +7,7 @@ import { Readable } from 'stream';
 mock.module('../../../prisma', () => ({
   prisma: {
     attachments: {
-      create: mock(() => Promise.resolve({ id: 1 })),
+      create: mock(() => Promise.resolve({ id: 1, portableId: 'test-attachment' })),
       findFirst: mock(() => Promise.resolve(null)),
       delete: mock(() => Promise.resolve()),
     }
@@ -82,13 +82,14 @@ describe('File Upload — Full Flow', () => {
       accountId: 1,
     });
 
-    expect(result.filePath).toContain('/api/file/');
-    expect(result.filePath).toContain('test-document');
-    expect(result.filePath).toContain('.txt');
+    expect(result.filePath).toBe('/api/attachment/test-attachment/file');
+    expect(result.storedPath).toContain('/api/file/');
+    expect(result.storedPath).toContain('test-document');
+    expect(result.storedPath).toContain('.txt');
     expect(result.fileName).toContain('.txt');
 
     // Verify file actually written to disk
-    const relativePath = result.filePath.replace('/api/file/', '');
+    const relativePath = result.storedPath.replace('/api/file/', '');
     const fullPath = path.join(TEMP_UPLOAD_DIR, relativePath);
     const content = await fs.readFile(fullPath, 'utf-8');
     expect(content).toBe('hello world');
@@ -104,11 +105,11 @@ describe('File Upload — Full Flow', () => {
       accountId: 1,
     });
 
-    expect(result.filePath).toContain('/api/file/');
-    expect(result.filePath).toContain('.epub');
+    expect(result.filePath).toBe('/api/attachment/test-attachment/file');
+    expect(result.storedPath).toContain('.epub');
 
     // Verify file written
-    const relativePath = result.filePath.replace('/api/file/', '');
+    const relativePath = result.storedPath.replace('/api/file/', '');
     const fullPath = path.join(TEMP_UPLOAD_DIR, relativePath);
     const stat = await fs.stat(fullPath);
     expect(stat.isFile()).toBe(true);
@@ -128,11 +129,11 @@ describe('File Upload — Full Flow', () => {
 
     // Must succeed — this is the exact scenario that caused 500
     expect(result.filePath).toBeTruthy();
-    expect(result.filePath).toContain('/api/file/');
-    expect(result.filePath).toContain('.epub');
+    expect(result.filePath).toBe('/api/attachment/test-attachment/file');
+    expect(result.storedPath).toContain('.epub');
 
     // Verify file actually exists on disk
-    const relativePath = result.filePath.replace('/api/file/', '');
+    const relativePath = result.storedPath.replace('/api/file/', '');
     const fullPath = path.join(TEMP_UPLOAD_DIR, relativePath);
     const stat = await fs.stat(fullPath);
     expect(stat.isFile()).toBe(true);
@@ -148,14 +149,14 @@ describe('File Upload — Full Flow', () => {
       accountId: 1,
     });
 
-    expect(result.filePath).toContain('/api/file/');
-    expect(result.filePath).toContain('.pdf');
+    expect(result.filePath).toBe('/api/attachment/test-attachment/file');
+    expect(result.storedPath).toContain('.pdf');
     // Reserved chars should be sanitized, not cause a crash
-    expect(result.filePath).not.toContain('<');
-    expect(result.filePath).not.toContain('>');
-    expect(result.filePath).not.toContain('|');
+    expect(result.storedPath).not.toContain('<');
+    expect(result.storedPath).not.toContain('>');
+    expect(result.storedPath).not.toContain('|');
 
-    const relativePath = result.filePath.replace('/api/file/', '');
+    const relativePath = result.storedPath.replace('/api/file/', '');
     const fullPath = path.join(TEMP_UPLOAD_DIR, relativePath);
     const stat = await fs.stat(fullPath);
     expect(stat.isFile()).toBe(true);
@@ -173,11 +174,11 @@ describe('File Upload — Full Flow', () => {
       accountId: 1,
     });
 
-    expect(result.filePath).toContain('/api/file/');
-    expect(result.filePath).toContain('.txt');
+    expect(result.filePath).toBe('/api/attachment/test-attachment/file');
+    expect(result.storedPath).toContain('.txt');
 
     // Filename should be truncated but still valid
-    const relativePath = result.filePath.replace('/api/file/', '');
+    const relativePath = result.storedPath.replace('/api/file/', '');
     const fullPath = path.join(TEMP_UPLOAD_DIR, relativePath);
     const stat = await fs.stat(fullPath);
     expect(stat.isFile()).toBe(true);
@@ -197,11 +198,11 @@ describe('File Upload — Full Flow', () => {
       accountId: 1,
     });
 
-    expect(result.filePath).toContain('/api/file/');
+    expect(result.filePath).toBe('/api/attachment/test-attachment/file');
     // Control chars should be stripped
-    expect(result.filePath).not.toMatch(/[\x00-\x1f\x7f]/);
+    expect(result.storedPath).not.toMatch(/[\x00-\x1f\x7f]/);
 
-    const relativePath = result.filePath.replace('/api/file/', '');
+    const relativePath = result.storedPath.replace('/api/file/', '');
     const fullPath = path.join(TEMP_UPLOAD_DIR, relativePath);
     const stat = await fs.stat(fullPath);
     expect(stat.isFile()).toBe(true);
@@ -217,10 +218,10 @@ describe('File Upload — Full Flow', () => {
       accountId: 1,
     });
 
-    expect(result.filePath).toContain('/api/file/');
-    expect(result.filePath).toContain('.pdf');
+    expect(result.filePath).toBe('/api/attachment/test-attachment/file');
+    expect(result.storedPath).toContain('.pdf');
 
-    const relativePath = result.filePath.replace('/api/file/', '');
+    const relativePath = result.storedPath.replace('/api/file/', '');
     const fullPath = path.join(TEMP_UPLOAD_DIR, relativePath);
     const stat = await fs.stat(fullPath);
     expect(stat.isFile()).toBe(true);
@@ -237,8 +238,9 @@ describe('File Upload — Full Flow', () => {
       accountId: 1,
     });
 
-    // Simulate what the file serving route does
-    const relativePath = result.filePath.replace('/api/file/', '');
+    // Simulate storage resolution behind the stable attachment route.
+    expect(result.filePath).toBe('/api/attachment/test-attachment/file');
+    const relativePath = result.storedPath.replace('/api/file/', '');
     const fullPath = path.join(TEMP_UPLOAD_DIR, relativePath);
     const readBack = await fs.readFile(fullPath, 'utf-8');
     expect(readBack).toBe(originalContent);

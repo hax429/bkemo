@@ -78,7 +78,7 @@ export async function latestNoteChangeCursor(
   return latest?.id ?? 0;
 }
 
-export type AccountEventKind = 'note' | 'draft';
+export type AccountEventKind = 'note' | 'draft' | 'security';
 export type AccountEvent = { kind: AccountEventKind };
 export type NoteDirtyListener = (event: AccountEvent) => void;
 

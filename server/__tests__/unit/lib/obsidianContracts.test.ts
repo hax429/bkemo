@@ -3,12 +3,15 @@ import {
   encodeObsidianSearchCursor,
   formatPairingCode,
   hasObsidianConnectAccess,
+  isCredentialTimeValid,
   isValidPairingCodeFormat,
   looksLikeAccessToken,
   normalizeObsidianSearch,
   normalizePairingCode,
   noteSourceUrl,
+  ownedPortableWhere,
   redactIntegrationError,
+  revisionWriteMatched,
   sanitizeAttachmentDisplayName,
   scopesForObsidian,
   validateAudioUpload,
@@ -76,5 +79,32 @@ describe('obsidianContracts', () => {
     expect(hasObsidianConnectAccess(['tags:read'])).toBe(false);
     expect(looksLikeAccessToken('aaaa.bbbb.cccc')).toBe(true);
     expect(looksLikeAccessToken('ABCD-EFGH')).toBe(false);
+  });
+
+  test('rejects revoked or expired credentials on the next resolve', () => {
+    const now = new Date('2026-08-03T12:00:00.000Z');
+    expect(isCredentialTimeValid({ revokedAt: null, expiresAt: null }, now)).toBe(true);
+    expect(isCredentialTimeValid({ revokedAt: now, expiresAt: null }, now)).toBe(false);
+    expect(isCredentialTimeValid({
+      revokedAt: null,
+      expiresAt: new Date('2026-08-03T11:59:59.000Z'),
+    }, now)).toBe(false);
+    expect(isCredentialTimeValid({
+      revokedAt: null,
+      expiresAt: new Date('2026-08-03T12:00:01.000Z'),
+    }, now)).toBe(true);
+  });
+
+  test('scopes note and attachment lookups to the actor account', () => {
+    expect(ownedPortableWhere(7, '67b2d411-221e-4dbe-98a4-d6db7c98c793')).toEqual({
+      portableId: '67b2d411-221e-4dbe-98a4-d6db7c98c793',
+      accountId: 7,
+    });
+  });
+
+  test('treats non-matching conditional writes as revision conflicts', () => {
+    expect(revisionWriteMatched(1)).toBe(true);
+    expect(revisionWriteMatched(0)).toBe(false);
+    expect(revisionWriteMatched(2)).toBe(false);
   });
 });

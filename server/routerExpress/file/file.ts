@@ -139,6 +139,7 @@ router.get(/.*/, async (req, res) => {
               accountId: true,
               sharePassword: true,
               shareExpiryDate: true,
+              shareEncryptedUrl: true,
             }
           }
         }
@@ -149,7 +150,13 @@ router.get(/.*/, async (req, res) => {
       const isGuestAvatarFile = pathIsGuestAvatarStorage(fullPath) || attachmentIsGuestAvatar(myFile);
       const noteIsOpenPublic = !!(myFile?.note && isOpenPublicShare(myFile.note));
       const shareFileToken = typeof req.query.shareFileToken === 'string' ? req.query.shareFileToken : '';
-      const shareTokenOk = !!(myFile?.noteId && verifyShareFileToken(shareFileToken, myFile.noteId));
+      const shareTokenOk = !!(myFile?.noteId && myFile.note && verifyShareFileToken(shareFileToken, {
+        id: myFile.noteId,
+        isShare: myFile.note.isShare,
+        shareEncryptedUrl: myFile.note.shareEncryptedUrl,
+        sharePassword: myFile.note.sharePassword,
+        shareExpiryDate: myFile.note.shareExpiryDate,
+      }));
 
       // Unregistered files are not readable (except dedicated guest-avatar storage).
       if (!myFile && !isGuestAvatarFile) {

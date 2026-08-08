@@ -1,15 +1,16 @@
 /**
  * OTA bundle generator (Phase 8b — see MOBILE_CLIENT_DESIGN.md §3a / IOS.md §2.2).
  *
- * Runs after `vite build`. Zips the built frontend (`dist/public`) into
- * `dist/public/app-bundle/bundle-<version>.zip` and writes a `manifest.json` that
- * the iOS/macOS OTA updater fetches to decide whether to pull a new frontend.
+ * Runs after `vite build`. Zips the built frontend (`out/output/public`) into
+ * `out/output/public/app-bundle/bundle-<version>.zip` and writes a
+ * `manifest.json` that the iOS/macOS OTA updater fetches to decide whether to
+ * pull a new frontend.
  *
  *   bun scripts/build-app-bundle.ts                 # version from root package.json
  *   APP_BUNDLE_MIN_NATIVE=1.8.0 bun scripts/build-app-bundle.ts
  *
  * Wired into `build:web` so every web build refreshes the bundle. Served by the
- * existing `express.static('dist/public')` — no new server routes.
+ * existing `express.static` of `out/output/public` — no new server routes.
  */
 import { createHash } from 'crypto';
 import fs from 'fs';
@@ -18,7 +19,7 @@ import { fileURLToPath } from 'url';
 import AdmZip from 'adm-zip';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const DIST = path.join(ROOT, 'dist', 'public');
+const DIST = path.join(ROOT, 'out', 'output', 'public');
 const OUT_DIR = path.join(DIST, 'app-bundle');
 
 function readVersion(): string {

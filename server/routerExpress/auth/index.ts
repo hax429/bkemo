@@ -3,8 +3,9 @@ import passport from './config';
 import { prisma } from '../../prisma';
 import { authenticator } from 'otplib';
 import { getGlobalConfig } from '../../routerTrpc/config';
-import { verifyToken, generateToken, generateApiToken } from '../../lib/helper';
+import { verifyToken, generateToken } from '../../lib/helper';
 import { resolvePermissions } from '../../lib/permissions';
+import { mintNativeDeviceAccessToken } from '../../lib/accessTokenService';
 
 const router = express.Router();
 
@@ -33,6 +34,20 @@ const logOAuthRequest = (provider: string) => (req: any, res: any, next: any) =>
   });
   next();
 };
+
+async function tokenForLogin(user: { id: number; name: string | null; role: string; nickname?: string | null; image?: string | null; token?: string }, body: any) {
+  const platform = typeof body?.platform === 'string' ? body.platform.trim().toLowerCase() : '';
+  if (platform === 'ios' || platform === 'macos') {
+    const minted = await mintNativeDeviceAccessToken({
+      accountId: user.id,
+      platform,
+      deviceName: typeof body?.deviceName === 'string' ? body.deviceName : null,
+      expiresInDays: null,
+    });
+    return minted.token;
+  }
+  return user.token ?? await generateToken(user, false);
+}
 
 router.get('/github', logOAuthRequest('GitHub'), (req, res, next) => {
   console.log('GitHub authentication route accessed');
@@ -82,6 +97,8 @@ router.post('/login', (req, res, next) => {
         return res.status(403).json({ error: 'This account has been disabled' });
       }
 
+      const token = await tokenForLogin(user, req.body);
+
       console.log('Login successful:', {
         user: user.id
       });
@@ -94,7 +111,7 @@ router.post('/login', (req, res, next) => {
           nickname: user.nickname,
           image: user.image,
         },
-        token: user.token,
+        token,
       });
     } catch (error) {
       console.error('Login error:', error);
@@ -143,12 +160,8 @@ router.post('/verify-2fa', async (req: any, res) => {
       return res.status(401).json({ error: 'Invalid verification code' });
     }
 
-    const token = await generateToken(user, true);
-    const apiToken = await generateApiToken({ id: user.id, name: user.name ?? '', role: user.role });
-    await prisma.accounts.update({
-      where: { id: user.id },
-      data: { apiToken }
-    });
+    const sessionToken = await generateToken(user, true);
+    const token = await tokenForLogin({ ...user, token: sessionToken }, req.body);
 
     console.log('2FA verification successful:', {
       user: user.id
@@ -190,6 +203,10 @@ router.get('/profile', async (req: any, res) => {
 
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (!resolvePermissions(user).enabled) {
+      return res.status(403).json({ error: 'This account has been disabled' });
     }
 
     console.log('Profile access:', {
@@ -252,4 +269,4 @@ router.get('/validate-token', async (req, res) => {
   }
 });
 
-export default router; 
+export default router;

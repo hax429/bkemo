@@ -4,10 +4,11 @@ import superjson from 'superjson';
 import { getBlinkoEndpoint } from './blinkoEndpoint';
 import { RootStore } from '@/store';
 import { UserStore } from '@/store/user';
+import { bkemoPlatformHeaders } from './bkemoPlatform';
 const headers = () => {
   const userStore = RootStore.Get(UserStore);
   const token = userStore.token;
-  const baseHeaders: Record<string, string> = {};
+  const baseHeaders: Record<string, string> = { ...bkemoPlatformHeaders() };
 
   if (token) {
     baseHeaders['Authorization'] = `Bearer ${token}`;

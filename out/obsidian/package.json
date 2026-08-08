@@ -1,0 +1,39 @@
+{
+  "name": "como-obsidian",
+  "version": "0.1.28",
+  "description": "como — Notes and AI chat companion for Obsidian",
+  "main": "main.js",
+  "type": "module",
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build:css": "node scripts/build-css.mjs",
+    "build": "npm run build:css && node esbuild.config.mjs production",
+    "test": "node --import tsx --import ./src/test/register-dom.ts --test src/*.test.ts src/**/*.test.ts",
+    "test:ui": "node --import tsx --import ./src/test/register-dom.ts --test src/**/*.ui.test.ts"
+  },
+  "keywords": [
+    "obsidian",
+    "como",
+    "bkemo",
+    "codian"
+  ],
+  "license": "UNLICENSED",
+  "private": true,
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.3.220",
+    "@codemirror/commands": "6.8.1",
+    "@modelcontextprotocol/sdk": "~1.30.0",
+    "smol-toml": "^1.6.1",
+    "tslib": "^2.8.1"
+  },
+  "devDependencies": {
+    "@codemirror/state": "^6.7.1",
+    "@codemirror/view": "^6.43.7",
+    "@types/node": "^22.15.17",
+    "esbuild": "0.25.5",
+    "happy-dom": "^18.0.1",
+    "obsidian": "latest",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3"
+  }
+}

@@ -15,6 +15,7 @@ import { NoteLinkSuggestion, type NoteLinkItem } from './noteLinkSuggestion';
 import { MarkdownHighlight, MarkdownUnderline } from './markdownMarks';
 import { EditorBubbleMenu } from './EditorBubbleMenu';
 import { Spellcheck } from './spellcheckExtension';
+import { Bookmark } from './bookmarkExtension';
 import { isModifierEnter } from '@/lib/quicknoteSubmit';
 import { setActiveTiptapEditor, getActiveTiptapEditor } from '@/lib/tiptapFormat';
 import 'highlight.js/styles/atom-one-dark.css';
@@ -95,6 +96,7 @@ export const TiptapEditor = forwardRef<TiptapEditorHandle, Props>(function Tipta
       TagSuggestion.configure({ getTags: () => getTags?.() ?? [] }),
       NoteLinkSuggestion.configure({ getNotes: (q) => getNotes?.(q) ?? [] }),
       Spellcheck,
+      Bookmark,
       Markdown.configure({
         html: false,
         transformPastedText: true,

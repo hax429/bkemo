@@ -29,6 +29,7 @@ import { databaseMigrationRouter } from './databaseMigration';
 import { draftRouter } from './draft';
 import { oauthRouter } from './oauth';
 import { obsidianRouter } from './obsidian';
+import { linkEnrichmentRouter } from './linkEnrichment';
 export const appRouter = router({
   ai: aiRouter,
   notes: noteRouter,
@@ -54,6 +55,7 @@ export const appRouter = router({
   draft: draftRouter,
   oauth: oauthRouter,
   obsidian: obsidianRouter,
+  linkEnrichment: linkEnrichmentRouter,
 });
 
 export const createCaller = t.createCallerFactory(appRouter);

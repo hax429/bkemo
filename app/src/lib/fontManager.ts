@@ -481,9 +481,6 @@ class FontManagerClass {
         (element as HTMLElement).style.fontFamily = '';
       });
       
-      // Clear font from vditor elements
-      this.applyFontToVditor('');
-      
       this.currentFont = 'default';
       return true;
     }
@@ -519,9 +516,6 @@ class FontManagerClass {
       (element as HTMLElement).style.fontFamily = fontFamily;
     });
     
-    // Apply to vditor elements
-    this.applyFontToVditor(fontFamily);
-    
     // 🔄 BACKGROUND: Load font asynchronously (browser will switch when ready)
     // Don't wait for this - let it happen in background
     this.loadFont(fontName).catch((error) => {
@@ -530,23 +524,6 @@ class FontManagerClass {
     });
     
     return true;
-  }
-
-  /**
-   * Apply font to vditor editor elements
-   */
-  public applyFontToVditor(fontFamily: string): void {
-    // Apply to all vditor elements
-    const vditorElements = document.querySelectorAll('.vditor-reset, .vditor-preview, .vditor-content, .vditor-ir, .vditor-sv, .vditor-wysiwyg');
-    vditorElements.forEach((element) => {
-      (element as HTMLElement).style.fontFamily = fontFamily;
-    });
-    
-    // Also apply to vditor input areas
-    const vditorInputs = document.querySelectorAll('.vditor-input, .vditor-ir__editor, .vditor-sv__editor, .vditor-wysiwyg__editor');
-    vditorInputs.forEach((element) => {
-      (element as HTMLElement).style.fontFamily = fontFamily;
-    });
   }
 
   /**

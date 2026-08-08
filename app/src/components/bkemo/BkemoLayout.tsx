@@ -1,5 +1,6 @@
 import { observer } from 'mobx-react-lite';
 import { ReactNode, CSSProperties } from 'react';
+import { AccessTokenMisuseBanner } from './AccessTokenMisuseBanner';
 
 export type Density = 'compact' | 'regular' | 'comfy';
 
@@ -57,7 +58,10 @@ export const BkemoLayout = observer(function BkemoLayout({
         ...backgroundStyle,
       } as CSSProperties}
     >
-      {children}
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+        <AccessTokenMisuseBanner />
+        <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>{children}</div>
+      </div>
     </div>
   );
 });

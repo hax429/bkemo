@@ -12,7 +12,7 @@ export function staticCacheControl(filePath: string, publicPath: string): string
   const normalizedFilePath = filePath.split(path.sep).join('/');
   const fileName = path.posix.basename(normalizedFilePath);
 
-  // In production server/public can be a symlink to dist/public. Express resolves
+  // In production server/public can be a symlink to out/output/public. Express resolves
   // the file path before calling setHeaders, so the relative path can point outside
   // the unresolved static root even though the file is inside it.
   if (relativePath.startsWith('assets/') || normalizedFilePath.includes('/public/assets/')) {

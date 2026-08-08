@@ -22,11 +22,14 @@ lerna-debug.log*
 # Turborepo
 .turbo/
 
-# Build and dist outputs
+# Build artifacts (web/server + platform packages)
+# Source under out/{obsidian,ios,macos} stays tracked.
 dist/
 dist-ssr/
 build/
-out/
+out/output/
+!out/output/.gitignore
+!out/output/README.md
 .next/
 .tauri
 
@@ -49,20 +52,12 @@ backups/
 
 # Rust / Cargo / Tauri
 target/
-app/src-tauri/target/
-app/src-tauri/gen/schemas/
-app/src-tauri/gen/apple/build/
-app/src-tauri/gen/apple/Externals/
-app/src-tauri/gen/apple/Blinko.xcodeproj/xcuserdata/
-app/src-tauri/gen/android/.gradle/
-app/src-tauri/gen/android/app/build/
-app/src-tauri/gen/android/build/
-app/src-tauri/gen/android/local.properties
-app/src-tauri/gen/android/key.properties
-app/src-tauri/gen/android/tauri.settings.gradle
-
-# Helm
-*.tgz
+out/macos/target/
+out/macos/gen/schemas/
+out/macos/gen/apple/build/
+out/macos/gen/apple/Externals/
+out/ios/build/
+app/tauri-plugin-blinko/ios/.build/
 
 # Environment variables
 .env
@@ -79,6 +74,12 @@ app/src-tauri/gen/android/tauri.settings.gradle
 # Ignore local SQLite databases, but keep the schema and migrations.
 *.db
 *.db-journal
+
+# Playwright
+**/test-results/
+**/playwright-report/
+**/blob-report/
+**/playwright/.cache/
 
 # Internal / Agent configurations
 .antigravitycli/

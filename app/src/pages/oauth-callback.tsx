@@ -7,6 +7,7 @@ import { DialogStore } from '@/store/module/Dialog';
 import { useTranslation } from 'react-i18next';
 import { LoadingPage } from '@/components/Common/LoadingPage';
 import { signIn, getTokenData } from '@/components/Auth/auth-client';
+import { consumeAuthReturnTo } from '@/lib/authReturnTo';
 import { eventBus } from '@/lib/event';
 import { UserStore } from '@/store/user';
 import { Button } from '@heroui/react';
@@ -46,7 +47,7 @@ export default function OAuthCallback() {
           eventBus.emit('user:token', tokenData);
         }
         RootStore.Get(DialogStore).close();
-        navigate('/');
+        navigate(consumeAuthReturnTo());
       } else {
         eventBus.emit('user:twoFactorResult', {
           success: false,
@@ -114,7 +115,7 @@ export default function OAuthCallback() {
 
               const userData = await getTokenData();
               if (userData && userData.user && userData.user.id) {
-                navigate('/');
+                navigate(consumeAuthReturnTo());
               } else {
                 setError(t('login-failed'));
                 setShowReturnButton(true);
@@ -131,7 +132,7 @@ export default function OAuthCallback() {
           } else {
             const tokenData = await getTokenData();
             if (tokenData?.user) {
-              navigate('/');
+              navigate(consumeAuthReturnTo());
             } else {
               setError(t('login-failed'));
               setShowReturnButton(true);
@@ -147,7 +148,7 @@ export default function OAuthCallback() {
         if (tokenData?.requiresTwoFactor) {
           ShowTwoFactorModal(handleTwoFactorAuth, false);
         } else if (tokenData?.user) {
-          navigate('/');
+          navigate(consumeAuthReturnTo());
         } else {
           setError(t('login-failed'));
           setShowReturnButton(true);

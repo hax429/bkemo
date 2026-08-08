@@ -376,6 +376,23 @@ const Preferences = observer(function Preferences() {
         <Toggle on={!!c.hidePcEditor} onChange={(v) => setConfig('hidePcEditor', v)} />
       } />
 
+      <h3 style={{ fontSize: 16, fontWeight: 600, color: 'var(--fg)', marginTop: 28, marginBottom: 4, borderBottom: '1px solid var(--border)', paddingBottom: 8 }}>Link bookmarks</h3>
+      <Row title="Link enrichment" sub="When you save a memo with bare URLs, fetch a Notion-like preview and prepare Markdown / Archive views." control={
+        <Toggle on={c.linkEnrichmentEnabled !== false} onChange={(v) => setConfig('linkEnrichmentEnabled', v)} />
+      } />
+      <Row title="Extract Markdown" sub="Run Defuddle on your server after save (not the Defuddle website). Requires link enrichment." control={
+        <Toggle
+          on={c.linkEnrichmentEnabled !== false && c.linkEnrichmentMarkdown !== false}
+          onChange={(v) => setConfig('linkEnrichmentMarkdown', v)}
+        />
+      } />
+      <Row title="Archive snapshot" sub="Submit the URL to the Internet Archive (Save Page Now) after save. Needs IA_S3_ACCESS_KEY / IA_S3_SECRET_KEY on the server." control={
+        <Toggle
+          on={c.linkEnrichmentEnabled !== false && c.linkEnrichmentArchive !== false}
+          onChange={(v) => setConfig('linkEnrichmentArchive', v)}
+        />
+      } />
+
       {/* Administrative System Settings */}
       {user.canManageSite && (
         <div style={{ marginTop: 32 }}>

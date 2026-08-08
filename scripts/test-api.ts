@@ -4,14 +4,15 @@
  * Run via the wrapper (loads .env):  ./scripts/test-api.sh
  * Or directly:  API_BASE=http://localhost:1111 bun scripts/test-api.ts
  *
- * It mints a full-access token (no permission scoping) from the first account,
+ * It mints a platform-bound full-app access token from the first account,
  * resolves each endpoint's HTTP method from /api/openapi.json, then exercises the
  * main flows (notes CRUD, tags, attachments, comments, reactions, notifications,
  * follows, analytics, access tokens, sharing) and prints a PASS/FAIL summary.
  * Everything it creates is cleaned up at the end.
  */
 import { prisma } from '../server/prisma';
-import { generateApiToken } from '../server/lib/helper';
+import { mintManagedAccessToken } from '../server/lib/accessTokenService';
+import { APP_FULL_SCOPE } from '../shared/lib/accessTokenPlatform';
 
 const BASE = (process.env.API_BASE || 'http://localhost:1111').replace(/\/$/, '');
 const API = `${BASE}/api`;
@@ -34,7 +35,7 @@ function record(name: string, ok: boolean, status: number | string, note?: strin
 async function call(path: string, opts: { body?: any; params?: Record<string, any>; method?: string; token?: string | null } = {}) {
   const method = (opts.method || methods[path] || 'POST').toUpperCase();
   let url = `${API}${path}`;
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = { 'X-Bkemo-Platform': 'api' };
   const token = opts.token === undefined ? TOKEN : opts.token;
   if (token) headers['Authorization'] = `Bearer ${token}`;
   let body: string | undefined;
@@ -88,10 +89,18 @@ async function main() {
     process.exit(1);
   }
 
-  // 2) Mint a full-access token from the first account (no permissions = unscoped).
+  // 2) Mint a platform-bound full-app access token from the first account.
   const acc = await prisma.accounts.findFirst({ orderBy: { id: 'asc' } });
   if (!acc) { console.error('No account in the database.'); process.exit(1); }
-  TOKEN = await generateApiToken({ id: acc.id, name: acc.name, role: acc.role });
+  const minted = await mintManagedAccessToken({
+    accountId: acc.id,
+    name: 'api-smoke',
+    platform: 'api',
+    scopes: [APP_FULL_SCOPE],
+    expiresInDays: 1,
+    fullApp: true,
+  });
+  TOKEN = minted.token;
   console.log(`${c.dim}Acting as account #${acc.id} (${acc.name}, ${acc.role})${c.reset}`);
 
   // auth sanity: a request with no token must be 401
@@ -203,7 +212,7 @@ async function main() {
   await test('accessTokens.scopes', '/v1/access-token/scopes', { params: {} });
   await test('accessTokens.list', '/v1/access-token/list', { params: {} });
   {
-    const r = await test('accessTokens.create', '/v1/access-token/create', { body: { name: 'api-smoke-test', scopes: ['notes:read'], expiresInDays: 1 } });
+    const r = await test('accessTokens.create', '/v1/access-token/create', { body: { name: 'api-smoke-test', platform: 'api', scopes: ['notes:read'], expiresInDays: 1 } });
     tokenId = r.json?.id ?? 0;
     // the freshly minted token should be able to read but not write
     const minted = r.json?.token;

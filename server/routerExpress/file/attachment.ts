@@ -24,6 +24,7 @@ router.get('/:portableId/file', async (req, res) => {
           accountId: true,
           sharePassword: true,
           shareExpiryDate: true,
+          shareEncryptedUrl: true,
         },
       },
     },
@@ -35,7 +36,13 @@ router.get('/:portableId/file', async (req, res) => {
   const avatar = await prisma.accounts.findFirst({ where: { image: stablePath }, select: { id: true } });
   const noteIsOpenPublic = !!(attachment.note && isOpenPublicShare(attachment.note));
   const shareFileToken = typeof req.query.shareFileToken === 'string' ? req.query.shareFileToken : '';
-  const shareTokenOk = verifyShareFileToken(shareFileToken, attachment.noteId ?? -1);
+  const shareTokenOk = !!(attachment.noteId && attachment.note && verifyShareFileToken(shareFileToken, {
+    id: attachment.noteId,
+    isShare: attachment.note.isShare,
+    shareEncryptedUrl: attachment.note.shareEncryptedUrl,
+    sharePassword: attachment.note.sharePassword,
+    shareExpiryDate: attachment.note.shareExpiryDate,
+  }));
   const attachmentPublic = !!attachment.isShare && !(attachment.note && noteHasSharePassword(attachment.note.sharePassword));
   const publiclyReadable = attachmentPublic
     || noteIsOpenPublic

@@ -2,7 +2,7 @@ import * as esbuild from 'esbuild';
 import { existsSync, mkdirSync } from 'fs';
 import path from 'path';
 
-const distDir = path.resolve(process.cwd(), '../dist');
+const distDir = path.resolve(process.cwd(), '../out/output');
 if (!existsSync(distDir)) {
   mkdirSync(distDir, { recursive: true });
 }
@@ -15,7 +15,7 @@ async function build() {
       minify: true,
       platform: 'node',
       target: 'node18',
-      outfile: '../dist/index.js',
+      outfile: '../out/output/index.js',
       format: 'cjs',
       sourcemap: true,
       metafile: true,
@@ -56,7 +56,7 @@ async function build() {
     });
 
     console.log('Build successful!');
-    console.log(`Output file: ${path.resolve(process.cwd(), '../dist/index.js')}`);
+    console.log(`Output file: ${path.resolve(process.cwd(), '../out/output/index.js')}`);
     
     if (result.metafile) {
       const outputFile = Object.keys(result.metafile.outputs)[0];

@@ -39,7 +39,7 @@
       ],
       "outputs": [
         "dist/**",
-        "../dist/**"
+        "../out/output/**"
       ]
     },
     "build:seed": {
@@ -47,7 +47,7 @@
         "prisma/seed.ts"
       ],
       "outputs": [
-        "dist/prisma/**"
+        "../out/output/**"
       ]
     },
     "dev": {
@@ -64,10 +64,6 @@
       ]
     },
     "lint": {},
-    "test": {
-      "dependsOn": [
-        "build:web"
-      ]
-    }
+    "test": {}
   }
 }

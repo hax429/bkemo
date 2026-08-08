@@ -1,0 +1,72 @@
+[package]
+name = "bkemo"
+version = "0.1.0"
+description = "bkemo — a Blinko-derived note app"
+authors = ["hax429"]
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+name = "app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[features]
+# Tauri's custom URL scheme handler (tauri://localhost) for production builds.
+# Without this feature active at compile time, tauri-build/build.rs sets cfg(dev) and the
+# runtime loads `devUrl` (https://bk.hax429.me) instead of `frontendDist`. `tauri build`
+# enables this automatically; bare `cargo build --release` does NOT — must be passed via
+# `--features custom-protocol`. Removing this re-introduces the dev-mode-in-release bug.
+custom-protocol = ["tauri/custom-protocol"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["devtools", "rustls-tls", "tray-icon", "image-png"] }
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri-plugin-os = "2"
+tauri-plugin-fs = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-http = "2"
+tauri-plugin-upload = "2"
+tauri-plugin-blinko = { path = "../../app/tauri-plugin-blinko/" }
+tauri-plugin-process = "2"
+tauri-plugin-notification = "2"
+
+# OTA frontend bundle updater (Phase 8 — see MOBILE_CLIENT_DESIGN.md §3 / IOS.md §2.2).
+# Compiled on all targets so a desktop `cargo check`/`cargo test` validates them;
+# only wired into the runtime on mobile (see src/lib.rs).
+zip = "2"
+sha2 = "0.10"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+tauri-plugin-global-shortcut = "2.0.0"
+tauri-plugin-single-instance = "2"
+tauri-plugin-autostart = "2"
+get-selected-text = "0.1"
+arboard = { version = "3", default-features = false }
+mouse_position = "0.1"
+enigo = "0.3"
+rdev = "0.3"
+sys-locale = "0.3"
+drag = "2.1"
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync", "fs"] }
+
+ 
+
+[target.'cfg(target_os = "windows")'.dependencies]
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync"] }
+
+
+
+[target.'cfg(target_os = "macos")'.dependencies]
+macos-accessibility-client = "0.0.1"
+keyring = { version = "3", features = ["apple-native"] }
+window-vibrancy = "0.6"

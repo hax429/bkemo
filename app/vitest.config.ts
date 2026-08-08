@@ -1,8 +1,8 @@
 import { defineConfig } from 'vitest/config';
 import path from 'path';
 
-// Phase 6 — unit tests for the pure mobile/offline logic (see IOS.md §8).
-// jsdom gives us `window`/`localStorage` for the endpoint + notification helpers.
+// Frontend unit + UI component tests (jsdom). Prefer `renderBkemo` from
+// `src/test/render.tsx` for product UI under the `.bkemo` token scope.
 export default defineConfig({
   resolve: {
     alias: {
@@ -13,5 +13,8 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
+    setupFiles: ['./src/test/setup.ts'],
+    clearMocks: true,
+    restoreMocks: true,
   },
 });

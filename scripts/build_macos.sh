@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #
-# Build the bkemo Tauri client as a macOS .app bundle.
+# Build the bkemo Tauri client as a macOS .app bundle and stage it under
+# out/output/macos/.
 #
 # Usage:
 #   ./scripts/build_macos.sh
@@ -13,7 +14,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 APP_DIR="${REPO_ROOT}/app"
-TAURI_DIR="${APP_DIR}/src-tauri"
+TAURI_DIR="${REPO_ROOT}/out/macos"
+OUT_DIR="${REPO_ROOT}/out/output/macos"
 
 export PATH="$HOME/.bun/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
 
@@ -31,6 +33,10 @@ Options:
   --open   Open the built app after a successful build
   -h, --help
            Show this help
+
+Output:
+  out/output/macos/bkemo.app
+  out/output/macos/*.dmg   (with --dmg)
 EOF
 }
 
@@ -56,7 +62,8 @@ done
 [[ "$(uname -s)" == "Darwin" ]] || die "macOS is required"
 command -v bun >/dev/null 2>&1 || die "bun is required (https://bun.sh)"
 command -v cargo >/dev/null 2>&1 || die "Rust/Cargo is required (https://rustup.rs)"
-[[ -f "${TAURI_DIR}/tauri.conf.json" ]] || die "Tauri config not found"
+[[ -f "${TAURI_DIR}/tauri.conf.json" ]] || die "Tauri config not found at ${TAURI_DIR}"
+[[ -L "${APP_DIR}/src-tauri" || -d "${APP_DIR}/src-tauri" ]] || die "app/src-tauri symlink/dir missing (should point at out/macos)"
 
 if [[ $CLEAN -eq 1 ]]; then
   printf 'Cleaning Tauri build artifacts...\n'
@@ -76,12 +83,22 @@ TARGET_DIR="${CARGO_TARGET_DIR:-${TAURI_DIR}/target}"
 APP_BUNDLE="${TARGET_DIR}/release/bundle/macos/bkemo.app"
 
 [[ -d "$APP_BUNDLE" ]] || die "build completed but app bundle was not found at ${APP_BUNDLE}"
-printf '\nBuilt: %s\n' "$APP_BUNDLE"
+
+mkdir -p "$OUT_DIR"
+rm -rf "${OUT_DIR}/bkemo.app"
+cp -R "$APP_BUNDLE" "${OUT_DIR}/bkemo.app"
+printf '\nStaged: %s\n' "${OUT_DIR}/bkemo.app"
 
 if [[ $INCLUDE_DMG -eq 1 ]]; then
-  printf 'DMG directory: %s\n' "${TARGET_DIR}/release/bundle/dmg"
+  DMG_SRC="${TARGET_DIR}/release/bundle/dmg"
+  if [[ -d "$DMG_SRC" ]]; then
+    find "$DMG_SRC" -maxdepth 1 -name '*.dmg' -exec cp {} "$OUT_DIR/" \;
+    printf 'DMG staged in: %s\n' "$OUT_DIR"
+  else
+    printf 'DMG directory missing: %s\n' "$DMG_SRC"
+  fi
 fi
 
 if [[ $OPEN_APP -eq 1 ]]; then
-  open "$APP_BUNDLE"
+  open "${OUT_DIR}/bkemo.app"
 fi

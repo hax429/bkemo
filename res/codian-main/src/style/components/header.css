@@ -1,0 +1,29 @@
+/* Header - logo and title */
+.claudian-container > .claudian-header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 0 12px 12px 12px;
+}
+
+.claudian-container .claudian-title {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.claudian-title-text {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.claudian-logo {
+  display: flex;
+  align-items: center;
+  color: var(--claudian-brand);
+}

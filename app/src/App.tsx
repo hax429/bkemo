@@ -29,6 +29,7 @@ import { getBlinkoEndpoint } from "@/lib/blinkoEndpoint";
 import { BaseStore } from "@/store/baseStore";
 import { api } from "@/lib/trpc";
 import { runTiptapFormat, type FormatCommand } from "@/lib/tiptapFormat";
+import { bkemoPlatformHeaders } from "@/lib/bkemoPlatform";
 
 const SignInPage = lazy(() => import('./pages/signin'));
 const SignUpPage = lazy(() => import('./pages/signup'));
@@ -179,6 +180,8 @@ function AppRoutes() {
       // Bootstrap establishes a race-safe server cursor, then the existing
       // cache-first views perform one full reconciliation.
       onBootstrap: () => { blinkoStore.updateTicker++; },
+      onSecurity: () => { eventBus.emit('security:token-misuse'); },
+      platformHeaders: bkemoPlatformHeaders(),
       pollMs: 60_000,
       idleMs: 5 * 60_000,
     });

@@ -177,6 +177,10 @@ export const getNextAuthSecret = async () => {
   return jwtSecretLoad;
 }
 
+/**
+ * @deprecated Legacy unbounded account apiToken. Do not issue; use mintManagedAccessToken.
+ * Kept only so old call sites fail closed after tokenType enforcement.
+ */
 export const generateApiToken = async (user: { id: number, name: string, role: string }, permissions?: string[]) => {
   const secret = await getNextAuthSecret();
   return jwt.sign(
@@ -184,6 +188,7 @@ export const generateApiToken = async (user: { id: number, name: string, role: s
       role: user.role,
       name: user.name,
       sub: user.id.toString(),
+      tokenType: 'legacy_api',
       exp: Math.floor(Date.now() / 1000) + (60 * 60 * 24 * 365 * 100),
       iat: Math.floor(Date.now() / 1000),
       permissions
@@ -196,27 +201,28 @@ export const generateApiToken = async (user: { id: number, name: string, role: s
  * Mint a named, scope-limited access token (a JWT carrying expanded permission
  * paths). `jti` ties it to an `accessToken` row so it can be listed/revoked;
  * `expSeconds` is the absolute expiry (default: effectively never).
+ * Omit `permissions` for full-app native tokens (session-equivalent ACL).
  */
 export const generateAccessToken = async (
   user: { id: number; name: string; role: string },
-  permissions: string[],
+  permissions: string[] | undefined,
   jti: string,
   expSeconds?: number,
+  platform?: string,
 ) => {
   const secret = await getNextAuthSecret();
-  return jwt.sign(
-    {
-      role: user.role,
-      name: user.name,
-      sub: user.id.toString(),
-      tokenType: 'access',
-      jti,
-      permissions,
-      exp: expSeconds ?? Math.floor(Date.now() / 1000) + (60 * 60 * 24 * 365 * 100),
-      iat: Math.floor(Date.now() / 1000),
-    },
-    secret,
-  );
+  const payload: Record<string, unknown> = {
+    role: user.role,
+    name: user.name,
+    sub: user.id.toString(),
+    tokenType: 'access',
+    jti,
+    exp: expSeconds ?? Math.floor(Date.now() / 1000) + (60 * 60 * 24 * 365 * 100),
+    iat: Math.floor(Date.now() / 1000),
+  };
+  if (permissions) payload.permissions = permissions;
+  if (platform) payload.platform = platform;
+  return jwt.sign(payload, secret);
 };
 
 export const generateToken = async (user: any, twoFactorVerified = false) => {
@@ -226,6 +232,7 @@ export const generateToken = async (user: any, twoFactorVerified = false) => {
       sub: user.id,
       name: user.name,
       role: user.role || 'user',
+      tokenType: 'session',
       twoFactorVerified,
       exp: Math.floor(Date.now() / 1000) + (60 * 60 * 24 * 30),
       iat: Math.floor(Date.now() / 1000)
@@ -247,37 +254,71 @@ export const verifyToken = async (token: string) => {
 };
 
 /**
- * For managed access tokens (`tokenType: 'access'`), confirm the backing row
- * still exists (i.e. not revoked) and refresh `lastUsedAt` (throttled to ~1/min
- * to avoid a write per request). Returns false when the token has been revoked.
- * Session/legacy tokens have no `tokenType` and always pass.
+ * Accept only `session` and managed `access` tokens. Legacy apiToken JWTs
+ * (no tokenType / legacy_api) are rejected. Access tokens require a live row;
+ * platform mismatches soft-allow and record a misuse incident.
  */
-const validateAccessToken = async (tokenData: any): Promise<boolean> => {
-  if (tokenData?.tokenType !== 'access' || !tokenData?.jti) return true;
+const validateCredential = async (
+  tokenData: any,
+  declaredPlatform: string,
+): Promise<boolean> => {
+  const tokenType = tokenData?.tokenType;
+  if (tokenType === 'session') return true;
+  if (tokenType !== 'access' || !tokenData?.jti) return false;
+
   const row = await prisma.accessToken.findUnique({ where: { jti: tokenData.jti } });
-  if (!row) return false; // revoked
+  if (!row) return false;
+  if (row.expiresAt && row.expiresAt.getTime() <= Date.now()) return false;
+
   const now = Date.now();
   if (!row.lastUsedAt || now - new Date(row.lastUsedAt).getTime() > 60_000) {
     prisma.accessToken.update({ where: { id: row.id }, data: { lastUsedAt: new Date() } }).catch(() => { /* best-effort */ });
   }
+
+  const expected = (row.platform || 'api').toLowerCase();
+  if (declaredPlatform !== expected) {
+    const { recordAccessTokenPlatformMismatch } = await import('./accessTokenService');
+    recordAccessTokenPlatformMismatch({
+      accountId: row.accountId,
+      accessTokenId: row.id,
+      tokenName: row.name,
+      expectedPlatform: expected,
+      observedPlatform: declaredPlatform,
+    }).catch(() => { /* best-effort */ });
+  }
   return true;
 };
 
+function declaredPlatformFromRequest(req: ExpressRequest): string {
+  const raw = req.headers?.['x-bkemo-platform'];
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  if (typeof value !== 'string' || !value.trim()) return 'unknown';
+  const normalized = value.trim().toLowerCase();
+  if (['web', 'macos', 'ios', 'obsidian', 'api'].includes(normalized)) return normalized;
+  return 'unknown';
+}
+
 export const getTokenFromRequest = async (req: ExpressRequest) => {
   try {
+    const declaredPlatform = declaredPlatformFromRequest(req);
+
     if (req.headers && typeof req.headers === 'object') {
       const authHeader = req.headers.authorization;
       if (authHeader) {
         const token = authHeader.replace("Bearer ", "");
         const tokenData = await verifyToken(token);
-        if (tokenData && await validateAccessToken(tokenData)) return { ...tokenData, id: tokenData.sub, token };
+        if (tokenData && await validateCredential(tokenData, declaredPlatform)) {
+          return { ...tokenData, id: tokenData.sub, token };
+        }
       }
     }
 
     if (req.query && req.query.token) {
       const token = req.query.token as string;
       const tokenData = await verifyToken(token);
-      if (tokenData && await validateAccessToken(tokenData)) return { ...tokenData, id: tokenData.sub, token };
+      if (tokenData && await validateCredential(tokenData, declaredPlatform)) {
+        return { ...tokenData, id: tokenData.sub, token };
+      }
     }
 
     return null;

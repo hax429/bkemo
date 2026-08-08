@@ -45,7 +45,6 @@ export const BasicSetting = observer(() => {
   const blinko = RootStore.Get(BlinkoStore);
   const { t } = useTranslation();
 
-  const [showToken, setShowToken] = useState(false);
 
   const initials = (user.nickname || user.name || 'G').slice(0, 2).toUpperCase();
 
@@ -149,121 +148,11 @@ export const BasicSetting = observer(() => {
         {/* Security & API Section Title */}
         <h3 style={{ fontSize: 16, fontWeight: 600, color: 'var(--fg)', marginTop: 24, marginBottom: 4, borderBottom: '1px solid var(--border)', paddingBottom: 8 }}>Security & APIs</h3>
 
-        {/* Row 2: Access Token */}
+        {/* Row 2: Access tokens live under Settings → Security & API */}
         <Row
-          title={
-            <div className="v-stack" style={{ gap: 2 }}>
-              <div className="h-stack" style={{ gap: 6, alignItems: 'center' }}>
-                <span style={{ fontSize: 14, color: 'var(--fg)', fontWeight: 500 }}>Access Token</span>
-                <button
-                  onClick={() => setShowToken(!showToken)}
-                  style={{
-                    background: 'var(--bg-3)',
-                    border: 'none',
-                    borderRadius: 6,
-                    padding: '3px 8px',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    cursor: 'pointer',
-                    color: 'var(--fg-2)'
-                  }}
-                >
-                  <Icon icon={showToken ? "lucide:eye-off" : "lucide:eye"} width={14} height={14} />
-                </button>
-              </div>
-              <div
-                onClick={async () => {
-                  const response = await PromiseCall(api.users.genLowPermToken.mutate());
-                  if (response?.token) {
-                    RootStore.Get(DialogStore).setData({
-                      isOpen: true,
-                      title: t('generate-low-permission-token'),
-                      content: (
-                        <div className="flex flex-col gap-4">
-                          <Alert
-                            color="warning"
-                            description={t('low-permission-token-desc')}
-                            title={t('this-token-is-only-displayed-once-please-save-it-properly')}
-                            variant="faded"
-                          />
-                          <Input
-                            readOnly
-                            className="w-full"
-                            value={response.token}
-                            endContent={<Copy size={20} content={response.token} />}
-                          />
-                        </div>
-                      )
-                    });
-                  }
-                }}
-                style={{ fontSize: 12, color: 'var(--accent)', cursor: 'pointer', fontWeight: 500 }}
-                className="hover:underline"
-              >
-                Generate Low Permission Token
-              </div>
-            </div>
-          }
-          sub="Required for webhook and API integrations. Keep this token private."
-          control={
-            <div className="h-stack" style={{ gap: 12, alignItems: 'center' }}>
-              <div className="h-stack" style={{ background: 'var(--bg-3)', border: '1px solid var(--border-2)', borderRadius: 8, padding: '4px 8px', gap: 8, width: 240, alignItems: 'center' }}>
-                <input
-                  disabled
-                  type={showToken ? "text" : "password"}
-                  value={showToken ? (user.userInfo.value?.token ?? '') : '••••••••••••••••••••••••••••••••'}
-                  style={{
-                    background: 'transparent',
-                    color: 'var(--fg)',
-                    border: 'none',
-                    outline: 'none',
-                    fontSize: 12,
-                    flex: 1,
-                    cursor: 'default',
-                    fontFamily: 'var(--font-mono)'
-                  }}
-                />
-                <button
-                  onClick={() => {
-                    navigator.clipboard.writeText(user.userInfo.value?.token ?? '');
-                    RootStore.Get(ToastPlugin).success(t('copied-successfully'));
-                  }}
-                  style={{
-                    background: 'transparent',
-                    border: 'none',
-                    color: 'var(--fg-3)',
-                    cursor: 'pointer',
-                    padding: 0,
-                    display: 'flex',
-                    alignItems: 'center'
-                  }}
-                  title="Copy Token"
-                >
-                  <Icon icon="lucide:copy" width={14} height={14} />
-                </button>
-              </div>
-              <button
-                onClick={async () => {
-                  if (confirm("Are you sure you want to regenerate your access token? This will invalidate any existing integrations.")) {
-                    await PromiseCall(api.users.regenToken.mutate());
-                    await user.userInfo.call(Number(user.id));
-                  }
-                }}
-                style={{
-                  background: 'transparent',
-                  border: 'none',
-                  color: 'var(--fg-2)',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  padding: 4
-                }}
-                title="Regenerate Token"
-              >
-                <Icon icon="lucide:refresh-cw" width={16} height={16} />
-              </button>
-            </div>
-          }
+          title={<span style={{ fontSize: 14, color: 'var(--fg)', fontWeight: 500 }}>Access tokens</span>}
+          sub="Legacy account apiToken is retired. Create platform-bound tokens under Settings → Security & API."
+          control={<span style={{ fontSize: 12, color: 'var(--fg-3)', fontFamily: 'var(--font-mono)' }}>Security & API</span>}
         />
 
         {/* Row 3: Two-Factor Authentication */}

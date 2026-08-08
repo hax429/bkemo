@@ -28,7 +28,7 @@ edit -> local server -> focused checks -> user acceptance
 | Source | `github.com/hax429/bkemo`, normally `main` | Code delivered to production |
 | Production host | SSH alias `Oracle` | Ubuntu server |
 | Production checkout | `/home/ubuntu/services/notes/bkemo` | Source-built live checkout |
-| Production process | `bkemo.service` | systemd service running `bun dist/index.js` on port `1111` |
+| Production process | `bkemo.service` | systemd service running `bun out/output/index.js` on port `1111` |
 | Public edge | Cloudflare and nginx | Cloudflare proxies to nginx, which terminates TLS and forwards `bk.hax429.me` to `localhost:1111` |
 | Public service | `https://bk.hax429.me` | Web application and API endpoint used by native clients |
 
@@ -203,7 +203,7 @@ check after the purge; HTTP 200 alone cannot detect an empty React root.
 ## 8. Native clients and frontend delivery
 
 The web deployment immediately updates the browser application and backend API.
-The production Tauri builds currently package `dist/public` through
+The production Tauri builds currently package `out/output/public` through
 `frontendDist`, so a normal server deployment does **not** replace their bundled
 frontend. Native code or bundled-frontend changes require the appropriate signed
 client build until the planned OTA bundle path is activated and device-verified.
@@ -231,17 +231,17 @@ For a new systemd host, the required shape is:
    so token verification does not need a live database after Neon scales to zero.
 3. Run `bun install`, Prisma generation/migrations, `bun run build:web`, and
    `bun run build:seed`.
-4. Ensure `server/public` resolves to `dist/public` and create the required
+4. Ensure `server/public` resolves to `out/output/public` and create the required
    `.blinko/{files,plugins,vector}` runtime directories (scheduled `.bk` backups
    write under `.blinko/files/BKEMO_BACKUP` when object storage is local).
-5. Run `bun dist/index.js` from the repository root under systemd and expose it
+5. Run `bun out/output/index.js` from the repository root under systemd and expose it
    through nginx with TLS and upload-size/upgrade headers.
 6. Keep `.env`, `.blinko`, database storage, and backups outside Git lifecycle
    operations.
 
-The repository also contains `deploy/bkemo-cutover-helper.service` for the
-guarded PostgreSQL-to-Neon cutover. It is a specialized migration path, not part
-of routine deployment. Review its service paths, socket permissions, direct
+The repository also contains `scripts/deploy/bkemo-cutover-helper.service` for
+the guarded PostgreSQL-to-Neon cutover. It is a specialized migration path, not
+part of routine deployment. Review its service paths, socket permissions, direct
 Neon URL, rollback snapshot, and maintenance-mode behavior before enabling it.
 
 ## Troubleshooting
@@ -250,7 +250,7 @@ Neon URL, rollback snapshot, and maintenance-mode behavior before enabling it.
 |---|---|
 | `Unable to find package manager binary` | Put `$HOME/.bun/bin` on `PATH` before Turbo commands. |
 | Modern JS syntax error from Turbo/Vite | The non-login shell found the old system Node; source nvm and select the default Node. |
-| `server/public` missing | Repair the link to `dist/public`, then rebuild and verify static files. |
+| `server/public` missing | Repair the link to `out/output/public`, then rebuild and verify static files. |
 | `.blinko` path warning after host cleanup | Inspect the active symlink target and recreate only the required runtime directories. |
 | Migration reports no pending migrations | Expected when the database already matches the repository. |
 | Service is active but UI is stale | Verify the built asset path, `server/public` target, cache headers/service worker, and public response—not only systemd state. |

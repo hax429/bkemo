@@ -106,6 +106,9 @@ export const ZConfigKey = z.union([
   z.literal('signinFooterEnabled'),
   z.literal('signinFooterText'),
   z.literal('customTitle'),
+  z.literal('linkEnrichmentEnabled'),
+  z.literal('linkEnrichmentMarkdown'),
+  z.literal('linkEnrichmentArchive'),
   ZUserPerferConfigKey,
   z.any()
 ]);
@@ -200,6 +203,9 @@ export const ZConfigSchema = z.object({
   signinFooterEnabled: z.boolean().optional(),
   signinFooterText: z.string().optional(),
   customTitle: z.string().optional(),
+  linkEnrichmentEnabled: z.boolean().optional(),
+  linkEnrichmentMarkdown: z.boolean().optional(),
+  linkEnrichmentArchive: z.boolean().optional(),
   bkemoPrefs: z.any().optional(),
 });
 

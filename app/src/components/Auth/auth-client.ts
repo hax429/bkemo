@@ -3,6 +3,8 @@ import { getBlinkoEndpoint } from '@/lib/blinkoEndpoint';
 import { eventBus } from '@/lib/event';
 import { RootStore } from '@/store';
 import { UserStore } from '@/store/user';
+import { getBkemoPlatform } from '@/lib/bkemoPlatform';
+import { isInTauri } from '@/lib/tauriHelper';
 
 let navigateFunction: ((path: string) => void) | null = null;
 
@@ -99,6 +101,7 @@ export async function signIn(
         body: JSON.stringify({
           username: options.username,
           password: options.password,
+          ...(isInTauri() ? { platform: getBkemoPlatform(), deviceName: options.deviceName || 'Mac' } : {}),
         }),
       });
 
@@ -154,6 +157,7 @@ export async function signIn(
         body: JSON.stringify({
           userId: options.userId,
           code: options.twoFactorCode,
+          ...(isInTauri() ? { platform: getBkemoPlatform(), deviceName: options.deviceName || 'Mac' } : {}),
         }),
       });
 

@@ -12,7 +12,9 @@ import {
   encodeObsidianSearchCursor,
   noteSourceUrl,
   normalizeObsidianSearch,
+  ownedPortableWhere,
   redactIntegrationError,
+  revisionWriteMatched,
   sanitizeAttachmentDisplayName,
   taskFilterClause,
   validateAudioUpload,
@@ -104,7 +106,7 @@ const noteInclude = {
 
 async function loadOwnedNote(actor: IntegrationActor, portableId: string) {
   const note = await prisma.notes.findFirst({
-    where: { portableId, accountId: actor.accountId },
+    where: ownedPortableWhere(actor.accountId, portableId),
     include: noteInclude,
   });
   if (!note) throw new IntegrationError('not_found', 'Note not found');
@@ -336,10 +338,7 @@ export class IntegrationGateway {
     requireScope(actor, 'attachments:read');
     return observed(actor, 'get_attachment', async () => {
       const attachment = await prisma.attachments.findFirst({
-        where: {
-          portableId,
-          accountId: actor.accountId,
-        },
+        where: ownedPortableWhere(actor.accountId, portableId),
       });
       if (!attachment) throw new IntegrationError('not_found', 'Attachment not found');
       return safeAttachment(attachment);
@@ -428,10 +427,12 @@ export class IntegrationGateway {
     requireScope(actor, 'notes:write');
     return observed(actor, operation, () => idempotent(actor, operation, input.idempotencyKey, async () => {
       const updated = await prisma.notes.updateMany({
-        where: { portableId: input.portableId, accountId: actor.accountId, revision: input.expectedRevision },
+        where: { ...ownedPortableWhere(actor.accountId, input.portableId), revision: input.expectedRevision },
         data,
       });
-      if (updated.count !== 1) throw new IntegrationError('revision_conflict', 'The note changed after it was read');
+      if (!revisionWriteMatched(updated.count)) {
+        throw new IntegrationError('revision_conflict', 'The note changed after it was read');
+      }
       publishNoteDirty(actor.accountId);
       return safeNote(await loadOwnedNote(actor, input.portableId), actor.scopes);
     }), input.portableId);
