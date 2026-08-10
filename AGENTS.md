@@ -11,8 +11,8 @@ matches the work before changing the repository:
   production topology, deployment approval gate, release steps, and verification.
 - [`docs/agents/MCP.md`](docs/agents/MCP.md) — current inbound MCP/OAuth contract,
   outbound connector policy, configuration, and verification.
-- [`docs/agents/OBSIDIAN.md`](docs/agents/OBSIDIAN.md) — Obsidian companion pairing,
-  `/api/v1/obsidian/*` contract, and disposable-vault testing.
+- [`docs/agents/OBSIDIAN.md`](docs/agents/OBSIDIAN.md) — Obsidian pairing and
+  `/api/v1/obsidian/*` contract. Plugin sources: [hax429/como](https://github.com/hax429/como).
 - [`docs/plans/README.md`](docs/plans/README.md) — potential integration roadmap,
   including MCP hardening, Obsidian sync, and later connectors.
 - [`docs/plans/IOS.md`](docs/plans/IOS.md) — future iOS native, offline, OTA,

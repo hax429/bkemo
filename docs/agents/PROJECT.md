@@ -123,10 +123,10 @@ Important implementation anchors:
 - `server/lib/integrationGateway.ts` and `server/routerExpress/mcp.ts` —
   account-scoped MCP operations, OAuth-protected Streamable HTTP transport, and
   integration audit/idempotency behavior.
-- `server/lib/obsidianPairing.ts`, `server/routerExpress/obsidian.ts`, and
-  `out/obsidian/` — Obsidian pairing plus the private **como** companion
-  (`id: como`; bkemo sources + `src/codian/` under one tree;
-  `/api/v1/obsidian/*`). Source links use `/note/{portableId}`.
+- `server/lib/obsidianPairing.ts` and `server/routerExpress/obsidian.ts` —
+  Obsidian pairing and `/api/v1/obsidian/*`. The private **como** companion
+  plugin (`id: como`) lives in [hax429/como](https://github.com/hax429/como).
+  Source links use `/note/{portableId}`.
 
 ## Data and API conventions
 
@@ -209,9 +209,9 @@ bun run test:ui:e2e        # Playwright browser smoke (needs local server)
 ```
 
 Component tests should prefer `renderBkemo` from `app/src/test/render.tsx`.
-Obsidian DOM tests import `out/obsidian/src/test/dom.ts` (via `register-dom.ts`).
-Mac shares the React UI with web; shell behavior is covered by `cargo test` in
-`out/macos`.
+Obsidian companion UI tests live in [hax429/como](https://github.com/hax429/como)
+(`bun run test` / `bun run test:ui`). Mac shares the React UI with web; shell
+behavior is covered by `cargo test` in `out/macos`.
 
 Backend integration tests may require their documented test environment
 variables. Backend end to end tests require a running local server and database.

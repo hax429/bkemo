@@ -23,7 +23,7 @@ lerna-debug.log*
 .turbo/
 
 # Build artifacts (web/server + platform packages)
-# Source under out/{obsidian,ios,macos} stays tracked.
+# Source under out/{ios,macos} stays tracked.
 dist/
 dist-ssr/
 build/

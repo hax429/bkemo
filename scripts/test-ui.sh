@@ -43,7 +43,12 @@ run_web() {
 
 run_obsidian() {
   printf '\n==> Obsidian companion UI (node:test + happy-dom)\n'
-  (cd "${REPO_ROOT}/out/obsidian" && bun run test:ui)
+  local como_root="${COMO_ROOT:-${HOME}/Developer/como}"
+  if [[ ! -f "${como_root}/package.json" ]]; then
+    printf 'skip: como repo not found at %s (set COMO_ROOT)\n' "$como_root"
+    return 0
+  fi
+  (cd "$como_root" && bun run test:ui)
 }
 
 run_mac() {
