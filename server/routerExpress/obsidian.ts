@@ -156,6 +156,22 @@ router.patch('/notes/:portableId', jsonBody, async (req, res) => {
   }
 });
 
+router.post('/notes/:portableId/complete', jsonBody, async (req, res) => {
+  try {
+    const actor = await requireActor(req, res);
+    if (!actor) return;
+    const note = await integrationGateway.completeTask(actor, {
+      portableId: req.params.portableId,
+      expectedRevision: Number(req.body?.expectedRevision),
+      done: !!req.body?.done,
+      idempotencyKey: String(req.body?.idempotencyKey || ''),
+    });
+    return res.json(note);
+  } catch (error) {
+    return sendError(res, error);
+  }
+});
+
 router.get('/changes', async (req, res) => {
   try {
     const actor = await requireActor(req, res);

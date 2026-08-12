@@ -26,6 +26,9 @@ and you explicitly approve that step.
   `notes:read`, `notes:write`, `tags:read`, `attachments:read`,
   `attachments:write`.
 - Note source URLs use `https://bk.hax429.me/note/{portableId}`.
+- Task helpers: create/update accept `task` / `dueDate` / `important` /
+  `urgent`; complete via `POST /api/v1/obsidian/notes/:portableId/complete`
+  (`done`, `expectedRevision`, `idempotencyKey`).
 - Errors are redacted (`unauthorized`, `revision_conflict`, `invalid_media`,
   `oversized_media`, access-token failures, etc.).
 - Security misuse alerts: minimal redirect copy in plugin settings; revoke /
