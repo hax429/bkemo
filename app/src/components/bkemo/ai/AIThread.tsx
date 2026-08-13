@@ -526,7 +526,6 @@ function AIComposer({
   disabled,
   error,
   input,
-  noteId,
   onOpen,
   onSend,
   sending,
@@ -536,7 +535,6 @@ function AIComposer({
   disabled?: boolean;
   error?: string | null;
   input: string;
-  noteId?: number;
   onOpen: (note: Note) => void;
   onSend: () => void;
   sending: boolean;
@@ -574,7 +572,7 @@ function AIComposer({
     } as any)
       .then(async (rows) => {
         let list = ((rows as any[]) ?? [])
-          .filter((note) => note?.id && note.id !== noteId)
+          .filter((note) => note?.id)
           .map((note) => ({
             id: Number(note.id),
             label: `BK-${note.id}`,
@@ -585,7 +583,7 @@ function AIComposer({
           if (!list.some((item) => String(item.id) === q) && Number(q) > 0) {
             try {
               const exact = await api.notes.detail.mutate({ id: Number(q) });
-              if (exact?.id && exact.id !== noteId) {
+              if (exact?.id) {
                 list = [{
                   id: Number(exact.id),
                   label: `BK-${exact.id}`,
@@ -610,7 +608,7 @@ function AIComposer({
         }
       });
     return () => { cancelled = true; };
-  }, [mentionQuery?.digits, mentionQuery?.start, noteId]);
+  }, [mentionQuery?.digits, mentionQuery?.start]);
 
   const applyMention = (item: BkMentionItem) => {
     if (!mentionQuery) return;
@@ -700,7 +698,7 @@ function AIComposer({
             event.preventDefault();
             if (!disabled && !sending && input.trim()) onSend();
           }}
-          placeholder={noteId ? 'Talk about this card… @bk-5 adds context. Enter to send.' : 'Message AI… Enter to send, Shift+Enter for a new line'}
+          placeholder="Message AI… Enter to send, Shift+Enter for a new line"
           rows={2}
         />
         <div className="h-stack bk-ai-composer-actions">
@@ -810,56 +808,5 @@ export const AIGlobalChat = observer(function AIGlobalChat({
         />
       </main>
     </div>
-  );
-});
-
-export const NoteAIThread = observer(function NoteAIThread({
-  note,
-  onOpen,
-}: {
-  note: Note;
-  onOpen: (note: Note) => void;
-}) {
-  const thread = useAIThread({ scope: 'note', noteId: note.id, loadAllHistory: true });
-
-  if (!note.id) {
-    return <div className="bk-ai-note-hint">Save this bkemo before starting a card AI chat.</div>;
-  }
-
-  // One conversation per note; merge history from the active/newest thread for display.
-  const historyMessages = (() => {
-    if (thread.activeId && thread.messagesByConversation[thread.activeId]) {
-      return thread.messagesByConversation[thread.activeId];
-    }
-    if (thread.conversations[0]?.id != null) {
-      return thread.messagesByConversation[thread.conversations[0].id] ?? [];
-    }
-    return thread.messagesByConversation[-1] ?? [];
-  })();
-
-  return (
-    <section className="bk-ai-note-thread">
-      <div className="h-stack bk-ai-note-head">
-        <span>AI chat</span>
-        <small>About this card · use @bk-5 to add context</small>
-      </div>
-      <AIConfigNotice status={thread.configStatus} />
-      <div className="v-stack bk-ai-note-history">
-        <div className="bk-ai-note-card">
-          <AIMessageList messages={historyMessages} sending={thread.sending} onOpen={onOpen} />
-        </div>
-        <AIComposer
-          contextNoteIds={thread.contextNoteIds}
-          disabled={!aiReady(thread.configStatus)}
-          error={thread.error}
-          input={thread.input}
-          noteId={note.id}
-          onOpen={onOpen}
-          onSend={thread.send}
-          sending={thread.sending}
-          setInput={thread.setInput}
-        />
-      </div>
-    </section>
   );
 });

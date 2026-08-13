@@ -17,7 +17,6 @@ import { toUpsertAttachment } from '@/lib/attachments';
 import { useAttachments, PendingAttachments } from './useAttachments';
 import { AttachmentList } from './AttachmentList';
 import { ShareImageSheet } from './ShareImage';
-import { NoteAIThread } from './ai/AIThread';
 import { useSharedDraft } from '@/lib/useSharedDraft';
 import { ComposerToolbar } from './ComposerToolbar';
 
@@ -355,8 +354,6 @@ export const NoteModal = observer(function NoteModal({ note, onClose, startFulls
               )}
               <MarkdownView content={note.content ?? ''} noteId={note.id} />
               <AttachmentList attachments={(note as any).attachments} />
-              {/* AI stays on details/read only — not in the editing surface. */}
-              <NoteAIThread note={note} onOpen={(n) => eventBus.emit('bkemo:open-note', { id: n.id })} />
             </div>
           </div>
         </div>

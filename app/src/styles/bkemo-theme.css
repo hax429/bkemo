@@ -1148,8 +1148,7 @@
 .bkemo .bk-ai-delete-chat,
 .bkemo .bk-ai-message-actions button,
 .bkemo .bk-ai-source-list button,
-.bkemo .bk-ai-context-list button,
-.bkemo .bk-ai-note-head button {
+.bkemo .bk-ai-context-list button {
   appearance: none;
   font: inherit;
   cursor: pointer;
@@ -1497,8 +1496,7 @@
   font-family: var(--font-mono);
   font-size: 11px;
 }
-.bkemo .bk-ai-message-actions button,
-.bkemo .bk-ai-note-head button {
+.bkemo .bk-ai-message-actions button {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: transparent;
@@ -1734,74 +1732,6 @@
   gap: 14px;
   padding-top: 4px;
   border-top: 1px solid var(--border);
-}
-.bkemo .bk-ai-note-hint,
-.bkemo .bk-ai-note-thread {
-  margin-top: 18px;
-  padding-top: 14px;
-  border-top: 1px solid var(--border);
-}
-.bkemo .bk-ai-note-hint {
-  color: var(--fg-3);
-  font-family: var(--font-mono);
-  font-size: 11px;
-}
-.bkemo .bk-ai-note-head {
-  margin-bottom: 8px;
-  gap: 8px;
-}
-.bkemo .bk-ai-note-head span:first-child {
-  color: var(--fg-3);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: .08em;
-  text-transform: uppercase;
-}
-.bkemo .bk-ai-note-head small {
-  color: var(--fg-3);
-  font-family: var(--font-mono);
-  font-size: 11px;
-}
-.bkemo .bk-ai-note-head button {
-  border: 0;
-  color: var(--accent);
-  padding: 0;
-}
-.bkemo .bk-ai-note-history { gap: 10px; }
-.bkemo .bk-ai-note-card {
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg-2);
-  overflow: hidden;
-}
-.bkemo .bk-ai-note-card-title {
-  padding: 6px 10px;
-  border-bottom: 1px solid var(--border);
-  color: var(--fg-3);
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-}
-.bkemo .bk-ai-note-card .bk-ai-message {
-  max-width: none;
-  border-radius: 0;
-  border-bottom: 1px solid var(--border);
-  padding: 9px 10px;
-  background: transparent;
-}
-.bkemo .bk-ai-note-card .bk-ai-message:last-child { border-bottom: 0; }
-.bkemo .bk-ai-note-card .bk-ai-user-content,
-.bkemo .bk-ai-note-card .bk-markdown {
-  font-size: 13px;
-  line-height: 1.5;
-}
-.bkemo .bk-ai-note-thread .bk-ai-composer-wrap {
-  border-top: 0;
-  padding: 0;
-  background: transparent;
-}
-.bkemo .bk-ai-note-thread .bk-ai-composer {
-  max-width: none;
-  border-style: dashed;
 }
 .bkemo .bk-ai-analytics-panel {
   margin: 12px 0;

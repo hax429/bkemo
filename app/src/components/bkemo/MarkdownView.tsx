@@ -22,20 +22,36 @@ function hl(children: React.ReactNode): React.ReactNode {
   );
 }
 
+function nodeText(node: React.ReactNode): string {
+  return React.Children.toArray(node)
+    .map((child) => {
+      if (typeof child === 'string' || typeof child === 'number') return String(child);
+      if (React.isValidElement(child)) {
+        return nodeText((child.props as { children?: React.ReactNode }).children);
+      }
+      return '';
+    })
+    .join('');
+}
+
 function isBareUrlParagraph(children: React.ReactNode): string | null {
-  const parts = React.Children.toArray(children);
+  const parts = React.Children.toArray(children).filter((part) => {
+    if (typeof part === 'string') return part.trim().length > 0;
+    return true;
+  });
   if (parts.length !== 1) return null;
   const only = parts[0];
-  if (typeof only === 'string') {
-    const trimmed = only.trim();
+  if (typeof only === 'string' || typeof only === 'number') {
+    const trimmed = String(only).trim();
     const match = trimmed.match(new RegExp(`^${BARE_URL_RE.source}$`, 'i'));
     return match ? normalizeUrl(match[0]) : null;
   }
-  if (React.isValidElement(only) && only.type === 'a') {
-    const href = normalizeUrl(String((only.props as any).href || ''));
-    const text = String((only.props as any).children ?? '').trim();
-    if (href && (!text || normalizeUrl(text) === href || text === href)) return href;
-  }
+  if (!React.isValidElement(only)) return null;
+  // Custom `a` renderers are functions, so check href rather than `type === 'a'`.
+  const href = normalizeUrl(String((only.props as { href?: unknown }).href || ''));
+  if (!href) return null;
+  const text = nodeText((only.props as { children?: React.ReactNode }).children).trim();
+  if (!text || normalizeUrl(text) === href || text === href) return href;
   return null;
 }
 
