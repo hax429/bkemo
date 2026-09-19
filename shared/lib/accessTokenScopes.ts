@@ -43,6 +43,7 @@ export const ACCESS_SCOPES: AccessScopeDef[] = [
       'notes.changes',
       'notes.detail',
       'notes.listByIds',
+      'notes.streamCount',
       'notes.dailyReviewNoteList',
       'notes.randomNoteList',
       'notes.relatedNotes',
