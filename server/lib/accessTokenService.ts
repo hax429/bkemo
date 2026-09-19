@@ -11,11 +11,6 @@ import {
 } from '../../shared/lib/accessTokenPlatform';
 import { noteSyncHub } from './noteSync';
 
-const NATIVE_DEFAULT_NAME: Record<'ios' | 'macos', string> = {
-  ios: 'iPhone',
-  macos: 'Mac',
-};
-
 export async function mintManagedAccessToken(input: {
   accountId: number;
   name: string;
@@ -86,23 +81,6 @@ export async function mintManagedAccessToken(input: {
   };
 }
 
-/** Mint a full-app device token for iOS/macOS sign-in. */
-export async function mintNativeDeviceAccessToken(input: {
-  accountId: number;
-  platform: 'ios' | 'macos';
-  deviceName?: string | null;
-  expiresInDays?: number | null;
-}) {
-  const name = (input.deviceName?.trim() || NATIVE_DEFAULT_NAME[input.platform]).slice(0, 80);
-  return mintManagedAccessToken({
-    accountId: input.accountId,
-    name,
-    platform: input.platform,
-    scopes: [APP_FULL_SCOPE],
-    expiresInDays: input.expiresInDays ?? null,
-    fullApp: true,
-  });
-}
 
 /**
  * Record a soft platform mismatch. Dedupes open incidents; wakes SSE listeners.

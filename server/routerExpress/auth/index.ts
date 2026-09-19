@@ -5,9 +5,19 @@ import { authenticator } from 'otplib';
 import { getGlobalConfig } from '../../routerTrpc/config';
 import { verifyToken, generateToken } from '../../lib/helper';
 import { resolvePermissions } from '../../lib/permissions';
-import { mintNativeDeviceAccessToken } from '../../lib/accessTokenService';
 
 const router = express.Router();
+
+/** iOS and macOS no longer log in with a password — they pair with a scoped access token
+ * minted from Settings → Security & API instead (see /api/v1/access-token/create and
+ * `GET /api/auth/profile`, which validates the pasted token). */
+function rejectNativePasswordLogin(body: any): string | null {
+  const platform = typeof body?.platform === 'string' ? body.platform.trim().toLowerCase() : '';
+  if (platform === 'ios' || platform === 'macos') {
+    return 'Password login is no longer supported on iOS/macOS. Create an access token in Settings → Security & API and paste it into the app instead.';
+  }
+  return null;
+}
 
 function handleOAuthCallback(req: any, res: any, err: any, user: any, info: any) {
   if (err) {
@@ -36,16 +46,6 @@ const logOAuthRequest = (provider: string) => (req: any, res: any, next: any) =>
 };
 
 async function tokenForLogin(user: { id: number; name: string | null; role: string; nickname?: string | null; image?: string | null; token?: string }, body: any) {
-  const platform = typeof body?.platform === 'string' ? body.platform.trim().toLowerCase() : '';
-  if (platform === 'ios' || platform === 'macos') {
-    const minted = await mintNativeDeviceAccessToken({
-      accountId: user.id,
-      platform,
-      deviceName: typeof body?.deviceName === 'string' ? body.deviceName : null,
-      expiresInDays: null,
-    });
-    return minted.token;
-  }
   return user.token ?? await generateToken(user, false);
 }
 
@@ -75,6 +75,11 @@ router.get('/discord', logOAuthRequest('Discord'), passport.authenticate('discor
 
 
 router.post('/login', (req, res, next) => {
+  const rejection = rejectNativePasswordLogin(req.body);
+  if (rejection) {
+    return res.status(400).json({ error: rejection });
+  }
+
   passport.authenticate('local', async (err, user, info) => {
     if (err) {
       return res.status(500).json({ error: 'Internal server error' });
@@ -122,6 +127,11 @@ router.post('/login', (req, res, next) => {
 
 router.post('/verify-2fa', async (req: any, res) => {
   try {
+    const rejection = rejectNativePasswordLogin(req.body);
+    if (rejection) {
+      return res.status(400).json({ error: rejection });
+    }
+
     const userId = req.body.userId;
 
     if (!userId || !req.body.code) {

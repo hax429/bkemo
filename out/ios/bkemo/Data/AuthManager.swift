@@ -6,7 +6,6 @@ import BkemoShared
 final class AuthManager: ObservableObject {
     static let shared = AuthManager()
     @Published var isLoggedIn = false
-    @Published var requires2faUserId: Int?
     @Published var authError: String?
     /// Minimal redirect notice — revoke/dismiss only on Mac or Web.
     @Published var securityAlertMessage: String?
@@ -19,45 +18,28 @@ final class AuthManager: ObservableObject {
         self.isLoggedIn = token != nil
     }
 
-    func login(username: String, password: String) async {
+    /// Pairs the app with an access token created in bkemo → Settings →
+    /// Security & API. There is no password login on iOS — the token's
+    /// scopes (view-only, read & write, full access, …) determine what the
+    /// app can do, enforced server-side.
+    func pairWithAccessToken(_ token: String) async {
         authError = nil
-        do {
-            let deviceName = UIDevice.current.name
-            let resp = try await client.login(username: username, password: password, deviceName: deviceName)
-            if let id = resp.requiresTwoFactor, id, let uid = resp.userId {
-                requires2faUserId = uid
-                return
-            }
-            if let token = resp.token {
-                Keychain.set(token, forKey: AppGroup.tokenKey)
-                client.token = token
-                AppGroup.defaults.removeObject(forKey: AppGroup.noteChangesCursorKey)
-                isLoggedIn = true
-                requires2faUserId = nil
-            } else {
-                authError = resp.error ?? "Login failed"
-            }
-        } catch {
-            authError = error.localizedDescription
+        let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            authError = "Paste an access token."
+            return
         }
-    }
-
-    func verify2fa(code: String) async {
-        guard let uid = requires2faUserId else { return }
-        authError = nil
+        client.token = trimmed
         do {
-            let deviceName = UIDevice.current.name
-            let resp = try await client.verify2fa(userId: uid, code: code, deviceName: deviceName)
-            if let token = resp.token {
-                Keychain.set(token, forKey: AppGroup.tokenKey)
-                client.token = token
-                AppGroup.defaults.removeObject(forKey: AppGroup.noteChangesCursorKey)
-                isLoggedIn = true
-                requires2faUserId = nil
-            } else {
-                authError = resp.error ?? "Verification failed"
-            }
+            _ = try await client.fetchProfile()
+            Keychain.set(trimmed, forKey: AppGroup.tokenKey)
+            AppGroup.defaults.removeObject(forKey: AppGroup.noteChangesCursorKey)
+            isLoggedIn = true
+        } catch APIError.unauthorized {
+            client.token = nil
+            authError = "That token isn't valid or has been revoked."
         } catch {
+            client.token = nil
             authError = error.localizedDescription
         }
     }
@@ -67,7 +49,6 @@ final class AuthManager: ObservableObject {
         AppGroup.defaults.removeObject(forKey: AppGroup.noteChangesCursorKey)
         client.token = nil
         isLoggedIn = false
-        requires2faUserId = nil
     }
 
     func handleUnauthorized() {

@@ -1,14 +1,12 @@
 import SwiftUI
 
 struct SignInView: View {
-    @State private var username = ""
-    @State private var password = ""
-    @State private var code = ""
+    @State private var accessToken = ""
     @State private var loading = false
     @FocusState private var focusedField: Field?
     @ObservedObject var auth = AuthManager.shared
 
-    private enum Field { case username, password, code }
+    private enum Field { case token }
 
     var body: some View {
         GeometryReader { proxy in
@@ -35,33 +33,24 @@ struct SignInView: View {
                         .foregroundStyle(.secondary)
                         .padding(.top, 7)
 
-                    Text(auth.requires2faUserId == nil ? "SIGN IN" : "TWO-FACTOR AUTHENTICATION")
+                    Text("CONNECT")
                         .font(.system(size: 11, weight: .medium, design: .monospaced))
                         .tracking(1)
                         .foregroundStyle(.secondary)
                         .padding(.top, 46)
                         .padding(.bottom, 10)
 
-                    if auth.requires2faUserId != nil {
-                        TextField("Verification code", text: $code)
-                            .keyboardType(.numberPad)
-                            .textContentType(.oneTimeCode)
-                            .focused($focusedField, equals: .code)
-                            .bkemoField()
-                            .autocorrectionDisabled()
-                    } else {
-                        TextField("Username", text: $username)
-                            .textContentType(.username)
-                            .focused($focusedField, equals: .username)
-                            .bkemoField()
-                            .autocorrectionDisabled()
-                            .textInputAutocapitalization(.never)
-                        SecureField("Password", text: $password)
-                            .textContentType(.password)
-                            .focused($focusedField, equals: .password)
-                            .bkemoField()
-                            .padding(.top, 10)
-                    }
+                    SecureField("Access token", text: $accessToken)
+                        .textContentType(.password)
+                        .focused($focusedField, equals: .token)
+                        .bkemoField()
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
+
+                    Text("No password here — create a token in bkemo → Settings → Security & API on Mac or web, then paste it above.")
+                        .font(.system(size: 12.5))
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 10)
 
                     if let error = auth.authError {
                         Label(error, systemImage: "exclamationmark.circle")
@@ -73,7 +62,7 @@ struct SignInView: View {
                     Button(action: submit) {
                         HStack(spacing: 8) {
                             if loading { ProgressView().controlSize(.small) }
-                            Text(auth.requires2faUserId == nil ? "Sign in" : "Verify")
+                            Text("Connect")
                                 .fontWeight(.semibold)
                             Image(systemName: "arrow.right")
                         }
@@ -99,26 +88,19 @@ struct SignInView: View {
             }
             .scrollDismissesKeyboard(.interactively)
             .background(Color(.systemBackground).ignoresSafeArea())
-            .onAppear { focusedField = auth.requires2faUserId == nil ? .username : .code }
+            .onAppear { focusedField = .token }
         }
     }
 
     private var canSubmit: Bool {
-        if loading { return false }
-        return auth.requires2faUserId == nil
-            ? !username.isEmpty && !password.isEmpty
-            : !code.isEmpty
+        !loading && !accessToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private func submit() {
         guard canSubmit else { return }
         Task {
             loading = true
-            if auth.requires2faUserId == nil {
-                await auth.login(username: username, password: password)
-            } else {
-                await auth.verify2fa(code: code)
-            }
+            await auth.pairWithAccessToken(accessToken)
             loading = false
         }
     }

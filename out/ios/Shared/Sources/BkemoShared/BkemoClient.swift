@@ -52,41 +52,24 @@ public struct BkemoClient {
 
     // MARK: Auth
 
-    public struct LoginResponse: Decodable {
-        public let token: String?
-        public let requiresTwoFactor: Bool?
-        public let userId: Int?
-        public let error: String?
+    public struct ProfileUser: Decodable {
+        public let id: Int
+        public let name: String?
+        public let role: String?
+        public let nickname: String?
+        public let image: String?
     }
 
-    public func login(username: String, password: String, deviceName: String? = nil) async throws -> LoginResponse {
-        var body: [String: Any] = [
-            "username": username,
-            "password": password,
-            "platform": "ios",
-        ]
-        if let deviceName, !deviceName.isEmpty { body["deviceName"] = deviceName }
-        let data = try await call("/api/auth/login", body: body)
-        return try JSONDecoder().decode(LoginResponse.self, from: data)
+    public struct ProfileResponse: Decodable {
+        public let user: ProfileUser
     }
 
-    public func verify2fa(userId: Int, code: String, deviceName: String? = nil) async throws -> LoginResponse {
-        var body: [String: Any] = [
-            "userId": userId,
-            "code": code,
-            "twoFactorCode": code,
-            "platform": "ios",
-        ]
-        if let deviceName, !deviceName.isEmpty { body["deviceName"] = deviceName }
-        let data = try await call("/api/auth/verify-2fa", body: body)
-        return try JSONDecoder().decode(LoginResponse.self, from: data)
-    }
-
-    public func profile() async throws -> Bool {
-        do {
-            _ = try await call("/api/auth/profile")
-            return true
-        } catch APIError.unauthorized { return false } catch { throw error }
+    /// Validates `token` against the server and fetches the account profile.
+    /// Used to pair an access token pasted from Settings → Security & API —
+    /// there is no password login on iOS.
+    public func fetchProfile() async throws -> ProfileResponse {
+        let data = try await call("/api/auth/profile", method: "GET")
+        return try JSONDecoder().decode(ProfileResponse.self, from: data)
     }
 
     // MARK: Account preferences

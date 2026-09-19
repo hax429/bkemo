@@ -7,6 +7,7 @@ import { ACCESS_SCOPES, type AccessScope } from '@shared/lib/accessTokenScopes';
 import {
   ACCESS_TOKEN_PLATFORMS,
   ACCESS_TOKEN_PLATFORM_LABELS,
+  APP_FULL_SCOPE,
   type AccessTokenPlatform,
 } from '@shared/lib/accessTokenPlatform';
 
@@ -27,6 +28,13 @@ const EXPIRY_OPTIONS = [
 
 const OBSIDIAN_SCOPES: AccessScope[] = [
   'notes:read', 'notes:write', 'tags:read', 'attachments:read', 'attachments:write',
+];
+
+const NATIVE_VIEW_ONLY_SCOPES: AccessScope[] = [
+  'notes:read', 'tags:read', 'attachments:read', 'comments:read',
+];
+const NATIVE_READ_WRITE_SCOPES: AccessScope[] = [
+  ...NATIVE_VIEW_ONLY_SCOPES, 'notes:write', 'tags:write', 'attachments:write', 'comments:write',
 ];
 
 function Chip({ children, tone = 'var(--fg-2)' }: { children: React.ReactNode; tone?: string }) {
@@ -50,7 +58,7 @@ export const SecurityScreen = observer(function SecurityScreen() {
   const [loading, setLoading] = useState(true);
   const [name, setName] = useState('');
   const [platform, setPlatform] = useState<AccessTokenPlatform>('api');
-  const [scopes, setScopes] = useState<AccessScope[]>(['notes:read']);
+  const [scopes, setScopes] = useState<string[]>(['notes:read']);
   const [expiry, setExpiry] = useState<number>(90);
   const [creating, setCreating] = useState(false);
   const [created, setCreated] = useState<{ token: string; name: string } | null>(null);
@@ -80,6 +88,13 @@ export const SecurityScreen = observer(function SecurityScreen() {
     setPlatform('obsidian');
     setScopes([...OBSIDIAN_SCOPES]);
     if (!name.trim()) setName('Obsidian');
+  };
+
+  const applyNativePreset = (preset: 'view' | 'readwrite' | 'full') => {
+    if (platform !== 'ios' && platform !== 'macos') setPlatform('macos');
+    if (preset === 'view') setScopes([...NATIVE_VIEW_ONLY_SCOPES]);
+    else if (preset === 'readwrite') setScopes([...NATIVE_READ_WRITE_SCOPES]);
+    else setScopes([APP_FULL_SCOPE]);
   };
 
   const create = async () => {
@@ -133,6 +148,32 @@ export const SecurityScreen = observer(function SecurityScreen() {
           onClick={applyObsidianPreset}
           style={{ background: 'var(--accent)', border: 'none', color: '#fff', padding: '7px 16px', borderRadius: 'var(--radius)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}
         >Fill Obsidian preset</button>
+      </div>
+
+      <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', background: 'var(--bg-2)', padding: 16, marginBottom: 24 }}>
+        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--fg)', marginBottom: 8 }}>iOS / macOS app</div>
+        <div style={{ color: 'var(--fg-2)', fontSize: 12, lineHeight: 1.5, marginBottom: 10 }}>
+          Neither app accepts a password. Pick a scope preset below (it also sets Platform to{' '}
+          <span style={mono}>macOS</span> — switch it to <span style={mono}>iOS</span> if you're
+          pairing the phone), create the token, then paste it into the app's sign-in screen.
+        </div>
+        <div className="h-stack" style={{ gap: 8, flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={() => applyNativePreset('view')}
+            style={{ background: 'var(--bg)', border: '1px solid var(--border-2)', color: 'var(--fg)', padding: '7px 16px', borderRadius: 'var(--radius)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}
+          >View only</button>
+          <button
+            type="button"
+            onClick={() => applyNativePreset('readwrite')}
+            style={{ background: 'var(--bg)', border: '1px solid var(--border-2)', color: 'var(--fg)', padding: '7px 16px', borderRadius: 'var(--radius)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}
+          >Read & write</button>
+          <button
+            type="button"
+            onClick={() => applyNativePreset('full')}
+            style={{ background: 'var(--accent)', border: 'none', color: '#fff', padding: '7px 16px', borderRadius: 'var(--radius)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}
+          >Full access</button>
+        </div>
       </div>
 
       <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', background: 'var(--bg-2)', padding: 16, marginBottom: 24 }}>

@@ -10,6 +10,7 @@ import { PromiseState } from "@/store/standard/PromiseState";
 import { api, reinitializeTrpcApi } from "@/lib/trpc";
 import { GradientBackground } from "@/components/Common/GradientBackground";
 import { signIn } from "@/components/Auth/auth-client";
+import { eventBus } from "@/lib/event";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Link } from 'react-router-dom';
 import { saveBlinkoEndpoint, getSavedEndpoint, getBlinkoEndpoint } from "@/lib/blinkoEndpoint";
@@ -31,6 +32,9 @@ export default function Component() {
   const [user, setUser] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [endpoint, setEndpoint] = React.useState("");
+  const [pairToken, setPairToken] = React.useState("");
+  const [pairing, setPairing] = React.useState(false);
+  const [pairError, setPairError] = React.useState("");
   const [canRegister, setCanRegister] = useState(false);
   const [providers, setProviders] = useState<OAuthProvider[]>([]);
   const [loadingProvider, setLoadingProvider] = useState<string>('');
@@ -130,6 +134,34 @@ export default function Component() {
     }
   };
 
+  const pairWithToken = async () => {
+    setPairError('');
+    const token = pairToken.trim();
+    if (!token) {
+      setPairError('Paste an access token.');
+      return;
+    }
+    setPairing(true);
+    try {
+      if (endpoint) saveBlinkoEndpoint(endpoint);
+      const response = await fetch(getBlinkoEndpoint('/api/auth/profile'), {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) {
+        setPairError(response.status === 401 ? "That token isn't valid or has been revoked." : 'Could not verify that token.');
+        return;
+      }
+      const data = await response.json();
+      eventBus.emit('user:token', { token, user: data.user });
+      navigate(safeReturnTo(searchParams.get('returnTo')));
+    } catch (error) {
+      console.error('Pair error:', error);
+      setPairError('Could not reach the server.');
+    } finally {
+      setPairing(false);
+    }
+  };
+
   return (
     <GradientBackground>
       <div className="flex h-full w-screen items-center justify-center p-2 sm:p-4 lg:p-8">
@@ -139,38 +171,8 @@ export default function Component() {
             <span>bkemo</span>
           </div>
 
-          {providers.length > 0 && (
-            <>
-              <div className="flex flex-col gap-4">
-                {providers.map((provider) => (
-                  <Button
-                    key={provider.id}
-                    className="w-full text-primary"
-                    color="primary"
-                    variant="bordered"
-                    startContent={provider.icon && <Icon icon={provider.icon} className="text-xl" />}
-                    isLoading={loadingProvider === provider.id}
-                    onPress={() => {
-                      setLoadingProvider(provider.id);
-                      stashAuthReturnTo(searchParams.get('returnTo'));
-                      window.location.href = `${getBlinkoEndpoint()}api/auth/${provider.id}`;
-                    }}
-                  >
-                    {t('sign-in-with-provider', { provider: provider.name })}
-                  </Button>
-                ))}
-              </div>
-
-              <div className="flex items-center gap-2 my-2">
-                <Divider className="flex-1" />
-                <span className="text-sm text-default-400">{t('or')}</span>
-                <Divider className="flex-1" />
-              </div>
-            </>
-          )}
-
-          <form className="flex flex-col gap-3" onSubmit={(e) => e.preventDefault()}>
-            {isTauriEnv && (
+          {isTauriEnv ? (
+            <div className="flex flex-col gap-3">
               <Input
                 label={t('blinko-endpoint')}
                 name="endpoint"
@@ -183,65 +185,131 @@ export default function Component() {
                   endpointStorage.save(e.target.value?.trim().replace(/"/g, ''))
                 }}
               />
-            )}
-            <Input
-              label={t('username')}
-              name={t('username')}
-              placeholder={t('enter-your-name')}
-              type="text"
-              variant="bordered"
-              value={user}
-              onChange={e => setUser(e.target.value?.trim())}
-            />
-            <Input
-              endContent={
-                <button type="button" onClick={() => setIsVisible(!isVisible)}>
-                  {isVisible ? (
-                    <Icon
-                      className="pointer-events-none text-2xl text-default-400"
-                      icon="solar:eye-closed-linear"
-                    />
-                  ) : (
-                    <Icon
-                      className="pointer-events-none text-2xl text-default-400"
-                      icon="solar:eye-bold"
-                    />
-                  )}
-                </button>
-              }
-              label={t('password')}
-              name="password"
-              placeholder={t('enter-your-password')}
-              type={isVisible ? "text" : "password"}
-              variant="bordered"
-              value={password}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  login();
+              <Input
+                endContent={
+                  <button type="button" onClick={() => setIsVisible(!isVisible)}>
+                    {isVisible ? (
+                      <Icon className="pointer-events-none text-2xl text-default-400" icon="solar:eye-closed-linear" />
+                    ) : (
+                      <Icon className="pointer-events-none text-2xl text-default-400" icon="solar:eye-bold" />
+                    )}
+                  </button>
                 }
-              }}
-              onChange={e => setPassword(e.target.value?.trim())}
-            />
-            <div className="flex items-center justify-between px-1 pl-2 pr-2">
-              <Checkbox defaultSelected name="remember" size="sm">
-                {t('keep-sign-in')}
-              </Checkbox>
+                label="Access token"
+                name="accessToken"
+                placeholder="Paste your access token"
+                type={isVisible ? "text" : "password"}
+                variant="bordered"
+                value={pairToken}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') pairWithToken();
+                }}
+                onChange={e => setPairToken(e.target.value)}
+              />
+              {pairError && (
+                <p className="text-danger text-sm px-1">{pairError}</p>
+              )}
+              <Button color="primary" isLoading={pairing} onPress={pairWithToken}>
+                Connect
+              </Button>
+              <p className="text-xs text-default-400 px-1">
+                No password here — create a token in bkemo → Settings → Security & API on web
+                or Mac, then paste it above.
+              </p>
             </div>
-            <Button
-              color="primary"
-              isLoading={SignIn.loading.value}
-              onPress={login}
-            >
-              {t('sign-in')}
-            </Button>
-          </form>
-          {canRegister && (
-            <p className="text-center text-small">
-              {t('need-to-create-an-account')}&nbsp;
-              <Link to="/signup">
-                {t('sign-up')}
-              </Link>
-            </p>
+          ) : (
+            <>
+              {providers.length > 0 && (
+                <>
+                  <div className="flex flex-col gap-4">
+                    {providers.map((provider) => (
+                      <Button
+                        key={provider.id}
+                        className="w-full text-primary"
+                        color="primary"
+                        variant="bordered"
+                        startContent={provider.icon && <Icon icon={provider.icon} className="text-xl" />}
+                        isLoading={loadingProvider === provider.id}
+                        onPress={() => {
+                          setLoadingProvider(provider.id);
+                          stashAuthReturnTo(searchParams.get('returnTo'));
+                          window.location.href = `${getBlinkoEndpoint()}api/auth/${provider.id}`;
+                        }}
+                      >
+                        {t('sign-in-with-provider', { provider: provider.name })}
+                      </Button>
+                    ))}
+                  </div>
+
+                  <div className="flex items-center gap-2 my-2">
+                    <Divider className="flex-1" />
+                    <span className="text-sm text-default-400">{t('or')}</span>
+                    <Divider className="flex-1" />
+                  </div>
+                </>
+              )}
+
+              <form className="flex flex-col gap-3" onSubmit={(e) => e.preventDefault()}>
+                <Input
+                  label={t('username')}
+                  name={t('username')}
+                  placeholder={t('enter-your-name')}
+                  type="text"
+                  variant="bordered"
+                  value={user}
+                  onChange={e => setUser(e.target.value?.trim())}
+                />
+                <Input
+                  endContent={
+                    <button type="button" onClick={() => setIsVisible(!isVisible)}>
+                      {isVisible ? (
+                        <Icon
+                          className="pointer-events-none text-2xl text-default-400"
+                          icon="solar:eye-closed-linear"
+                        />
+                      ) : (
+                        <Icon
+                          className="pointer-events-none text-2xl text-default-400"
+                          icon="solar:eye-bold"
+                        />
+                      )}
+                    </button>
+                  }
+                  label={t('password')}
+                  name="password"
+                  placeholder={t('enter-your-password')}
+                  type={isVisible ? "text" : "password"}
+                  variant="bordered"
+                  value={password}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      login();
+                    }
+                  }}
+                  onChange={e => setPassword(e.target.value?.trim())}
+                />
+                <div className="flex items-center justify-between px-1 pl-2 pr-2">
+                  <Checkbox defaultSelected name="remember" size="sm">
+                    {t('keep-sign-in')}
+                  </Checkbox>
+                </div>
+                <Button
+                  color="primary"
+                  isLoading={SignIn.loading.value}
+                  onPress={login}
+                >
+                  {t('sign-in')}
+                </Button>
+              </form>
+              {canRegister && (
+                <p className="text-center text-small">
+                  {t('need-to-create-an-account')}&nbsp;
+                  <Link to="/signup">
+                    {t('sign-up')}
+                  </Link>
+                </p>
+              )}
+            </>
           )}
           {blinko.config.value?.signinFooterEnabled &&
            blinko.config.value?.signinFooterText?.trim() && (
