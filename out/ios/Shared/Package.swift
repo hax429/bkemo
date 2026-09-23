@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "BkemoShared",
-    platforms: [.iOS(.v17)],
+    platforms: [.iOS(.v17), .macOS(.v14)],
     products: [.library(name: "BkemoShared", targets: ["BkemoShared"])],
     targets: [.target(name: "BkemoShared", path: "Sources/BkemoShared")]
 )
