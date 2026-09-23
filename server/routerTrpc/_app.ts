@@ -30,7 +30,9 @@ import { draftRouter } from './draft';
 import { oauthRouter } from './oauth';
 import { obsidianRouter } from './obsidian';
 import { linkEnrichmentRouter } from './linkEnrichment';
+import { nativeSettingsRouter } from './nativeSettings';
 export const appRouter = router({
+  nativeSettings: nativeSettingsRouter,
   ai: aiRouter,
   notes: noteRouter,
   tags: tagRouter,

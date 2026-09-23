@@ -1,7 +1,7 @@
 import express, { type Request, type Response } from 'express';
 import busboy from 'busboy';
 import { integrationGateway, IntegrationError } from '../lib/integrationGateway';
-import { redactIntegrationError, sanitizeAttachmentDisplayName } from '../lib/obsidianContracts';
+import { isPublicVaultMedia, redactIntegrationError, sanitizeAttachmentDisplayName } from '../lib/obsidianContracts';
 import {
   exchangeObsidianPairingCode,
   resolveObsidianActor,
@@ -33,6 +33,43 @@ function sendError(res: Response, error: unknown) {
     return res.status(status).json(redacted);
   }
   return res.status(500).json(redactIntegrationError('internal'));
+}
+
+async function readMultipartUpload(req: Request, fileSize: number): Promise<{
+  fileBuffer: Buffer | null;
+  fileName: string;
+  mimeType: string;
+  fields: Record<string, string>;
+  truncated: boolean;
+}> {
+  const bb = busboy({ headers: req.headers, limits: { fileSize, files: 1 } });
+  let fileBuffer: Buffer | null = null;
+  let fileName = 'upload.bin';
+  let mimeType = 'application/octet-stream';
+  const fields: Record<string, string> = {};
+  let truncated = false;
+
+  const done = new Promise<void>((resolve, reject) => {
+    bb.on('field', (name, value) => {
+      fields[name] = value;
+      if (name === 'fileName') fileName = value;
+    });
+    bb.on('file', (_name, stream, info) => {
+      fileName = info.filename || fileName;
+      mimeType = info.mimeType || mimeType;
+      const chunks: Buffer[] = [];
+      stream.on('data', (chunk: Buffer) => chunks.push(chunk));
+      stream.on('limit', () => { truncated = true; });
+      stream.on('error', reject);
+      stream.on('end', () => { fileBuffer = Buffer.concat(chunks); });
+    });
+    bb.on('error', reject);
+    bb.on('finish', () => resolve());
+  });
+
+  req.pipe(bb);
+  await done;
+  return { fileBuffer, fileName, mimeType, fields, truncated };
 }
 
 async function requireActor(req: Request, res: Response) {
@@ -271,6 +308,30 @@ router.get('/attachments/:portableId/content', async (req, res) => {
   }
 });
 
+router.get('/public-media/:portableId', async (req, res) => {
+  try {
+    const attachment = await prisma.attachments.findFirst({
+      where: { portableId: req.params.portableId },
+    });
+    if (!attachment || !isPublicVaultMedia(attachment.metadata)) {
+      throw new IntegrationError('not_found', 'Attachment not found');
+    }
+    const buffer = await FileService.getFileBuffer(attachment.path);
+    const fileName = sanitizeAttachmentDisplayName(attachment.name);
+    const hardened = hardenFileContentType(attachment.type || 'application/octet-stream', fileName);
+    res.setHeader('Content-Type', hardened.contentType);
+    res.setHeader('Content-Length', String(buffer.length));
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    res.setHeader(
+      'Content-Disposition',
+      `${hardened.forceAttachment ? 'attachment' : 'inline'}; filename="${fileName.replace(/"/g, '')}"`,
+    );
+    return res.send(buffer);
+  } catch (error) {
+    return sendError(res, error);
+  }
+});
+
 router.post('/audio', async (req, res) => {
   try {
     const actor = await requireActor(req, res);
@@ -281,45 +342,48 @@ router.post('/audio', async (req, res) => {
       throw new IntegrationError('invalid_request', 'Request is invalid');
     }
 
-    const bb = busboy({ headers: req.headers, limits: { fileSize: 25 * 1024 * 1024, files: 1 } });
-    let fileBuffer: Buffer | null = null;
-    let fileName = 'recording.webm';
-    let mimeType = 'audio/webm';
-    let durationSeconds: number | null = null;
-    let idempotencyKey = '';
-    let truncated = false;
+    const parsed = await readMultipartUpload(req, 25 * 1024 * 1024);
+    const durationSeconds = parsed.fields.durationSeconds != null ? Number(parsed.fields.durationSeconds) : null;
+    const idempotencyKey = parsed.fields.idempotencyKey || '';
 
-    const done = new Promise<void>((resolve, reject) => {
-      bb.on('field', (name, value) => {
-        if (name === 'idempotencyKey') idempotencyKey = value;
-        if (name === 'durationSeconds') durationSeconds = Number(value);
-        if (name === 'fileName') fileName = value;
-      });
-      bb.on('file', (_name, stream, info) => {
-        fileName = info.filename || fileName;
-        mimeType = info.mimeType || mimeType;
-        const chunks: Buffer[] = [];
-        stream.on('data', (chunk: Buffer) => chunks.push(chunk));
-        stream.on('limit', () => { truncated = true; });
-        stream.on('error', reject);
-        stream.on('end', () => { fileBuffer = Buffer.concat(chunks); });
-      });
-      bb.on('error', reject);
-      bb.on('finish', () => resolve());
-    });
-
-    req.pipe(bb);
-    await done;
-
-    if (truncated) throw new IntegrationError('oversized_media', 'Audio exceeds the size limit');
-    if (!fileBuffer) throw new IntegrationError('invalid_media', 'Audio type is not supported');
+    if (parsed.truncated) throw new IntegrationError('oversized_media', 'File exceeds the size limit');
+    if (!parsed.fileBuffer) throw new IntegrationError('invalid_media', 'Audio type is not supported');
     if (!idempotencyKey) throw new IntegrationError('invalid_idempotency_key', 'Idempotency key must be 8-128 safe characters');
 
     const attachment = await integrationGateway.uploadAudio(actor, {
-      buffer: fileBuffer,
-      fileName,
-      mimeType,
+      buffer: parsed.fileBuffer,
+      fileName: parsed.fileName,
+      mimeType: parsed.mimeType,
       durationSeconds,
+      idempotencyKey,
+    });
+    return res.status(201).json(attachment);
+  } catch (error) {
+    return sendError(res, error);
+  }
+});
+
+router.post('/files', async (req, res) => {
+  try {
+    const actor = await requireActor(req, res);
+    if (!actor) return;
+
+    const contentType = req.headers['content-type'] || '';
+    if (!contentType.includes('multipart/form-data')) {
+      throw new IntegrationError('invalid_request', 'Request is invalid');
+    }
+
+    const parsed = await readMultipartUpload(req, 50 * 1024 * 1024);
+    const idempotencyKey = parsed.fields.idempotencyKey || '';
+
+    if (parsed.truncated) throw new IntegrationError('oversized_media', 'File exceeds the size limit');
+    if (!parsed.fileBuffer) throw new IntegrationError('invalid_media', 'Media type is not supported');
+    if (!idempotencyKey) throw new IntegrationError('invalid_idempotency_key', 'Idempotency key must be 8-128 safe characters');
+
+    const attachment = await integrationGateway.uploadFile(actor, {
+      buffer: parsed.fileBuffer,
+      fileName: parsed.fileName,
+      mimeType: parsed.mimeType,
       idempotencyKey,
     });
     return res.status(201).json(attachment);

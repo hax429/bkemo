@@ -18,6 +18,7 @@ import {
   sanitizeAttachmentDisplayName,
   taskFilterClause,
   validateAudioUpload,
+  validateFileUpload,
   type ObsidianSearchFilter,
 } from './obsidianContracts';
 
@@ -374,6 +375,42 @@ export class IntegrationGateway {
             audioDuration: String(input.durationSeconds),
           }),
           source: 'obsidian',
+        },
+      });
+
+      const portableId = uploaded.filePath.match(/\/api\/attachment\/([0-9a-f-]{36})\/file/i)?.[1];
+      if (!portableId) throw new IntegrationError('internal', 'Unexpected server error');
+      const attachment = await prisma.attachments.findFirst({
+        where: { portableId, accountId: actor.accountId },
+      });
+      if (!attachment) throw new IntegrationError('internal', 'Unexpected server error');
+      return safeAttachment(attachment);
+    }));
+  }
+
+  async uploadFile(actor: IntegrationActor, input: {
+    buffer: Buffer;
+    fileName: string;
+    mimeType: string;
+    idempotencyKey: string;
+  }) {
+    requireScope(actor, 'attachments:write');
+    return observed(actor, 'upload_file', () => idempotent(actor, 'upload_file', input.idempotencyKey, async () => {
+      const mediaError = validateFileUpload({
+        mimeType: input.mimeType,
+        sizeBytes: input.buffer.length,
+      });
+      if (mediaError) throw new IntegrationError(mediaError, mediaError);
+
+      const fileName = sanitizeAttachmentDisplayName(input.fileName);
+      const uploaded = await FileService.uploadFile({
+        buffer: input.buffer,
+        originalName: fileName,
+        type: input.mimeType.split(';')[0]?.trim().toLowerCase() || 'application/octet-stream',
+        accountId: actor.accountId,
+        metadata: {
+          source: 'obsidian-vault',
+          public: true,
         },
       });
 

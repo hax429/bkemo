@@ -40,6 +40,7 @@ export const PAIRING_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 export const PAIRING_CODE_PATTERN = /^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{4}-[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{4}$/;
 
 export const AUDIO_MAX_BYTES = 25 * 1024 * 1024;
+export const FILE_MAX_BYTES = 50 * 1024 * 1024;
 export const AUDIO_MAX_DURATION_SECONDS = 15 * 60;
 export const AUDIO_ALLOWED_MIME = new Set([
   'audio/webm',
@@ -163,6 +164,23 @@ export function validateAudioUpload(input: {
   return null;
 }
 
+export function validateFileUpload(input: {
+  mimeType: string;
+  sizeBytes: number;
+}): IntegrationErrorCode | null {
+  if (!Number.isFinite(input.sizeBytes) || input.sizeBytes <= 0) return 'invalid_media';
+  if (input.sizeBytes > FILE_MAX_BYTES) return 'oversized_media';
+  return null;
+}
+
+export function isPublicVaultMedia(metadata: unknown): boolean {
+  return !!metadata
+    && typeof metadata === 'object'
+    && !Array.isArray(metadata)
+    && (metadata as { source?: unknown }).source === 'obsidian-vault'
+    && (metadata as { public?: unknown }).public === true;
+}
+
 export function sanitizeAttachmentDisplayName(name: string): string {
   const cleaned = name
     .replace(/[\x00-\x1f\x7f]/g, '')
@@ -187,7 +205,7 @@ export function redactIntegrationError(code: string, message?: string): { code: 
     access_token_expired: 'Access token has expired — create a new one in Settings → Security',
     access_token_revoked: 'Access token was revoked',
     invalid_media: 'Audio type is not supported',
-    oversized_media: 'Audio exceeds the size limit',
+    oversized_media: 'File exceeds the size limit',
     invalid_duration: 'Audio duration is invalid or too long',
     transcription_unavailable: 'Transcription is temporarily unavailable',
     offline: 'bkemo is unreachable',

@@ -15,6 +15,8 @@ import {
   sanitizeAttachmentDisplayName,
   scopesForObsidian,
   validateAudioUpload,
+  validateFileUpload,
+  isPublicVaultMedia,
 } from '../../../lib/obsidianContracts';
 
 describe('obsidianContracts', () => {
@@ -57,6 +59,15 @@ describe('obsidianContracts', () => {
     expect(validateAudioUpload({ mimeType: 'video/mp4', sizeBytes: 1024 })).toBe('invalid_media');
     expect(validateAudioUpload({ mimeType: 'audio/webm', sizeBytes: 26 * 1024 * 1024 })).toBe('oversized_media');
     expect(validateAudioUpload({ mimeType: 'audio/webm', sizeBytes: 1024, durationSeconds: 20 * 60 })).toBe('invalid_duration');
+  });
+
+  test('accepts generic vault media under 50 MB', () => {
+    expect(validateFileUpload({ mimeType: 'image/png', sizeBytes: 1024 })).toBeNull();
+    expect(validateFileUpload({ mimeType: 'application/pdf', sizeBytes: 49 * 1024 * 1024 })).toBeNull();
+    expect(validateFileUpload({ mimeType: 'application/pdf', sizeBytes: 51 * 1024 * 1024 })).toBe('oversized_media');
+    expect(validateFileUpload({ mimeType: '', sizeBytes: 0 })).toBe('invalid_media');
+    expect(isPublicVaultMedia({ source: 'obsidian-vault', public: true })).toBe(true);
+    expect(isPublicVaultMedia({ source: 'obsidian' })).toBe(false);
   });
 
   test('sanitizes attachment names and redacts errors', () => {
