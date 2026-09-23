@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { BASE_TOKEN_PATHS, expandScopes } from '@shared/lib/accessTokenScopes';
+import { BASE_TOKEN_PATHS, SETTINGS_PRIVILEGED_PATHS, SETTINGS_REDACTED_READS, expandScopes } from '@shared/lib/accessTokenScopes';
+import { allowsSettingsPath, needsRedactedGrant, settingsOperations } from '@server/lib/nativeSettings';
 import { tokenAllowsPath } from '@shared/lib/tokenPathMatch';
 
 // Paths a scoped macOS/iOS session calls while loading Home. Any gap here
@@ -28,5 +29,32 @@ describe('expandScopes', () => {
     const perms = expandScopes(['notes:read']);
     expect(tokenAllowsPath(perms, 'users.list')).toBe(false);
     expect(tokenAllowsPath(perms, 'config.update')).toBe(false);
+  });
+});
+
+describe('settings scope', () => {
+  const perms = expandScopes(['settings']);
+
+  test('reaches every native settings operation except privileged ones', () => {
+    for (const op of settingsOperations) {
+      const allowed = allowsSettingsPath(perms, op.id);
+      expect({ op: op.id, allowed }).toEqual({ op: op.id, allowed: !SETTINGS_PRIVILEGED_PATHS.includes(op.id) });
+    }
+  });
+
+  test('secret-bearing reads are native-settings-only (redacted), never direct', () => {
+    for (const p of SETTINGS_REDACTED_READS) {
+      expect(tokenAllowsPath(perms, p)).toBe(false);
+      expect(needsRedactedGrant(perms, p)).toBe(true);
+    }
+    expect(needsRedactedGrant(expandScopes(['notes:read']), 'ai.getAllProviders')).toBe(false);
+  });
+
+  test('never lets a scoped token escalate', () => {
+    for (const p of SETTINGS_PRIVILEGED_PATHS) {
+      expect(tokenAllowsPath(perms, p)).toBe(false);
+      expect(allowsSettingsPath(perms, p)).toBe(false);
+    }
+    expect(tokenAllowsPath(perms, 'users.impersonate')).toBe(false);
   });
 });

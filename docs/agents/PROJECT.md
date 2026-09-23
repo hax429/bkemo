@@ -141,9 +141,15 @@ Important implementation anchors:
   intentionally part of the external API.
 - Platform-bound access tokens are the external API security boundary (iOS,
   macOS, Obsidian, scripts). Web interactive login stays a session JWT. Clients
-  send `X-Bkemo-Platform`; mismatches soft-allow and warn on Mac/Web. Never
-  expose account administration, provider secrets, or unrestricted user data
-  through a convenience scope. See
+  send `X-Bkemo-Platform`; a different declared platform soft-allows and warns
+  on Mac/Web, while a missing header (`unknown`: `<img>`/download URLs, native
+  helpers) is not flagged. Scopes resolve from the token row on every request.
+  The `settings` scope (in the native Read & write preset) excludes
+  `SETTINGS_PRIVILEGED_PATHS` (token minting, password/2FA, account linking,
+  user administration, recovery key) and reaches `SETTINGS_REDACTED_READS` only
+  through `nativeSettings.perform`, which redacts secrets. Never expose account
+  administration, provider secrets, or unrestricted user data through a
+  convenience scope. See
   [`../plans/platform-bound-access-tokens.md`](../plans/platform-bound-access-tokens.md).
 - `.env`, `.blinko/`, and database directories contain local or production state
   and must never be committed or replaced during a source update.

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { tokenAllowsPath } from '../../shared/lib/tokenPathMatch';
+import { SETTINGS_REDACTED_GRANT, SETTINGS_REDACTED_READS } from '../../shared/lib/accessTokenScopes';
 import { ZConfigSchema, ZUserPerferConfigKey } from '../../shared/lib/types';
 import { resolvePermissions } from './permissions';
 
@@ -61,7 +62,12 @@ export const settingsOperations = [
 ];
 
 export function allowsSettingsPath(permissions: string[] | undefined, path: string) {
-  return permissions === undefined || tokenAllowsPath(permissions, path);
+  return permissions === undefined || tokenAllowsPath(permissions, path) || needsRedactedGrant(permissions, path);
+}
+/** True when a scoped token may call this secret-bearing read, redacted, via perform. */
+export function needsRedactedGrant(permissions: string[] | undefined, path: string) {
+  return permissions !== undefined && SETTINGS_REDACTED_READS.includes(path) && !tokenAllowsPath(permissions, path)
+    && tokenAllowsPath(permissions, SETTINGS_REDACTED_GRANT);
 }
 export function allowsSettingsAccess(account: { role?: string; permissions?: unknown }, access: SettingsAccess) {
   const permissions = resolvePermissions(account);

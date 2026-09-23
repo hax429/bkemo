@@ -23,7 +23,8 @@ export type AccessScope =
   | 'share'
   | 'notifications'
   | 'follows'
-  | 'analytics:read';
+  | 'analytics:read'
+  | 'settings';
 
 export type AccessScopeDef = {
   id: AccessScope;
@@ -32,6 +33,9 @@ export type AccessScopeDef = {
   /** Exact tRPC procedure paths, or prefix grants ending in `.` (e.g. `notifications.`). */
   paths: string[];
 };
+
+/** Pseudo-path: may call SETTINGS_REDACTED_READS via nativeSettings.perform. */
+export const SETTINGS_REDACTED_GRANT = 'nativeSettings.redactedRead';
 
 export const ACCESS_SCOPES: AccessScopeDef[] = [
   {
@@ -147,6 +151,54 @@ export const ACCESS_SCOPES: AccessScopeDef[] = [
     description: 'Read note-count and monthly activity stats.',
     paths: ['analytics.'],
   },
+  {
+    id: 'settings',
+    label: 'Manage settings',
+    description: 'Preferences plus your AI, schedule, storage, MCP and data settings (as your account allows). Secrets stay redacted. Cannot mint tokens, change password/2FA, administer users, or touch the recovery key.',
+    paths: [
+      'config.list', 'config.update',
+      'users.nativeAccountList', 'users.clearUserData',
+      'accessTokens.list', 'accessTokens.revoke', 'accessTokens.misuseIncidents', 'accessTokens.dismissMisuse',
+      'oauth.connections', 'oauth.revoke',
+      'ai.createProvider', 'ai.updateProvider', 'ai.deleteProvider',
+      'ai.createModel', 'ai.updateModel', 'ai.deleteModel',
+      'ai.fetchProviderModels', 'ai.createModelsFromProvider', 'ai.testConnect',
+      'ai.rebuildEmbeddingProgress', 'ai.rebuildEmbeddingStart', 'ai.rebuildEmbeddingResume', 'ai.rebuildEmbeddingRetryFailed', 'ai.rebuildEmbeddingStop',
+      'task.list', 'task.upsertTask', 'task.saveWeeklyKnowledgeSettings',
+      'task.testWeeklyKnowledgeConnection', 'task.checkWeeklyKnowledgeStatus',
+      'attachments.storageStats', 'attachments.storageActivity', 'attachments.migrationStatus',
+      'attachments.startStorageMigration', 'attachments.retryStorageMigration', 'attachments.cleanupStorageMigrationSources',
+      'config.testStorage', 'config.saveStorage', 'config.verifyActiveSetup', 'config.removeStorageCredentials',
+      'config.saveNeonCuSettings', 'config.neonCuUsage', 'config.clearNeonCuSettings',
+      'mcpServers.create', 'mcpServers.update', 'mcpServers.testConnection', 'mcpServers.toggle',
+      'mcpServers.delete', 'mcpServers.emergencyDisable', 'mcpServers.connectionStatus', 'mcpServers.getTools',
+      'task.exportPortable', 'task.previewPortableImport', 'task.importPortable',
+      SETTINGS_REDACTED_GRANT,
+    ],
+  },
+];
+
+/**
+ * Reads whose raw tRPC result carries secrets (provider API keys, MCP headers,
+ * export credentials). A `settings` token reaches them only through
+ * `nativeSettings.perform`, which redacts the result; the pseudo-path below
+ * marks that permission.
+ */
+export const SETTINGS_REDACTED_READS = [
+  'ai.getAllProviders', 'ai.getAllModels', 'mcpServers.list', 'task.weeklyKnowledgeSettings', 'config.neonCuSettings',
+];
+
+/**
+ * Settings operations a scoped token can never reach: each would widen its own
+ * access (mint a Full access token, take over the login, attach an account),
+ * administer other users, or expose/replace the site recovery key. They need
+ * a Full access token or the web session.
+ */
+export const SETTINGS_PRIVILEGED_PATHS = [
+  'accessTokens.create', 'users.upsertUser', 'users.generate2FASecret', 'users.verify2FAToken',
+  'users.linkAccount', 'users.unlinkAccount',
+  'users.list', 'users.upsertUserByAdmin', 'users.deleteUser', 'users.clearSiteData',
+  'task.exportRecoveryKey', 'task.importRecoveryKey',
 ];
 
 /**

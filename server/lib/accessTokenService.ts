@@ -85,6 +85,10 @@ export async function mintManagedAccessToken(input: {
 /**
  * Record a soft platform mismatch. Dedupes open incidents; wakes SSE listeners.
  * Returns whether a new incident was created (for notify-once semantics).
+ *
+ * Only a *different declared* platform counts. A missing header ("unknown") is
+ * normal for <img>/download URLs, keepalive fetches and native helpers, and a
+ * thief could set the header anyway, so it carries no signal — just noise.
  */
 export async function recordAccessTokenPlatformMismatch(input: {
   accountId: number;
@@ -93,6 +97,7 @@ export async function recordAccessTokenPlatformMismatch(input: {
   expectedPlatform: string;
   observedPlatform: string;
 }): Promise<{ created: boolean }> {
+  if (input.observedPlatform === 'unknown') return { created: false };
   const existing = await prisma.accessTokenMisuseIncident.findFirst({
     where: {
       accessTokenId: input.accessTokenId,

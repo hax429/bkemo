@@ -90,6 +90,14 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
 /** Network note-list fetches fall back to cache past this many ms. */
 const NOTE_NET_TIMEOUT_MS = 3000;
 
+/** Server note ids are autoincrement ints; offline drafts use Date.now(). */
+export const isOfflineNoteId = (id: number) => id >= 1e12;
+
+export function isPermanentSyncError(error: unknown): boolean {
+  const status = (error as any)?.data?.httpStatus ?? (error as any)?.shape?.data?.httpStatus;
+  return typeof status === 'number' && status >= 400 && status < 500 && status !== 408 && status !== 429;
+}
+
 export class BlinkoStore implements Store {
   sid = 'BlinkoStore';
   noteContent = '';
@@ -520,6 +528,15 @@ export class BlinkoStore implements Store {
 
     const ops = [...(this.offlinePendingOps.list ?? [])];
     for (const op of ops) {
+      // StorageListState reloads parsed copies, so match by value, not identity.
+      const dropOp = () => this.offlinePendingOps.removeByFind(o => JSON.stringify(o) === JSON.stringify(op));
+      // Offline notes get Date.now() ids; once the note syncs it has a server id,
+      // so an op aimed at the local id can never apply. Retrying it would pin
+      // "N pending" forever and block every op queued behind it.
+      if (isOfflineNoteId(op.noteId)) {
+        dropOp();
+        continue;
+      }
       try {
         if (op.type === 'edit') {
           await api.notes.upsert.mutate({ id: op.noteId, ...op.patch });
@@ -527,10 +544,14 @@ export class BlinkoStore implements Store {
           await api.notes.deleteMany.mutate({ ids: [op.noteId] });
           await deleteNoteFromCache(op.noteId);
         }
-        const idx = this.offlinePendingOps.list?.indexOf(op) ?? -1;
-        if (idx !== -1) this.offlinePendingOps.remove(idx);
+        dropOp();
       } catch (error) {
         console.error('[offline-sync] failed for op:', op, error);
+        // A 4xx will fail identically on every retry; only transient errors wait.
+        if (isPermanentSyncError(error)) {
+          dropOp();
+          continue;
+        }
         break;
       }
     }

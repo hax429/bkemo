@@ -3,7 +3,7 @@ import { TRPCError } from '@trpc/server';
 import { publicProcedure, router } from '../middleware';
 import { prisma } from '../prisma';
 import { configRouter, getGlobalConfig } from './config';
-import { allowsSettingsAccess, allowsSettingsPath, settingsOperations, settingsConfig, isSettingsSecret, redactSettingsResult } from '../lib/nativeSettings';
+import { allowsSettingsAccess, allowsSettingsPath, needsRedactedGrant, settingsOperations, settingsConfig, isSettingsSecret, redactSettingsResult } from '../lib/nativeSettings';
 
 // Introspection itself is available to any authenticated token. It grants no
 // additional operation: capabilities are intersected with account permissions.
@@ -55,7 +55,9 @@ export const nativeSettingsRouter = router({
       if (operation.destructive && input.confirmed !== true) throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'Confirm this action first.' });
       const { appRouter } = await import('./_app');
       const [namespace, name] = operation.id.split('.');
-      const caller = appRouter.createCaller(ctx) as any;
+      // A redacted-read grant widens this one call only; the result is redacted below.
+      const callCtx = needsRedactedGrant(ctx.permissions, operation.id) ? { ...ctx, permissions: [...ctx.permissions!, operation.id] } : ctx;
+      const caller = appRouter.createCaller(callCtx) as any;
       // REST JSON represents the date inputs of portable export as ISO strings.
       const payload = input.input;
       if (operation.id === 'task.exportPortable' && payload) {

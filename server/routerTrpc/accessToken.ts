@@ -124,7 +124,8 @@ export const accessTokenRouter = router({
     .query(async ({ ctx }) => {
       const accountId = Number((ctx as any).id);
       const rows = await prisma.accessTokenMisuseIncident.findMany({
-        where: { accountId, dismissedAt: null },
+        // Incidents recorded before header-less requests stopped counting.
+        where: { accountId, dismissedAt: null, observedPlatform: { not: 'unknown' } },
         orderBy: { lastSeenAt: 'desc' },
       });
       return rows.map((r) => ({

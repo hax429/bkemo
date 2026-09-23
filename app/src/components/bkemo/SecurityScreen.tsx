@@ -34,7 +34,7 @@ const NATIVE_VIEW_ONLY_SCOPES: AccessScope[] = [
   'notes:read', 'tags:read', 'attachments:read', 'comments:read',
 ];
 const NATIVE_READ_WRITE_SCOPES: AccessScope[] = [
-  ...NATIVE_VIEW_ONLY_SCOPES, 'notes:write', 'tags:write', 'attachments:write', 'comments:write',
+  ...NATIVE_VIEW_ONLY_SCOPES, 'notes:write', 'tags:write', 'attachments:write', 'comments:write', 'settings',
 ];
 
 function Chip({ children, tone = 'var(--fg-2)' }: { children: React.ReactNode; tone?: string }) {
