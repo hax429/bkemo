@@ -1,9 +1,19 @@
-# bkemo macOS — Tauri Quick-Capture Shell (Plan)
+# bkemo macOS — Tauri Shell + Native Quick-Capture Helper (Plan)
 
 **Server:** `https://bk.hax429.me`  
-**Stack:** Tauri v2 (`out/macos/`), shared React frontend, `tauri-plugin-global-shortcut`  
-**Last updated:** 2026-07-23  
-**Companion:** [`IOS.md`](./IOS.md) (native SwiftUI; Tauri iOS retired). macOS stays on Tauri.
+**Stack:** Tauri v2 (`out/macos/`, shared React frontend) for the main app/tray/hotkey
+registration, plus a native SwiftUI helper (`out/macos/native-capture/`) for the
+quick-capture panel itself.  
+**Last updated:** 2026-09-20  
+**Companion:** [`IOS.md`](./IOS.md) (native SwiftUI iOS app; Tauri iOS retired).
+
+> **2026-09-20 update:** §10's original decision #8 ("macOS = Tauri; iOS =
+> SwiftUI; separate") and the "native SwiftUI rewrite deferred" non-goal below
+> are superseded for the capture surface specifically — see §13. The main
+> window, tray, and hotkey registration are still Tauri/React; only the
+> `/quicknote` panel moved to native SwiftUI, for launch/record speed and to
+> use Liquid Glass. Everything else in this document (through §12) describes
+> that superseded Tauri-only design and is kept for history.
 
 ---
 
@@ -37,7 +47,7 @@ Speed of capture beats feature parity with the web app. The full bkemo UI remain
 
 | # | Goal | Success criteria |
 |---|------|------------------|
-| G1 | ⌃W opens quicknote while app is running (incl. tray-only) | Window visible, TipTap focused, cursor ready ≤300 ms |
+| G1 | ⌃W opens quicknote while app is running (incl. tray-only) | Window visible, TipTap focused, cursor ready immediately (native `orderFront` / no window animation) |
 | G2 | Repeat ⌃W hides without discarding in-progress text | Reopen restores the exact draft and focuses TipTap |
 | G3 | Fresh draft on open-from-shortcut | Editor is create-mode memo; empty (or cleared) ready for a new note |
 | G4 | Remappable | Settings → change chord → old unregisters, new registers; persists across relaunch |
@@ -104,7 +114,7 @@ Do not merge the iOS SwiftUI app into this plan. Do not revive Tauri iOS for mac
 | App running | Required for v1 (including background/tray) |
 | Cold start via shortcut | Phase 2 |
 | Note type | Always **memo** on shortcut open; todo via in-window toggle |
-| Latency target | ≤300 ms keypress → keyboard-ready when process already live |
+| Latency target | Native-feel show/hide: pre-warmed webview, no window animation, Done dismisses before upload |
 
 ### 3.1 Quick Note window semantics
 
@@ -216,6 +226,7 @@ Align with product offline conventions in `docs/agents/PROJECT.md`:
 - [ ] ⌃W with quicknote already visible → hides
 - [ ] Unsaved body survives hide and reopen
 - [ ] After successful save, next ⌃W yields empty memo draft
+- [ ] Done / ⌘↵ hides the panel immediately; the note still appears in the stream after the background upload
 - [ ] Remap to another chord → works; old chord inactive
 - [ ] Force register failure (conflict) → Settings shows error, no silent success
 - [ ] Signed out → composer still appears
@@ -238,7 +249,7 @@ Align with product offline conventions in `docs/agents/PROJECT.md`:
 | 8 | vs iOS | macOS = Tauri; iOS = SwiftUI; separate |
 | 9 | Auth | Always open composer; don’t block blank editor |
 | 10 | Note type | Memo on open; todo via UI toggle |
-| 11 | Latency | ≤300 ms when app already running |
+| 11 | Latency | Native-feel show/hide while the app is already running |
 | 12 | Doc path | `docs/plans/mac.md` |
 | 13 | Other platforms | Leave their defaults alone |
 | 14 | Conflicts | Detect failure → warn + suggest remap |
@@ -248,10 +259,12 @@ Align with product offline conventions in `docs/agents/PROJECT.md`:
 ## 11. Files likely to change
 
 ```
-out/macos/src/desktop/hotkey.rs       macOS default Control+W
-out/macos/src/desktop/window.rs       draft-preserving quicknote toggle
-out/macos/src/desktop/setup.rs        shortcut → show/focus
-out/macos/src/desktop/tray.rs         tray → same path
+out/macos/src/desktop/hotkey.rs           macOS default Control+W
+out/macos/src/desktop/window.rs           draft-preserving quicknote toggle
+out/macos/src/desktop/quicknote_panel.rs  animation-free native show/hide
+out/macos/src/desktop/capture_queue.rs    Done → hide, then background finalize
+out/macos/src/desktop/setup.rs            shortcut → show/focus
+out/macos/src/desktop/tray.rs             tray → same path
 app/src/pages/quicknote.tsx               event → focus / draft policy
 app/src/hooks/useInitialHotkeySetup.ts    platform default
 app/src/components/BlinkoSettings/HotkeySetting.tsx
@@ -271,3 +284,125 @@ Do not update `docs/agents/PROJECT.md` until implementation lands (same conventi
 - `out/macos/tauri.conf.json` — `quicknote` window definition
 - `out/macos/src/desktop/hotkey.rs` — register / defaults
 - `app/src/pages/quicknote.tsx` — capture UI
+
+---
+
+## 13. Native quick-capture helper (2026-09-20 grill — supersedes §7/§10 #8)
+
+### 13.1 Why
+
+The Tauri `/quicknote` webview (§2, §7) was already heavily optimized
+(pre-warmed, animation-disabled `NSPanel` tricks in `quicknote_panel.rs`,
+background upload in `capture_queue.rs`) but is still a webview. The goal
+here is native launch/record speed and macOS 26 Liquid Glass, for the
+capture surface only — not a full Tauri-to-SwiftUI rewrite of the app.
+
+### 13.2 Shape
+
+```
+out/macos/                       Tauri: still owns ⌃W, tray, main window
+  src/desktop/native_capture.rs  spawns the helper, sends show/toggle + token over IPC
+out/macos/native-capture/        SwiftPM executable — the actual capture panel
+  Sources/BkemoCapture/
+    main.swift, AppDelegate.swift        NSApplication entry, accessory policy
+    CapturePanelController.swift         NSPanel (animation/level/collection-behavior
+                                          tricks — ported from quicknote_panel.rs),
+                                          hosts the SwiftUI content via NSHostingView
+    CaptureView.swift, MarkdownPreview.swift, GlassBackground.swift, CaptureViewModel.swift
+    IPCServer.swift                      Unix-domain socket listener (Network.framework)
+    CaptureQueue.swift                   persist-then-drain upload queue (actor)
+    TaskSyntax.swift                     port of app/src/lib/taskSyntax.ts (tested)
+  Tests/BkemoCaptureTests/               TaskSyntax unit tests
+  build.sh                               swift build + assemble .app (no Xcode project)
+out/ios/Shared/                  BkemoShared SPM package — now also targets macOS;
+                                  the helper reuses its BkemoClient + Keychain code
+```
+
+Runtime flow:
+
+```
+⌃W (global, still Tauri)  ──▶ hotkey.rs / setup.rs dispatch_shortcut_command
+                                    │  #[cfg(target_os = "macos")]
+                                    ▼
+                       native_capture::send_toggle(app)
+                                    │  reads token via keychain.rs::load_session_token()
+                                    │  connects to ~/Library/Application Support/
+                                    │  me.hax429.bk/capture.sock (Unix domain socket)
+                                    ▼
+                    BkemoCapture helper (already running, spawned by
+                    setup_app at Tauri startup, torn down on RunEvent::Exit)
+                                    │
+                    IPCServer decodes {"cmd","token","endpoint"} ──▶ CapturePanelController
+                                    │  owns show/hide/toggle + visibility state entirely;
+                                    │  Rust never queries panel visibility
+                                    ▼
+                    Enter/⌘↵ → panel hides immediately, CaptureQueue persists
+                    to disk and POSTs /api/v1/note/upsert in the background
+                    with retry/backoff (same job survives helper relaunch)
+```
+
+Tray "Quick Note" uses `native_capture::send_show` (always shows, never
+hides — same distinction the old `show_quicknote_window` made for the tray
+vs. the toggle-based hotkey).
+
+The old `/quicknote` Tauri window, `quicknote_panel.rs`, and
+`capture_queue.rs` are untouched and still used by **web** and any
+non-macOS Tauri platform. On macOS, `dispatch_shortcut_command` and the
+tray's "quicknote" handler route to the native helper instead; the webview
+path simply never gets triggered there.
+
+### 13.3 Locked decisions (from the 2026-09-20 grill)
+
+| # | Decision | Choice |
+|---|----------|--------|
+| 1 | Scope | Capture panel only — main window/tray/Hotkey Settings stay Tauri/React |
+| 2 | Process model | Separate SwiftUI `.app` (`LSUIElement`), spawned by Tauri at its own startup, torn down on exit |
+| 3 | Hotkey ownership | Rust keeps ⌃W registration; sends a single `toggle`/`show` IPC message, helper owns its own visibility |
+| 4 | IPC transport | Local Unix-domain socket (`~/Library/Application Support/me.hax429.bk/capture.sock`), not distributed notifications (would broadcast the bearer token) |
+| 5 | Auth | No separate login for the helper — Tauri hands it the current token on every IPC message |
+| 6 | Networking | Reuse `BkemoShared` (extended to macOS); `/api/v1/note/upsert` (matches iOS), not the Rust tRPC envelope |
+| 7 | Editor scope | Plain text; inline shortcuts (`-[]`, `due:`, `#important`, `#urgent`) parsed at submit; no live tag/link autocomplete, no attachments (v1) |
+| 8 | Preview | Toggle-based (not live WYSIWYG); native `AttributedString(markdown:)` + custom todo-checkbox rendering |
+| 9 | Visual style | macOS 26+ Liquid Glass only, no older-OS fallback |
+| 10 | Window behavior | 1:1 parity with the old Rust/AppKit panel, incl. `hidesOnDeactivate = false` (does NOT hide when it loses focus) |
+| 11 | Save behavior | Hides immediately; persist + POST + retry happen after, in the background |
+| 12 | Preferences popover | Fast-follow, not in this initial ship (gear icon → native `.popover()`, read-only sign-in status + appearance) |
+| 13 | Distribution | Dev-only, unsigned/ad-hoc build |
+| 14 | Build tooling | SwiftPM executable + `build.sh` (no Xcode project) |
+
+### 13.4 Dev workflow
+
+```bash
+cd out/macos/native-capture
+./build.sh            # debug build → .build/debug-app/BkemoCapture.app
+swift test             # TaskSyntax unit tests
+```
+
+Tauri's `setup_app` launches the built helper automatically (macOS only) if
+it isn't already running — no manual step needed once it's built once.
+`native_capture.rs` resolves the helper path at compile time relative to
+the Tauri crate's own `CARGO_MANIFEST_DIR`; this is a dev-only path
+resolution (§13.3 #13) to revisit if this ever ships to another machine.
+
+
+## 14. Native settings migration (2026-09-20, approved)
+
+The main workspace remains Tauri during gradual migration of UI to SwiftUI.
+Business logic can remain TypeScript and Rust. One native helper owns Capture
+and Settings, using real Liquid Glass with a macOS 26 minimum and no vibrancy
+fallback. All Mac settings entry points open the same native window.
+
+Native settings cover authorized personal and administrative settings. Server
+capabilities intersect token grants with live account permissions; each action
+reuses existing validated server procedures. Signed out local Mac preferences
+remain available. Remote changes require connectivity. Native appearance is
+separate from workspace appearance. Unknown contract versions offer an explicit
+browser action. Destructive operations require confirmation.
+
+The Mac build must compile and embed the helper before packaging the app/DMG,
+resolve it from the installed bundle, and use local signing. Production,
+notarization, publishing and automatic updates remain outside this change.
+
+Validation: focused capability tests, Swift tests/build, Rust checks/tests, web
+build, local API verification, and native window interaction. Preserve existing
+unrelated changes.

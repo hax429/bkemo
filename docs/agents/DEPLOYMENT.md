@@ -99,6 +99,8 @@ gate:
 | REST API | Start local server and run `./scripts/test-api.sh` |
 | Prisma schema | Review the migration, generate Prisma client, and test migration behavior |
 | Rust/Tauri | `cargo check`, relevant target check, and `cargo test` |
+| macOS native capture/settings | `out/macos/native-capture/build.sh`, `swift test` there, and `./scripts/build_macos.sh` |
+| Native settings API | Unit tests plus `bun --env-file .env scripts/test-native-settings.ts` against the local server (it refuses a hosted database) |
 | iOS/offline/native | Platform build and the checks in `docs/plans/IOS.md` |
 
 Do not treat a successful build as user acceptance. Keep the local server
@@ -221,6 +223,20 @@ The production Tauri builds currently package `out/output/public` through
 `frontendDist`, so a normal server deployment does **not** replace their bundled
 frontend. Native code or bundled-frontend changes require the appropriate signed
 client build until the planned OTA bundle path is activated and device-verified.
+
+The macOS build (`./scripts/build_macos.sh`) now also compiles the SwiftPM
+helper in `out/macos/native-capture` and bundles it as
+`Contents/Resources/BkemoCapture.app`. It requires Xcode with the macOS 26 SDK,
+sets `minimumSystemVersion` to 26.0, and fails if the helper is missing or
+`codesign --verify --deep --strict` fails. The iOS project signs with team
+`XUR3432T6M` (`out/ios/project.yml`); regenerate the Xcode project with
+XcodeGen after editing it.
+
+The native Settings window reads `GET /api/v1/native/settings` and performs
+actions through `POST /api/v1/native/settings/action`. Those routes, and the
+server half of Quick Note's background `draft.finalize` queue, ship with the
+normal server deployment above, so deploy the server before distributing a
+macOS build that depends on them.
 
 The OTA generator already exists in the app package:
 

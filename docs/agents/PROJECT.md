@@ -57,13 +57,15 @@ capture windows and shared settings still import them.
 - Use the native SwiftUI iOS app and Tauri macOS shell with remote API access,
   cached reads, and queued offline creates.
 - On macOS, the Tauri app registers Control+W by default for quick capture.
-  The shortcut toggles a rounded `/quicknote` capture panel without discarding
-  its persisted draft. Web capture and macOS Quick Note share one account-scoped
-  draft that saves locally as you type and snapshots to Neon only when the
-  browser tab closes or the macOS app quits (not when a window is merely
-  hidden). Closing never auto-fills another device; a quiet “Recover draft”
-  action appears only when a different server snapshot exists. Explicit Save
-  creates a memo and clears the draft. Escape and × hide Quick Note.
+  The shortcut toggles a pre-warmed `/quicknote` panel with animation disabled
+  so it can appear and take keyboard focus immediately. Web capture and macOS
+  Quick Note share one account-scoped draft that saves locally as you type and
+  snapshots to Neon only when the browser tab closes or the macOS app quits
+  (not when a window is merely hidden). Closing never auto-fills another
+  device; a quiet “Recover draft” action appears only when a different server
+  snapshot exists. Done / ⌘↵ hides the panel immediately and a native
+  background queue POSTs `draft.finalize` (persisted on disk, retried after
+  failures). Escape and × hide Quick Note without uploading.
 - macOS stores only the bearer token in Keychain (`keyring`); each Tauri window
   hydrates its session from Keychain. Profile metadata remains in app data so
   cached notes and offline creation work without a connection.
