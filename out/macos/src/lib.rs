@@ -66,6 +66,9 @@ pub fn run() {
     {
         builder
             .invoke_handler(tauri::generate_handler![
+                open_native_settings,
+                sync_native_session,
+                initialize_native_desktop_settings,
                 toggle_editor_window,
                 set_main_always_on_top,
                 is_main_always_on_top,
@@ -78,6 +81,8 @@ pub fn run() {
                 clear_session_token,
                 set_tray_visible,
                 toggle_quicknote_window,
+                hide_quicknote_window,
+                queue_quicknote_capture,
                 resize_quicknote_window,
                 toggle_quickai_window,
                 resize_quickai_window,
@@ -106,8 +111,16 @@ pub fn run() {
                 setup_app(app)?;
                 Ok(())
             })
-            .run(tauri::generate_context!())
-            .expect("error while running tauri application");
+            .build(tauri::generate_context!())
+            .expect("error while building tauri application")
+            .run(|_app_handle, _event| {
+                // Tie the native capture helper's lifetime to this app's —
+                // no login item, no independent background agent (mac.md).
+                #[cfg(target_os = "macos")]
+                if let tauri::RunEvent::Exit = _event {
+                    terminate_helper();
+                }
+            });
     }
 
     #[cfg(any(target_os = "android", target_os = "ios"))]

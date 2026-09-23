@@ -8,6 +8,10 @@ pub mod window_state;
 pub mod text_selection;
 pub mod drag_out;
 pub mod spellcheck;
+pub mod quicknote_panel;
+pub mod capture_queue;
+#[cfg(target_os = "macos")]
+pub mod native_capture;
 
 pub use hotkey::*;
 pub use keychain::*;
@@ -19,3 +23,11 @@ pub use window_state::*;
 pub use text_selection::*;
 pub use drag_out::*;
 pub use spellcheck::*;
+pub use quicknote_panel::*;
+pub use capture_queue::*;
+#[cfg(target_os = "macos")]
+pub use native_capture::*;
+#[cfg(target_os = "macos")]
+pub mod native_settings;
+#[cfg(target_os = "macos")]
+pub use native_settings::*;

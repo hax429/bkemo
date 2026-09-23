@@ -57,7 +57,7 @@ enigo = "0.3"
 rdev = "0.3"
 sys-locale = "0.3"
 drag = "2.1"
-tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync", "fs"] }
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync", "fs", "time"] }
 
  
 
@@ -70,3 +70,4 @@ tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync"] }
 macos-accessibility-client = "0.0.1"
 keyring = { version = "3", features = ["apple-native"] }
 window-vibrancy = "0.6"
+objc = "0.2"

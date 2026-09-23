@@ -1,4 +1,4 @@
-const DEFAULT_TAURI_ENDPOINT = 'https://bk.hax429.me';
+const DEFAULT_TAURI_ENDPOINT = import.meta.env.VITE_BLINKO_ENDPOINT || 'https://bk.hax429.me';
 
 function readSavedEndpoint(): string | null {
     const raw = window.localStorage.getItem('blinkoEndpoint');

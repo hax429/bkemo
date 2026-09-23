@@ -8,31 +8,43 @@ describe('quicknote submission', () => {
     expect(isModifierEnter({ key: 'Enter', metaKey: false, ctrlKey: false })).toBe(false);
   });
 
-  it('does not clear or hide when the save was not accepted', async () => {
-    const clear = vi.fn();
-    const hide = vi.fn();
+  it('hides before the background enqueue settles, then clears', async () => {
+    const order: string[] = [];
+    const clear = vi.fn(() => { order.push('clear'); });
+    const hide = vi.fn(() => { order.push('hide'); });
 
-    await expect(deliverQuickNote({
-      save: async () => undefined,
-      clear,
-      hide,
-    })).rejects.toThrow('Quick note was not accepted');
-
-    expect(clear).not.toHaveBeenCalled();
-    expect(hide).not.toHaveBeenCalled();
-  });
-
-  it('clears and hides only after a successful save', async () => {
-    const clear = vi.fn();
-    const hide = vi.fn();
-
-    await deliverQuickNote({
-      save: async () => ({ id: 42 }),
+    const delivered = deliverQuickNote({
+      enqueue: () => new Promise((resolve) => {
+        order.push('enqueue-start');
+        setTimeout(() => {
+          order.push('enqueue-done');
+          resolve({ id: 42 });
+        }, 20);
+      }),
       clear,
       hide,
     });
 
-    expect(clear).toHaveBeenCalledOnce();
     expect(hide).toHaveBeenCalledOnce();
+    expect(clear).not.toHaveBeenCalled();
+    expect(order).toEqual(['hide', 'enqueue-start']);
+
+    await expect(delivered).resolves.toEqual({ id: 42 });
+    expect(clear).toHaveBeenCalledOnce();
+    expect(order).toEqual(['hide', 'enqueue-start', 'enqueue-done', 'clear']);
+  });
+
+  it('keeps the composer when enqueue is not accepted', async () => {
+    const clear = vi.fn();
+    const hide = vi.fn();
+
+    await expect(deliverQuickNote({
+      enqueue: async () => undefined,
+      clear,
+      hide,
+    })).rejects.toThrow('Quick note was not accepted');
+
+    expect(hide).toHaveBeenCalledOnce();
+    expect(clear).not.toHaveBeenCalled();
   });
 });

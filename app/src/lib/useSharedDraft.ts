@@ -127,6 +127,17 @@ export function useSharedDraft(enabled = true) {
     apply(next, true);
   }, [apply]);
 
+  const resetLocal = useCallback(() => {
+    const cleared = emptySharedDraft();
+    if (accountId) {
+      clearLocalSharedDraft(accountId);
+      clearDismissedServerUpdatedAt(accountId);
+    }
+    apply(cleared, true);
+    setRecoverable(null);
+    latestFlush = null;
+  }, [accountId, apply]);
+
   const checkRecoverable = useCallback(async () => {
     if (!enabled || !accountId || !token) return;
     try {
@@ -269,6 +280,7 @@ export function useSharedDraft(enabled = true) {
     draft,
     update,
     finalize,
+    resetLocal,
     syncing,
     error,
     recoverable,

@@ -8,7 +8,11 @@ use tauri::{
     Emitter, Manager,
 };
 
-use crate::desktop::{show_quicknote_window, toggle_editor_window};
+use crate::desktop::toggle_editor_window;
+#[cfg(not(target_os = "macos"))]
+use crate::desktop::show_quicknote_window;
+#[cfg(target_os = "macos")]
+use crate::desktop::send_show;
 
 #[tauri::command]
 pub fn set_tray_visible(app: AppHandle, visible: bool) -> Result<(), String> {
@@ -64,12 +68,22 @@ pub fn setup_system_tray(app: &AppHandle) -> Result<TrayIcon, Box<dyn std::error
         .on_menu_event(|app, event| {
             match event.id().as_ref() {
                 "quicknote" => {
-                    let _ = show_quicknote_window(app.clone());
+                    #[cfg(target_os = "macos")]
+                    {
+                        send_show(app);
+                    }
+                    #[cfg(not(target_os = "macos"))]
+                    {
+                        let _ = show_quicknote_window(app.clone());
+                    }
                 }
                 "toggle" => {
                     let _ = toggle_editor_window(app.clone());
                 }
                 "settings" => {
+                    #[cfg(target_os = "macos")]
+                    crate::desktop::native_capture::send_settings(app, None);
+                    #[cfg(not(target_os = "macos"))]
                     if let Some(window) = app.get_webview_window("main") {
                         let _ = window.show();
                         let _ = window.set_focus();

@@ -1,3 +1,5 @@
+import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { observer } from 'mobx-react-lite';
 import { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -9,7 +11,7 @@ import { api } from '@/lib/trpc';
 import type { Note } from '@shared/lib/types';
 import { loadPrefs, savePrefs, hydratePrefs, type BkemoPrefs } from '@/lib/bkemoSettings';
 import { getBkemoConfig } from '@/lib/bkemoConfig';
-import { isInTauri } from '@/lib/tauriHelper';
+import { isInTauri, isMacOS } from '@/lib/tauriHelper';
 import { isTask } from '@/lib/taskFilters';
 import { ensureNotificationPermission, syncTaskNotifications } from '@/lib/taskNotifications';
 import { FontManager } from '@/lib/fontManager';
@@ -70,6 +72,29 @@ const BkemoPage = observer(function BkemoPage() {
   const navigateSettings = (section: string) => navigate(pathForSettingsSection(section), { replace: true });
 
   const cfg = getBkemoConfig();
+  const nativeSettings = isInTauri() && isMacOS();
+  const [nativeSettingsError, setNativeSettingsError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!nativeSettings || route !== 'settings') return;
+    let active = true;
+    setNativeSettingsError(null);
+    invoke('open_native_settings', { section: settingsSection }).then(() => {
+      if (active) navigate('/', { replace: true });
+    }).catch(error => { if (active) setNativeSettingsError(String(error)); });
+    return () => { active = false; };
+  }, [nativeSettings, route, settingsSection, navigate]);
+  useEffect(() => {
+    if (!nativeSettings) return;
+    let disposed = false;
+    let stop: (() => void) | undefined;
+    listen('native-settings-changed', async () => {
+      const store = RootStore.Get(BlinkoStore);
+      await store.config.call();
+      if (disposed) return;
+      if (store.config.value?.bkemoPrefs) setPrefs(hydratePrefs(store.config.value.bkemoPrefs));
+    }).then(unlisten => { if (disposed) unlisten(); else stop = unlisten; });
+    return () => { disposed = true; stop?.(); };
+  }, [nativeSettings]);
 
   useEffect(() => {
     if (!parsedLocation.known) navigate('/', { replace: true });
@@ -196,6 +221,7 @@ const BkemoPage = observer(function BkemoPage() {
     if (route === 'files') return <FilesScreen />;
     if (route === 'analytics' || route === 'stats') return <Analytics />;
     if (route === 'ai') return <AIScreen onOpen={setEditing} />;
+    if (route === 'settings' && nativeSettings) return <div role="status" style={{ padding: 24 }}>{nativeSettingsError ?? 'Opening native Settings…'}</div>;
     if (route === 'settings') return <SettingsScreen prefs={prefs} onChange={updatePrefs} onNavigate={navigateTo} onSearch={() => setShowSearch(true)} section={settingsSection} onSectionChange={navigateSettings} />;
     if (TODO_VIEWS.includes(route as TodoView)) {
       return <Todos view={route as TodoView} onView={navigateTo} onOpen={setEditing} />;

@@ -5,8 +5,7 @@ import { BlinkoStore } from "@/store/blinkoStore";
 import { UserStore } from "@/store/user";
 import { NoteType } from "@shared/lib/types";
 import { parseTaskSyntax } from "@/lib/taskSyntax";
-import { noteLinkTitle } from "@/lib/noteLinks";
-import { toUpsertAttachment } from "@/lib/attachments";
+import { extractNoteLinkIds, noteLinkTitle } from "@/lib/noteLinks";
 import { useAttachments, PendingAttachments } from "@/components/bkemo/useAttachments";
 import { useEffect, useRef, useState } from "react";
 import { isInTauri } from "@/lib/tauriHelper";
@@ -14,6 +13,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { emit, listen } from "@tauri-apps/api/event";
 import { useTranslation } from "react-i18next";
 import { loadPrefs } from "@/lib/bkemoSettings";
+import { getBlinkoEndpoint } from "@/lib/blinkoEndpoint";
+import { deliverQuickNote } from "@/lib/quicknoteSubmit";
 import { useSharedDraft } from "@/lib/useSharedDraft";
 
 const QuickNotePage = observer(() => {
@@ -105,8 +106,8 @@ const QuickNotePage = observer(() => {
     document.body.style.overflow = 'hidden';
     document.body.style.background = 'transparent';
 
-    // Auto focus to editor
-    const timer = setTimeout(focusEditor, 100);
+    // Focus immediately so a pre-warmed window is keystroke-ready on first paint.
+    requestAnimationFrame(focusEditor);
 
     // Initial window size check
     const initialCheckTimer = setTimeout(() => {
@@ -134,7 +135,6 @@ const QuickNotePage = observer(() => {
     window.addEventListener('resize', resizeHandler);
 
     return () => {
-      clearTimeout(timer);
       clearTimeout(initialCheckTimer);
       if (resizeTimeoutRef.current) {
         clearTimeout(resizeTimeoutRef.current);
@@ -183,14 +183,11 @@ const QuickNotePage = observer(() => {
     };
   }, [blinko]);
 
-  const closeWindow = async () => {
-    // Close the quicknote window after sending - Tauri only.
+  const closeWindow = () => {
     if (isInTauri()) {
-      try {
-        await invoke('toggle_quicknote_window');
-      } catch (error) {
-        console.error('Failed to toggle quicknote window:', error);
-      }
+      void invoke('hide_quicknote_window').catch((error) => {
+        console.error('Failed to hide quicknote window:', error);
+      });
     }
   };
 
@@ -213,21 +210,50 @@ const QuickNotePage = observer(() => {
       return;
     }
 
+    const job = {
+      endpoint: getBlinkoEndpoint(),
+      content: parsed.content,
+      type: parsed.isTodo ? NoteType.TODO : NoteType.BLINKO,
+      isImportant: !!parsed.isImportant,
+      isUrgent: !!parsed.isUrgent,
+      dueDate: parsed.isTodo && parsed.dueDate ? parsed.dueDate.toISOString() : null,
+      referenceIds: extractNoteLinkIds(parsed.content),
+      attachments: att.items.map((item) => ({
+        name: item.name,
+        path: item.path,
+        size: item.size,
+        type: item.type,
+      })),
+    };
+
+    closeWindow();
     setSending(true);
     try {
-      shared.update({
-        content: parsed.content,
-        type: parsed.isTodo ? NoteType.TODO : NoteType.BLINKO,
-        isImportant: !!parsed.isImportant,
-        isUrgent: !!parsed.isUrgent,
-        dueDate: parsed.isTodo && parsed.dueDate ? parsed.dueDate.toISOString() : null,
+      await deliverQuickNote({
+        hide: closeWindow,
+        clear: () => {
+          editorRef.current?.clear();
+          att.clear();
+          shared.resetLocal();
+        },
+        enqueue: async () => {
+          if (isInTauri()) {
+            await invoke('queue_quicknote_capture', { job });
+            return { queued: true };
+          }
+          shared.update({
+            content: parsed.content,
+            type: job.type,
+            isImportant: job.isImportant,
+            isUrgent: job.isUrgent,
+            dueDate: job.dueDate,
+          });
+          const saved = await shared.finalize(job.attachments);
+          if (!saved) throw new Error(shared.error || 'Draft could not be saved yet');
+          await emit('native-note-changed', saved);
+          return saved;
+        },
       });
-      const saved = await shared.finalize(att.items.map(toUpsertAttachment));
-      if (!saved) throw new Error(shared.error || 'Draft could not be saved yet');
-      if (isInTauri()) await emit('native-note-changed', saved);
-      editorRef.current?.clear();
-      att.clear();
-      await closeWindow();
     } catch (error) {
       console.error('Quick note save failed:', error);
       setSaveError(error instanceof Error ? error.message : String(error));
@@ -319,7 +345,7 @@ const QuickNotePage = observer(() => {
           onClick={send}
           disabled={sending || att.uploading > 0}
           style={{ background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 'var(--radius)', padding: '4px 14px', fontSize: 12, fontWeight: 500, opacity: (sending || att.uploading > 0) ? 0.6 : 1, cursor: 'pointer' }}
-        >Send</button>
+        >Done</button>
       </div>
     </div>
   );

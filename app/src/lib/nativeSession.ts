@@ -1,3 +1,4 @@
+import { getBlinkoEndpoint } from '@/lib/blinkoEndpoint';
 import { invoke } from '@tauri-apps/api/core';
 import { emit } from '@tauri-apps/api/event';
 import type { TokenData } from '@/components/Auth/auth-client';
@@ -18,7 +19,7 @@ function legacyTokenData(): TokenData | null {
 
 export async function persistNativeSession(tokenData: TokenData | null, notify = true): Promise<void> {
   if (!isInTauri() || !isMacOS() || !tokenData?.token) return;
-  await invoke('save_session_token', { token: tokenData.token });
+  await invoke('save_session_token', { token: tokenData.token, endpoint: getBlinkoEndpoint() });
   localStorage.setItem(SESSION_PROFILE_KEY, JSON.stringify({
     user: tokenData.user,
     expires: tokenData.expires,
@@ -43,7 +44,7 @@ export async function bootstrapNativeSession(): Promise<TokenData | null> {
   let token = legacy?.token ?? null;
 
   if (token) {
-    await invoke('save_session_token', { token });
+    await invoke('save_session_token', { token, endpoint: getBlinkoEndpoint() });
     if (legacy?.user) {
       localStorage.setItem(SESSION_PROFILE_KEY, JSON.stringify({
         user: legacy.user,
@@ -56,5 +57,6 @@ export async function bootstrapNativeSession(): Promise<TokenData | null> {
   }
 
   if (!token) return null;
+  await invoke('save_session_token', { token, endpoint: getBlinkoEndpoint() });
   return sessionFromStoredProfile(token, localStorage.getItem(SESSION_PROFILE_KEY));
 }

@@ -61,6 +61,7 @@ done
 
 [[ "$(uname -s)" == "Darwin" ]] || die "macOS is required"
 command -v bun >/dev/null 2>&1 || die "bun is required (https://bun.sh)"
+command -v swift >/dev/null 2>&1 || die "Xcode with the macOS 26 SDK or newer is required"
 command -v cargo >/dev/null 2>&1 || die "Rust/Cargo is required (https://rustup.rs)"
 [[ -f "${TAURI_DIR}/tauri.conf.json" ]] || die "Tauri config not found at ${TAURI_DIR}"
 [[ -L "${APP_DIR}/src-tauri" || -d "${APP_DIR}/src-tauri" ]] || die "app/src-tauri symlink/dir missing (should point at out/macos)"
@@ -68,6 +69,7 @@ command -v cargo >/dev/null 2>&1 || die "Rust/Cargo is required (https://rustup.
 if [[ $CLEAN -eq 1 ]]; then
   printf 'Cleaning Tauri build artifacts...\n'
   cargo clean --manifest-path "${TAURI_DIR}/Cargo.toml"
+  (cd "${TAURI_DIR}/native-capture" && swift package clean)
 fi
 
 BUNDLES="app"
@@ -75,15 +77,20 @@ if [[ $INCLUDE_DMG -eq 1 ]]; then
   BUNDLES="app,dmg"
 fi
 
+printf 'Building native Settings and Capture...\n'
+"${TAURI_DIR}/native-capture/build.sh" release
+NATIVE_CONFIG='{"bundle":{"resources":{"native-capture/.build/release-app/BkemoCapture.app/":"BkemoCapture.app/"},"macOS":{"minimumSystemVersion":"26.0","signingIdentity":"-"}}}'
 printf 'Building bkemo for macOS (%s)...\n' "$BUNDLES"
 cd "$APP_DIR"
-bun run tauri build --bundles "$BUNDLES"
+bun run tauri build --bundles "$BUNDLES" --config "$NATIVE_CONFIG"
 
 TARGET_DIR="${CARGO_TARGET_DIR:-${TAURI_DIR}/target}"
 APP_BUNDLE="${TARGET_DIR}/release/bundle/macos/bkemo.app"
 
 [[ -d "$APP_BUNDLE" ]] || die "build completed but app bundle was not found at ${APP_BUNDLE}"
 
+[[ -x "$APP_BUNDLE/Contents/Resources/BkemoCapture.app/Contents/MacOS/BkemoCapture" ]] || die "native helper missing from app bundle"
+codesign --verify --deep --strict "$APP_BUNDLE"
 mkdir -p "$OUT_DIR"
 rm -rf "${OUT_DIR}/bkemo.app"
 cp -R "$APP_BUNDLE" "${OUT_DIR}/bkemo.app"

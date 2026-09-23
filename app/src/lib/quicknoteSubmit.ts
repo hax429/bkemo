@@ -9,22 +9,23 @@ export function isModifierEnter(event: ModifierEnterEvent): boolean {
 }
 
 type DeliverQuickNoteOptions<T> = {
-  save: () => Promise<T | null | undefined>;
+  enqueue: () => Promise<T | null | undefined> | T | null | undefined;
   clear: () => void;
   hide: () => Promise<void> | void;
 };
 
-export async function deliverQuickNote<T>({
-  save,
+/** Hide immediately, persist the upload, then clear the composer. */
+export function deliverQuickNote<T>({
+  enqueue,
   clear,
   hide,
 }: DeliverQuickNoteOptions<T>): Promise<T> {
-  const saved = await save();
-  if (saved == null) {
-    throw new Error('Quick note was not accepted by bkemo');
-  }
-
-  clear();
-  await hide();
-  return saved;
+  void hide();
+  return Promise.resolve(enqueue()).then((saved) => {
+    if (saved == null) {
+      throw new Error('Quick note was not accepted by bkemo');
+    }
+    clear();
+    return saved;
+  });
 }

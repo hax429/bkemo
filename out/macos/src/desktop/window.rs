@@ -1,5 +1,9 @@
 use tauri::{AppHandle, Manager, Emitter, WebviewWindowBuilder, WebviewUrl, Runtime, WindowEvent};
 
+use super::quicknote_panel::{
+    configure_quicknote_panel, hide_quicknote_panel, is_quicknote_visible, show_quicknote_panel,
+};
+
 // QuickTool window dimensions - defined once for consistency
 pub const QUICKTOOL_WIDTH: f64 = 190.0;
 pub const QUICKTOOL_HEIGHT: f64 = 35.0;
@@ -49,6 +53,10 @@ fn create_quick_window<R: Runtime>(
         .closable(false)
         .build()
         .map_err(|e| format!("Failed to create {} window: {}", config.label, e))?;
+
+    if config.label == "quicknote" {
+        configure_quicknote_panel(&window);
+    }
 
     // Handle window close event - hide instead of close
     let window_clone = window.clone();
@@ -155,67 +163,60 @@ pub fn resize_quicknote_window<R: tauri::Runtime>(app: AppHandle<R>, height: f64
     }
 }
 
-#[tauri::command]
-pub fn toggle_quicknote_window<R: tauri::Runtime>(app: AppHandle<R>) -> Result<(), String> {
-    if let Some(window) = app.get_webview_window("quicknote") {
-        if window.is_visible().unwrap_or(false) {
-            window
-                .hide()
-                .map_err(|e| format!("Failed to hide quicknote window: {}", e))?;
-        } else {
-            window
-                .show()
-                .map_err(|e| format!("Failed to show quicknote window: {}", e))?;
-            window
-                .set_focus()
-                .map_err(|e| format!("Failed to focus quicknote window: {}", e))?;
-            let _ = window.emit("quicknote-shortcut", ());
-        }
+fn ensure_quicknote_window<R: tauri::Runtime>(app: &AppHandle<R>) -> Result<(), String> {
+    if app.get_webview_window("quicknote").is_some() {
         return Ok(());
     }
 
-    // Create new quicknote window if it doesn't exist
-    let config = QuickWindowConfig {
-        label: "quicknote",
-        title: "Quick Note",
-        url: "/quicknote",
-        width: 600.0,
-        height: 150.0,
-        resizable: true,
-        skip_taskbar: false,
-    };
-
-    create_quick_window(&app, config)
-}
-
-/// Show and focus quicknote without toggling it closed.
-///
-/// This is the capture entry point for global shortcuts and the tray. The
-/// existing toggle command remains available for explicit close/hide actions.
-pub fn show_quicknote_window<R: tauri::Runtime>(app: AppHandle<R>) -> Result<(), String> {
-    if app.get_webview_window("quicknote").is_none() {
-        let config = QuickWindowConfig {
+    create_quick_window(
+        app,
+        QuickWindowConfig {
             label: "quicknote",
             title: "Quick Note",
             url: "/quicknote",
             width: 600.0,
             height: 150.0,
             resizable: true,
-            skip_taskbar: false,
-        };
-        create_quick_window(&app, config)?;
-    }
+            skip_taskbar: true,
+        },
+    )
+}
 
+#[tauri::command]
+pub fn hide_quicknote_window<R: tauri::Runtime>(app: AppHandle<R>) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("quicknote") {
+        hide_quicknote_panel(&window);
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn toggle_quicknote_window<R: tauri::Runtime>(app: AppHandle<R>) -> Result<(), String> {
+    ensure_quicknote_window(&app)?;
+    let window = app
+        .get_webview_window("quicknote")
+        .ok_or_else(|| "Quicknote window not found".to_string())?;
+    if is_quicknote_visible(&window) {
+        hide_quicknote_panel(&window);
+    } else {
+        show_quicknote_panel(&window);
+    }
+    Ok(())
+}
+
+/// Show and focus quicknote without toggling it closed.
+///
+/// This is the capture entry point for the tray. The global shortcut uses
+/// toggle so a second press hides the panel. On macOS this whole path is
+/// superseded by the native helper (`native_capture::send_show`) — kept
+/// here for Windows/Linux, which still use the Tauri quicknote webview.
+#[cfg_attr(target_os = "macos", allow(dead_code))]
+pub fn show_quicknote_window<R: tauri::Runtime>(app: AppHandle<R>) -> Result<(), String> {
+    ensure_quicknote_window(&app)?;
     let window = app
         .get_webview_window("quicknote")
         .ok_or_else(|| "Quicknote window not found after creation".to_string())?;
-    window
-        .show()
-        .map_err(|e| format!("Failed to show quicknote window: {}", e))?;
-    window
-        .set_focus()
-        .map_err(|e| format!("Failed to focus quicknote window: {}", e))?;
-    let _ = window.emit("quicknote-shortcut", ());
+    show_quicknote_panel(&window);
     Ok(())
 }
 

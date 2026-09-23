@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { isInTauri, isDesktop } from '@/lib/tauriHelper';
+import { isInTauri, isDesktop, isMacOS } from '@/lib/tauriHelper';
 import { invoke } from '@tauri-apps/api/core';
 import { enable, isEnabled } from '@tauri-apps/plugin-autostart';
 import { RootStore } from '@/store';
@@ -21,12 +21,15 @@ export const useInitialHotkeySetup = () => {
         await blinko.config.call(); // Ensure config is loaded
         
         const config = await blinko.config.value?.desktopHotkeys;
-        const finalConfig = {
+        let finalConfig = {
           ...DEFAULT_HOTKEY_CONFIG,
           ...config,
           windowBehavior: 'show' as const
         };
         
+        if (isMacOS()) {
+          finalConfig = { ...finalConfig, ...await invoke<typeof finalConfig>('initialize_native_desktop_settings', { settings: finalConfig }) };
+        }
         console.log('Setting up initial hotkeys with config:', finalConfig);
 
         await invoke('set_tray_visible', {
@@ -35,7 +38,7 @@ export const useInitialHotkeySetup = () => {
 
         // Default start-at-login on first desktop launch (user can disable in Settings).
         try {
-          if (!localStorage.getItem(AUTOSTART_DEFAULT_KEY)) {
+          if (!isMacOS() && !localStorage.getItem(AUTOSTART_DEFAULT_KEY)) {
             const already = await isEnabled();
             if (!already) await enable();
             localStorage.setItem(AUTOSTART_DEFAULT_KEY, '1');

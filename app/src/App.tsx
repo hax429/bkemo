@@ -298,7 +298,8 @@ function AppRoutes() {
     };
   }, [blinkoStore, navigate, windowType]);
 
-  if (!nativeSessionReady) return <LoadingPage />;
+  // Quick-capture must paint before Keychain hydration; save still checks the token.
+  if (!nativeSessionReady && windowType === 'main') return <LoadingPage />;
 
   // Return different routes based on window type
   switch (windowType) {

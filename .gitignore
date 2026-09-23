@@ -58,6 +58,8 @@ out/macos/gen/apple/build/
 out/macos/gen/apple/Externals/
 out/ios/build/
 app/tauri-plugin-blinko/ios/.build/
+out/ios/Shared/.build/
+out/macos/native-capture/.build/
 
 # Environment variables
 .env

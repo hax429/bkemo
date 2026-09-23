@@ -207,6 +207,7 @@ pub fn setup_application_menu(app: &AppHandle) -> tauri::Result<()> {
     app.set_menu(menu)?;
 
     app.on_menu_event(|app, event| match event.id().as_ref() {
+        SETTINGS_ID => { crate::desktop::native_capture::send_settings(app, None); }
         QUIT_ID => {
             let _ = app.emit("draft-flush-before-quit", ());
             let handle = app.clone();

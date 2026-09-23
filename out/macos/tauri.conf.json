@@ -43,7 +43,7 @@
         "maxHeight": 600,
         "fullscreen": false,
         "resizable": false,
-        "focus": true,
+        "focus": false,
         "center": true,
         "visible": false,
         "alwaysOnTop": true,
@@ -105,6 +105,9 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "macOS": {
+      "minimumSystemVersion": "26.0"
+    }
   }
 }
