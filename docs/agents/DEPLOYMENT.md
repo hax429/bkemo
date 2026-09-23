@@ -175,8 +175,15 @@ and recent logs agree that it is healthy:
 ssh Oracle 'systemctl is-active bkemo && curl -fsS -o /dev/null http://localhost:1111/'
 curl -fsS -o /dev/null -w 'HTTP %{http_code}\n' https://bk.hax429.me/
 curl -fsS https://bk.hax429.me/api/v1/public/site-info
+curl -fsS https://bk.hax429.me/api/v1/public/build-info
 ssh Oracle 'journalctl -u bkemo -n 50 --no-pager'
 ```
+
+`build-info` returns the server bundle's stamp (`version`, `build` = commit
+count, `commit`, `builtAt`) from `scripts/buildInfo.ts`; its `commit` must match
+the pushed `main` head. Settings → About shows the same stamp for the loaded web
+bundle beside the server's and warns when a cached bundle is older than the
+server. A native client's web build stays at its packaged stamp (see §8).
 
 A healthy startup log includes the server listening on `0.0.0.0:1111`. Also
 check the user-visible behavior that motivated the deployment; HTTP 200 alone

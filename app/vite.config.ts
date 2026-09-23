@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react";
 import path from 'path';
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
+import { getBuildInfo } from '../scripts/buildInfo'
 
 const host = process.env.TAURI_DEV_HOST || '0.0.0.0';
 const EXPRESS_PORT = 1111;
@@ -10,6 +11,9 @@ const isDev = process.env.NODE_ENV === 'development';
 
 // https://vitejs.dev/config/
 export default defineConfig({
+  define: {
+    __BKEMO_BUILD__: JSON.stringify(getBuildInfo()),
+  },
   plugins: [
     react(), 
     tailwindcss(),

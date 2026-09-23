@@ -20,7 +20,19 @@ const limit = pLimit(5);
 let refreshTicker = 0;
 let spotifyClient: SpotifyClient | null = null;
 
+declare const __BKEMO_BUILD__: { version: string; build: string; commit: string; builtAt: string } | undefined;
+
 export const publicRouter = router({
+  buildInfo: publicProcedure
+    .meta({ openapi: { method: 'GET', path: '/v1/public/build-info', summary: 'Get the running server build stamp', tags: ['Public'] } })
+    .input(z.void())
+    .output(z.object({ version: z.string(), build: z.string(), commit: z.string(), builtAt: z.string() }))
+    .query(function () {
+      // Stamped by esbuild at build time; unbundled dev servers have no stamp.
+      return typeof __BKEMO_BUILD__ !== 'undefined'
+        ? __BKEMO_BUILD__
+        : { version: packageJson.version, build: 'dev', commit: 'dev', builtAt: '' };
+    }),
   serverVersion: publicProcedure
     .meta({ openapi: { method: 'GET', path: '/v1/public/server-version', summary: 'Get server version', tags: ['Public'] } })
     .input(z.void())

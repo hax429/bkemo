@@ -7,6 +7,8 @@ import { prisma } from "@server/prisma";
 import { User } from "@server/context";
 import { Request as ExpressRequest } from 'express';
 import { getGlobalConfig } from "@server/routerTrpc/config";
+import { expandScopes } from "../../shared/lib/accessTokenScopes";
+import { APP_FULL_SCOPE } from "../../shared/lib/accessTokenPlatform";
 
 export const SendWebhook = async (data: any, webhookType: string, ctx: any) => {
   try {
@@ -257,18 +259,22 @@ export const verifyToken = async (token: string) => {
  * Accept only `session` and managed `access` tokens. Legacy apiToken JWTs
  * (no tokenType / legacy_api) are rejected. Access tokens require a live row;
  * platform mismatches soft-allow and record a misuse incident.
+ *
+ * Access-token permissions are re-derived from the row's stored scopes on every
+ * request, so a scope-catalogue fix reaches already-minted tokens instead of
+ * staying frozen in the JWT. Returns null when the credential is rejected.
  */
 const validateCredential = async (
   tokenData: any,
   declaredPlatform: string,
-): Promise<boolean> => {
+): Promise<any | null> => {
   const tokenType = tokenData?.tokenType;
-  if (tokenType === 'session') return true;
-  if (tokenType !== 'access' || !tokenData?.jti) return false;
+  if (tokenType === 'session') return tokenData;
+  if (tokenType !== 'access' || !tokenData?.jti) return null;
 
   const row = await prisma.accessToken.findUnique({ where: { jti: tokenData.jti } });
-  if (!row) return false;
-  if (row.expiresAt && row.expiresAt.getTime() <= Date.now()) return false;
+  if (!row) return null;
+  if (row.expiresAt && row.expiresAt.getTime() <= Date.now()) return null;
 
   const now = Date.now();
   if (!row.lastUsedAt || now - new Date(row.lastUsedAt).getTime() > 60_000) {
@@ -286,7 +292,10 @@ const validateCredential = async (
       observedPlatform: declaredPlatform,
     }).catch(() => { /* best-effort */ });
   }
-  return true;
+
+  const scopes = Array.isArray(row.scopes) ? (row.scopes as string[]) : [];
+  const { permissions: _frozen, ...rest } = tokenData;
+  return scopes.includes(APP_FULL_SCOPE) ? rest : { ...rest, permissions: expandScopes(scopes) };
 };
 
 function declaredPlatformFromRequest(req: ExpressRequest): string {
@@ -306,8 +315,9 @@ export const getTokenFromRequest = async (req: ExpressRequest) => {
       const authHeader = req.headers.authorization;
       if (authHeader) {
         const token = authHeader.replace("Bearer ", "");
-        const tokenData = await verifyToken(token);
-        if (tokenData && await validateCredential(tokenData, declaredPlatform)) {
+        const verified = await verifyToken(token);
+        const tokenData = verified && await validateCredential(verified, declaredPlatform);
+        if (tokenData) {
           return { ...tokenData, id: tokenData.sub, token };
         }
       }
@@ -315,8 +325,9 @@ export const getTokenFromRequest = async (req: ExpressRequest) => {
 
     if (req.query && req.query.token) {
       const token = req.query.token as string;
-      const tokenData = await verifyToken(token);
-      if (tokenData && await validateCredential(tokenData, declaredPlatform)) {
+      const verified = await verifyToken(token);
+      const tokenData = verified && await validateCredential(verified, declaredPlatform);
+      if (tokenData) {
         return { ...tokenData, id: tokenData.sub, token };
       }
     }

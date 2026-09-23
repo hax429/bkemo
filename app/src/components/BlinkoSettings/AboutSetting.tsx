@@ -1,13 +1,33 @@
 import { observer } from "mobx-react-lite";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Icon } from '@/components/Common/Iconify/icons';
 import { RootStore } from "@/store";
 import { ToastPlugin } from "@/store/module/Toast/Toast";
+import { api } from '@/lib/trpc';
+
+type BuildInfo = typeof __BKEMO_BUILD__;
+const WEB_BUILD: BuildInfo = typeof __BKEMO_BUILD__ !== 'undefined'
+  ? __BKEMO_BUILD__
+  : { version: 'dev', build: 'dev', commit: 'dev', builtAt: '' };
+
+const formatBuild = (b: BuildInfo) => `v${b.version} · build ${b.build} · ${b.commit}`;
+const formatBuiltAt = (iso: string) => (iso ? new Date(iso).toLocaleString() : 'not stamped');
+
+const rowStyle = { justifyContent: 'space-between', padding: '12px 16px', background: 'var(--bg-2)', borderRadius: 'var(--radius)', border: '1px solid var(--border)', gap: 12 } as const;
 
 export const AboutSetting = observer(() => {
   const { t } = useTranslation();
   const [clearing, setClearing] = useState(false);
+  const [server, setServer] = useState<BuildInfo | null>(null);
+
+  useEffect(() => {
+    api.public.buildInfo.query().then(setServer).catch(() => setServer(null));
+  }, []);
+
+  // A cached (service-worker) bundle older than the server means the new
+  // deploy has not reached this client yet — Clear Cache below fixes it.
+  const stale = server && server.build !== 'dev' && WEB_BUILD.build !== 'dev' && server.commit !== WEB_BUILD.commit;
 
   const clearBrowserCache = async () => {
     setClearing(true);
@@ -54,10 +74,25 @@ export const AboutSetting = observer(() => {
       <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: 24 }}>
         <div style={{ fontSize: 14, color: 'var(--fg)', fontWeight: 500, marginBottom: 12 }}>Version Information</div>
         <div className="v-stack" style={{ gap: 12 }}>
-          <div className="h-stack" style={{ justifyContent: 'space-between', padding: '12px 16px', background: 'var(--bg-2)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
-            <span style={{ fontSize: 13, color: 'var(--fg-2)' }}>Release Version</span>
-            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--accent)', fontFamily: 'var(--font-mono)' }}>v0.8.0</span>
+          <div className="h-stack" style={rowStyle}>
+            <span style={{ fontSize: 13, color: 'var(--fg-2)' }}>Web build</span>
+            <span style={{ textAlign: 'right' }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--accent)', fontFamily: 'var(--font-mono)' }}>{formatBuild(WEB_BUILD)}</span>
+              <div style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 2 }}>built {formatBuiltAt(WEB_BUILD.builtAt)}</div>
+            </span>
           </div>
+          <div className="h-stack" style={rowStyle}>
+            <span style={{ fontSize: 13, color: 'var(--fg-2)' }}>Server build</span>
+            <span style={{ textAlign: 'right' }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--fg)', fontFamily: 'var(--font-mono)' }}>{server ? formatBuild(server) : '…'}</span>
+              {server && <div style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 2 }}>built {formatBuiltAt(server.builtAt)}</div>}
+            </span>
+          </div>
+          {stale && (
+            <div style={{ fontSize: 12, color: 'var(--important)', padding: '0 4px' }}>
+              This page is running an older cached build than the server. Use Clear Cache below to load the latest.
+            </div>
+          )}
           <div className="h-stack" style={{ justifyContent: 'space-between', padding: '12px 16px', background: 'var(--bg-2)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
             <span style={{ fontSize: 13, color: 'var(--fg-2)' }}>Architecture</span>
             <span style={{ fontSize: 13, color: 'var(--fg)' }}>Unified notes + tasks</span>

@@ -51,6 +51,9 @@ export const ACCESS_SCOPES: AccessScopeDef[] = [
       'notes.getNoteHistory',
       'notes.getNoteVersion',
       'notes.internalSharedWithMe',
+      // Bookmark cards render stored link metadata for the note being read.
+      'linkEnrichment.getByUrl',
+      'linkEnrichment.listForNote',
     ],
   },
   {
@@ -68,6 +71,14 @@ export const ACCESS_SCOPES: AccessScopeDef[] = [
       'notes.clearRecycleBin',
       'notes.updateAttachmentsOrder',
       'notes.updateNotesOrder',
+      // The composer's cross-device draft and bookmark re-fetch/edit.
+      'draft.get',
+      'draft.snapshot',
+      'draft.clear',
+      'draft.finalize',
+      'linkEnrichment.retry',
+      'linkEnrichment.saveMarkdown',
+      'linkEnrichment.process',
     ],
   },
   {
@@ -138,6 +149,12 @@ export const ACCESS_SCOPES: AccessScopeDef[] = [
   },
 ];
 
+/**
+ * Granted to every scoped token: reading your own profile and harmless client
+ * boot metadata. Without these a scoped native session 403s on startup.
+ */
+export const BASE_TOKEN_PATHS = ['users.detail', 'ai.configStatus', 'plugin.getPluginCssContents'];
+
 const SCOPE_IDS = new Set(ACCESS_SCOPES.map((s) => s.id));
 
 /** Keep only recognized scope ids. */
@@ -147,7 +164,7 @@ export function sanitizeScopes(scopes: string[]): AccessScope[] {
 
 /** Flatten the given scopes to the concrete tRPC path fragments they grant. */
 export function expandScopes(scopes: string[]): string[] {
-  const out = new Set<string>();
+  const out = new Set<string>(BASE_TOKEN_PATHS);
   for (const id of sanitizeScopes(scopes)) {
     ACCESS_SCOPES.find((s) => s.id === id)?.paths.forEach((p) => out.add(p));
   }

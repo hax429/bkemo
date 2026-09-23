@@ -1,6 +1,7 @@
 import * as esbuild from 'esbuild';
 import { existsSync, mkdirSync } from 'fs';
 import path from 'path';
+import { getBuildInfo } from '../scripts/buildInfo';
 
 const distDir = path.resolve(process.cwd(), '../out/output');
 if (!existsSync(distDir)) {
@@ -43,6 +44,7 @@ async function build() {
       ],
       define: {
         'process.env.NODE_ENV': '"production"',
+        __BKEMO_BUILD__: JSON.stringify(getBuildInfo()),
       },
       loader: {
         '.ts': 'ts',
