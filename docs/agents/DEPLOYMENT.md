@@ -28,7 +28,7 @@ edit -> local server -> focused checks -> user acceptance
 | Source | `github.com/hax429/bkemo`, normally `main` | Code delivered to production |
 | Production host | SSH alias `Oracle` | Ubuntu server |
 | Production checkout | `/home/ubuntu/services/notes/bkemo` | Source-built live checkout |
-| Production process | `bkemo.service` | systemd service running `bun out/output/index.js` on port `1111` |
+| Production process | `bkemo.service` | systemd service running `bun dist/index.js` on port `1111`; `server/public -> ../dist/public` |
 | Public edge | Cloudflare and nginx | Cloudflare proxies to nginx, which terminates TLS and forwards `bk.hax429.me` to `localhost:1111` |
 | Public service | `https://bk.hax429.me` | Web application and API endpoint used by native clients |
 
@@ -151,8 +151,15 @@ ssh Oracle 'set -e
   bunx prisma migrate deploy --schema=prisma/schema.prisma
   bun run build:web
   bun run build:seed
+  rsync -a --delete out/output/ dist/
   sudo systemctl restart bkemo'
 ```
+
+The build writes `out/output/`, but the service runs `dist/index.js` (the bundle
+resolves static files through `../server/public`, so it must live one level
+below the repo root). Skipping the `rsync` restarts the previous build: this
+went unnoticed from 2026-08-03 to 2026-09-23. Always confirm with `build-info`
+below.
 
 Why the environment setup matters:
 
@@ -238,10 +245,11 @@ For a new systemd host, the required shape is:
    so token verification does not need a live database after Neon scales to zero.
 3. Run `bun install`, Prisma generation/migrations, `bun run build:web`, and
    `bun run build:seed`.
-4. Ensure `server/public` resolves to `out/output/public` and create the required
+4. Create the required
    `.blinko/{files,plugins,vector}` runtime directories (scheduled `.bk` backups
    write under `.blinko/files/BKEMO_BACKUP` when object storage is local).
-5. Run `bun out/output/index.js` from the repository root under systemd and expose it
+5. Copy `out/output/` to `dist/`, point `server/public` at `../dist/public`,
+   and run `bun dist/index.js` from the repository root under systemd and expose it
    through nginx with TLS and upload-size/upgrade headers.
 6. Keep `.env`, `.blinko`, database storage, and backups outside Git lifecycle
    operations.
