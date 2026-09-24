@@ -54,8 +54,9 @@ capture windows and shared settings still import them.
   connected applications. Settings -> MCP connections controls encrypted,
   allowlisted outbound Streamable HTTP connectors. See
   [`MCP.md`](./MCP.md).
-- Use the native SwiftUI iOS app and Tauri macOS shell with remote API access,
-  cached reads, and queued offline creates.
+- Use the native SwiftUI iOS app (local-first timeline, every edit queued
+  offline — see "iOS app" below) and the Tauri macOS shell with remote API
+  access, cached reads, and queued offline creates.
 - On macOS, the Tauri app registers Control+W by default for quick capture.
   The shortcut toggles a pre-warmed `/quicknote` panel with animation disabled
   so it can appear and take keyboard focus immediately. Web capture and macOS
@@ -229,6 +230,38 @@ state.
 Run focused tests for the area changed. If native Rust code changes, also run
 the relevant `cargo check`/`cargo test` and platform build described in
 [`../plans/IOS.md`](../plans/IOS.md).
+
+## iOS app (`out/ios`)
+
+Native SwiftUI, iOS 17+, talks only to `https://bk.hax429.me` with a paired
+access token (no password login). Regenerate the project with `xcodegen` after
+adding files; `project.yml` owns every Info.plist.
+
+- **Local-first store.** `MemoStore` holds the whole account mirror in memory,
+  persisted as JSON in the App Group (`Data/timeline.json`). Launch decodes only
+  `head.json` (pinned + first 60) so the first frame never waits on the full
+  mirror; `loadFull()` swaps it in right after. No SwiftData on the hot path —
+  the v1 SwiftData store is read once by `LegacyMigration` and deleted.
+- **Outbox.** Every mutation (capture, edit, pin, archive, done, checklist
+  toggle, delete) is applied locally and appended to `Data/outbox.json`
+  synchronously. Ops carry full memo snapshots and coalesce per memo
+  (`OutboxQueue`, unit-tested). Server snapshots never overwrite a memo with a
+  pending op.
+- **Sync.** `SyncEngine` is single-flight: flush outbox, then pull
+  `/v1/note/changes` by cursor (bootstrap = pin cursor, page `/v1/note/list`
+  active + archived). SSE `/v1/note/events` and a 60 s poll trigger pulls while
+  foregrounded; `BGAppRefreshTask` (`me.hax429.bk.sync`) and a background task
+  flush when backgrounded. A 401 sets `needsReauth` and keeps local data.
+- **Hand-off.** Share extension, widgets, and the `CaptureMemoIntent`
+  (Siri/Shortcuts) write one JSON file per capture to `Inbox/`; the app drains
+  it on launch/foreground. Entry points: `bkemo://compose?type=memo|todo`,
+  `bkemo://search`, and home-screen quick actions.
+- **UI.** MoeMemos-style card timeline grouped by day, stats + heatmap header,
+  tag/pinned/todo/archive filters, local search, floating composer with `#tag`
+  suggestions. Palette mirrors the web presets (dusk / coffee / developer /
+  light) in `Design/Theme.swift`.
+- **Debug.** Launch with `-bkemo-demo` (Debug only) for an in-memory sample
+  timeline with networking disabled; the console logs first-frame time.
 
 ## Current guidance versus future plans
 

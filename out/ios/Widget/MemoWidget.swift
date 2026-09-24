@@ -1,114 +1,166 @@
 import WidgetKit
 import SwiftUI
-import SwiftData
 import BkemoShared
 
 private var widgetAccent: Color {
-    guard let data = AppGroup.defaults.data(forKey: AppGroup.appearanceKey),
-          let preferences = try? JSONDecoder().decode(BkemoClient.AppearancePreferences.self, from: data) else {
-        return Color(red: 0.89, green: 0.66, blue: 0.42)
-    }
-    return Color(widgetHex: preferences.accent)
-}
-
-// MARK: Timeline providers
-
-struct MemoProvider: TimelineProvider {
-    func placeholder(in context: Context) -> MemoEntry { .placeholder }
-    func getSnapshot(in context: Context, completion: @escaping (MemoEntry) -> Void) { completion(.placeholder) }
-    func getTimeline(in context: Context, completion: @escaping (Timeline<MemoEntry>) -> Void) {
-        let entry = currentEntry()
-        completion(Timeline(entries: [entry], policy: .after(.now.addingTimeInterval(900))))
-    }
+    let hex = BkemoClient.AppearancePreferences.cached().accent
+    let value = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+    let rgb = UInt64(value, radix: 16) ?? 0xE2A96B
+    return Color(
+        red: Double((rgb >> 16) & 0xff) / 255,
+        green: Double((rgb >> 8) & 0xff) / 255,
+        blue: Double(rgb & 0xff) / 255
+    )
 }
 
 struct MemoEntry: TimelineEntry {
     let date: Date
-    let lastContent: String
-    let lastIsTodo: Bool
+    let recent: [Memo]
+    let todayCount: Int
+
+    static let placeholder = MemoEntry(
+        date: .now,
+        recent: [Memo(content: "A thought worth keeping"), Memo(content: "Buy oat milk", type: NoteType.todo)],
+        todayCount: 3
+    )
 }
 
-extension MemoEntry {
-    static let placeholder = MemoEntry(date: .now, lastContent: "No captures yet", lastIsTodo: false)
-}
+struct MemoProvider: TimelineProvider {
+    func placeholder(in context: Context) -> MemoEntry { .placeholder }
 
-// MARK: Views
+    func getSnapshot(in context: Context, completion: @escaping (MemoEntry) -> Void) {
+        completion(context.isPreview ? .placeholder : current())
+    }
+
+    func getTimeline(in context: Context, completion: @escaping (Timeline<MemoEntry>) -> Void) {
+        let midnight = Calendar.current.startOfDay(for: .now.addingTimeInterval(86_400))
+        completion(Timeline(entries: [current()], policy: .after(midnight)))
+    }
+
+    private func current() -> MemoEntry {
+        let head = TimelineHead.read().sorted { $0.createdAt > $1.createdAt }
+        let today = head.filter { Calendar.current.isDateInToday($0.createdAt) }.count
+        return MemoEntry(date: .now, recent: Array(head.prefix(3)), todayCount: today)
+    }
+}
 
 struct MemoWidgetView: View {
-    @Environment(\.widgetFamily) var family
-    let entry: MemoProvider.Entry
+    @Environment(\.widgetFamily) private var family
+    let entry: MemoEntry
 
     var body: some View {
         switch family {
-        case .systemSmall:
-            VStack(spacing: 10) {
-                MemoButton(type: 0, label: "Memo")
-                TodoButton(type: 2, label: "Todo")
-            }
-            .padding(8)
-            .containerBackground(.fill.tertiary, for: .widget)
-        case .systemMedium:
-            HStack(spacing: 12) {
-                VStack(spacing: 10) {
-                    MemoButton(type: 0, label: "Memo")
-                    TodoButton(type: 2, label: "Todo")
-                }
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Last memo")
-                        .font(.caption2).foregroundStyle(.secondary)
-                    Text(entry.lastContent)
-                        .font(.caption)
-                        .lineLimit(2)
-                }
+        case .systemSmall: small
+        case .systemMedium: medium
+        case .accessoryCircular: circular
+        case .accessoryRectangular: rectangular
+        default: small
+        }
+    }
+
+    private var small: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("bkemo")
+                    .font(.system(size: 15, weight: .bold, design: .serif))
                 Spacer()
+                Text("\(entry.todayCount) today")
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .foregroundStyle(.secondary)
             }
-            .padding(10)
-            .containerBackground(.fill.tertiary, for: .widget)
-        default:
-            EmptyView()
-        }
-    }
-}
-
-struct MemoButton: View {
-    let type: Int
-    let label: String
-    var body: some View {
-        Button(intent: OpenBkemoIntent(type: type)) {
-            Text(label)
-                .font(.caption.bold())
-                .padding(.vertical, 8)
-                .frame(maxWidth: .infinity)
-                .background(widgetAccent.opacity(0.2))
-                .foregroundStyle(.primary)
-                .cornerRadius(8)
-        }
-        .buttonStyle(.plain)
-    }
-}
-
-struct TodoButton: View {
-    let type: Int
-    let label: String
-    var body: some View {
-        Button(intent: OpenBkemoIntent(type: type)) {
-            HStack(spacing: 4) {
-                Image(systemName: "checkmark.circle")
-                Text(label)
+            Spacer(minLength: 0)
+            Button(intent: OpenBkemoIntent(type: NoteType.blinko)) {
+                captureLabel("Memo", symbol: "square.and.pencil", filled: true)
             }
-            .font(.caption.bold())
-            .padding(.vertical, 8)
-            .frame(maxWidth: .infinity)
-            .background(widgetAccent.opacity(0.2))
-            .foregroundStyle(.primary)
-            .cornerRadius(8)
+            .buttonStyle(.plain)
+            Button(intent: OpenBkemoIntent(type: NoteType.todo)) {
+                captureLabel("Todo", symbol: "checkmark.circle", filled: false)
+            }
+            .buttonStyle(.plain)
         }
-        .buttonStyle(.plain)
+        .containerBackground(for: .widget) { Color(.systemBackground) }
+    }
+
+    private var medium: some View {
+        HStack(alignment: .top, spacing: 14) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("bkemo")
+                    .font(.system(size: 16, weight: .bold, design: .serif))
+                Spacer(minLength: 0)
+                Link(destination: URL(string: "bkemo://compose?type=memo")!) {
+                    captureLabel("Memo", symbol: "square.and.pencil", filled: true)
+                }
+                Link(destination: URL(string: "bkemo://compose?type=todo")!) {
+                    captureLabel("Todo", symbol: "checkmark.circle", filled: false)
+                }
+            }
+            .frame(width: 112)
+            VStack(alignment: .leading, spacing: 7) {
+                Text("RECENT")
+                    .font(.system(size: 9.5, weight: .medium, design: .monospaced))
+                    .tracking(0.8)
+                    .foregroundStyle(.secondary)
+                if entry.recent.isEmpty {
+                    Text("Nothing captured yet.")
+                        .font(.system(size: 13, design: .serif))
+                        .foregroundStyle(.secondary)
+                }
+                ForEach(entry.recent, id: \.localId) { memo in
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Image(systemName: memo.isTodo ? (memo.isDone ? "checkmark.circle.fill" : "circle") : "circle.fill")
+                            .font(.system(size: memo.isTodo ? 10 : 4))
+                            .foregroundStyle(memo.isTodo ? widgetAccent : Color.secondary)
+                        Text(memo.content.replacingOccurrences(of: "\n", with: " "))
+                            .font(.system(size: 13, design: .serif))
+                            .lineLimit(2)
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+        }
+        .containerBackground(for: .widget) { Color(.systemBackground) }
+    }
+
+    private var circular: some View {
+        ZStack {
+            AccessoryWidgetBackground()
+            Image(systemName: "square.and.pencil")
+                .font(.system(size: 20, weight: .semibold))
+        }
+        .widgetURL(URL(string: "bkemo://compose"))
+        .containerBackground(for: .widget) { Color.clear }
+    }
+
+    private var rectangular: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Label("bkemo", systemImage: "square.and.pencil")
+                .font(.system(size: 13, weight: .semibold))
+            Text(entry.recent.first?.content.replacingOccurrences(of: "\n", with: " ") ?? "Tap to capture")
+                .font(.system(size: 12))
+                .lineLimit(2)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .widgetURL(URL(string: "bkemo://compose"))
+        .containerBackground(for: .widget) { Color.clear }
+    }
+
+    private func captureLabel(_ title: String, symbol: String, filled: Bool) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: symbol).font(.system(size: 12, weight: .semibold))
+            Text(title).font(.system(size: 13, weight: .semibold))
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 10)
+        .frame(height: 32)
+        .foregroundStyle(filled ? .white : widgetAccent)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(filled ? widgetAccent : widgetAccent.opacity(0.14))
+        )
     }
 }
 
-// MARK: Widget registration
-
+@main
 struct MemoWidget: Widget {
     let kind = "MemoWidget"
 
@@ -117,33 +169,7 @@ struct MemoWidget: Widget {
             MemoWidgetView(entry: entry)
         }
         .configurationDisplayName("bkemo")
-        .description("One-tap memo or todo.")
-        .supportedFamilies([.systemSmall, .systemMedium])
-    }
-}
-
-
-
-// MARK: Helpers
-
-private func currentEntry() -> MemoEntry {
-    let schema = Schema([LocalMemo.self])
-    let config = ModelConfiguration("Memo", schema: schema, url: AppGroup.storeURL, cloudKitDatabase: .none)
-    guard let container = try? ModelContainer(for: schema, configurations: [config]) else { return .placeholder }
-    let context = ModelContext(container)
-    let descriptor = FetchDescriptor<LocalMemo>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
-    guard let memo = try? context.fetch(descriptor).first else { return .placeholder }
-    return MemoEntry(date: .now, lastContent: memo.content, lastIsTodo: memo.type == NoteType.todo)
-}
-
-private extension Color {
-    init(widgetHex hex: String) {
-        let value = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
-        let rgb = UInt64(value, radix: 16) ?? 0xE2A96B
-        self.init(
-            red: Double((rgb >> 16) & 0xff) / 255,
-            green: Double((rgb >> 8) & 0xff) / 255,
-            blue: Double(rgb & 0xff) / 255
-        )
+        .description("Capture a memo or todo in one tap.")
+        .supportedFamilies([.systemSmall, .systemMedium, .accessoryCircular, .accessoryRectangular])
     }
 }

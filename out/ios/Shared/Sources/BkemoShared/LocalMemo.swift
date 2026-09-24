@@ -1,6 +1,7 @@
 import Foundation
 import SwiftData
 
+/// v1 SwiftData row. Only read once to migrate unsynced captures into the v2 outbox.
 @Model
 public final class LocalMemo {
     @Attribute(.unique) public var localId: UUID

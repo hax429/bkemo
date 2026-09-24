@@ -26,19 +26,22 @@ public enum TagParser {
         public var label: String { "#\(path)" }
     }
 
+    private static let tagRegex = try? NSRegularExpression(pattern: "(?<=\\s|^)#[^\\s#]+(?=\\s|$)")
+    private static let codeRegex = try? NSRegularExpression(pattern: "\\{\\{[\\s\\S]*?\\}\\}|```[\\s\\S]*?```")
+
     public static func extract(_ text: String) -> [String] {
-        let withoutCode = text.replacingOccurrences(of: "\\{\\{[\\s\\S]*?\\}\\}", with: "", options: .regularExpression)
-            .replacingOccurrences(of: "```[\\s\\S]*?```", with: "", options: .regularExpression)
-        var tags: [String] = []
-        let pattern = "(?<=\\s|^)#[^\\s#]+(?=\\s|$)"
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
-        let range = NSRange(withoutCode.startIndex..., in: withoutCode)
-        for match in regex.matches(in: withoutCode, range: range) {
-            if let r = Range(match.range, in: withoutCode) {
-                tags.append(String(withoutCode[r]).dropFirst().description)
-            }
+        guard text.contains("#"), let tagRegex else { return [] }
+        var source = text
+        if text.contains("```") || text.contains("{{"), let codeRegex {
+            source = codeRegex.stringByReplacingMatches(
+                in: text, range: NSRange(text.startIndex..., in: text), withTemplate: ""
+            )
         }
-        return tags
+        let range = NSRange(source.startIndex..., in: source)
+        return tagRegex.matches(in: source, range: range).compactMap { match in
+            guard let r = Range(match.range, in: source) else { return nil }
+            return String(source[r].dropFirst())
+        }
     }
 
     /// Active `#tag` fragment at the UTF-16 cursor, matching web TipTap suggestion.

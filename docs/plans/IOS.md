@@ -1,5 +1,10 @@
 # bkemo iOS — Native Quick-Capture App (Plan)
 
+> **Status (2026-09-24):** superseded by the v2 redesign now in `out/ios` —
+> local-first full timeline, offline outbox for every edit, inbox hand-off for
+> extensions. Current behavior lives in `docs/agents/PROJECT.md` → "iOS app".
+> Sections below are historical context.
+
 **Server:** `https://bk.hax429.me`
 **Stack:** SwiftUI (iOS 17+), SwiftData, App Group, REST via `URLSession`
 **Last updated:** 2026-07-23

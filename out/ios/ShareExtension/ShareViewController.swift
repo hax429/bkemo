@@ -1,75 +1,139 @@
 import UIKit
 import SwiftUI
 import UniformTypeIdentifiers
-import SwiftData
 import BkemoShared
 
+/// Share sheet → bkemo. The capture is written to the App Group inbox and the
+/// app uploads it on next launch/foreground, so sharing works offline and the
+/// extension never touches the network except for an optional page title.
 @objc(ShareViewController)
 final class ShareViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
-        Task { @MainActor in
-            let content = await collectContent()
-            let host = UIHostingController(rootView: ShareView(prefilled: content) { [weak self] in
-                self?.saveAndDismiss($0)
-            } onCancel: { [weak self] in
-                self?.extensionContext?.completeRequest(returningItems: nil)
-                self?.dismiss(animated: true)
-            })
-            host.view.frame = view.bounds
-            host.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-            view.backgroundColor = .systemBackground
-            addChild(host)
-            view.addSubview(host.view)
-            host.didMove(toParent: self)
-        }
+        let model = ShareModel()
+        let host = UIHostingController(rootView: ShareView(model: model, onSave: { [weak self] draft in
+            self?.save(draft)
+        }, onCancel: { [weak self] in
+            self?.extensionContext?.completeRequest(returningItems: nil)
+        }))
+        host.view.backgroundColor = .clear
+        addChild(host)
+        host.view.frame = view.bounds
+        host.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        view.addSubview(host.view)
+        host.didMove(toParent: self)
+
+        let items = (extensionContext?.inputItems as? [NSExtensionItem]) ?? []
+        Task { @MainActor in await model.load(from: items) }
     }
 
-    private func saveAndDismiss(_ draft: ShareDraft) {
-        Task { @MainActor in
-            let schema = Schema([LocalMemo.self])
-            let config = ModelConfiguration("Memo", schema: schema, url: AppGroup.storeURL, cloudKitDatabase: .none)
-            guard let container = try? ModelContainer(for: schema, configurations: [config]) else {
-                extensionContext?.completeRequest(returningItems: nil); return
-            }
-            let ctx = ModelContext(container)
-            let memo = LocalMemo(content: draft.content, type: draft.type, source: MemoSource.share,
-                                 isImportant: draft.isImportant, isUrgent: draft.isUrgent)
-            ctx.insert(memo)
-            try? ctx.save()
-            extensionContext?.completeRequest(returningItems: nil)
-            dismiss(animated: true)
-        }
+    private func save(_ draft: ShareDraft) {
+        let memo = Memo(
+            content: draft.content,
+            type: draft.isTodo ? NoteType.todo : NoteType.blinko,
+            source: MemoSource.share
+        )
+        try? Inbox.write(memo)
+        extensionContext?.completeRequest(returningItems: nil)
     }
+}
 
-    private func collectContent() async -> String {
+struct ShareDraft {
+    var content: String
+    var isTodo: Bool
+}
+
+@MainActor
+@Observable
+final class ShareModel {
+    var text = ""
+    var loading = true
+
+    func load(from items: [NSExtensionItem]) async {
         var url: URL?
-        var text: String?
-        for item in (extensionContext?.inputItems as? [NSExtensionItem]) ?? [] {
+        var plain: String?
+        for item in items {
             for provider in item.attachments ?? [] {
                 if url == nil, provider.hasItemConformingToTypeIdentifier(UTType.url.identifier) {
-                    url = await withCheckedContinuation { c in
-                        provider.loadItem(forTypeIdentifier: UTType.url.identifier) { item, _ in
-                            c.resume(returning: item as? URL)
-                        }
-                    }
+                    url = try? await provider.loadItem(forTypeIdentifier: UTType.url.identifier) as? URL
                 }
-                if text == nil, provider.hasItemConformingToTypeIdentifier(UTType.text.identifier) {
-                    text = await withCheckedContinuation { c in
-                        provider.loadItem(forTypeIdentifier: UTType.text.identifier) { item, _ in
-                            c.resume(returning: item as? String)
-                        }
-                    }
+                if plain == nil, provider.hasItemConformingToTypeIdentifier(UTType.plainText.identifier) {
+                    plain = try? await provider.loadItem(forTypeIdentifier: UTType.plainText.identifier) as? String
                 }
             }
         }
         if let url {
-            var body = url.absoluteString
-            if let title = await URLMetadata.fetchTitle(url) {
-                body = "\(title)\n\n\(url.absoluteString)"
+            text = url.absoluteString
+            loading = false
+            if let title = await URLMetadata.fetchTitle(url), text == url.absoluteString {
+                text = "\(title)\n\n\(url.absoluteString)"
             }
-            return body
+        } else {
+            text = plain ?? ""
+            loading = false
         }
-        return text ?? ""
+    }
+}
+
+struct ShareView: View {
+    @Bindable var model: ShareModel
+    let onSave: (ShareDraft) -> Void
+    let onCancel: () -> Void
+
+    @State private var isTodo = false
+    @FocusState private var focused: Bool
+
+    private var accent: Color {
+        let value = BkemoClient.AppearancePreferences.cached().accent
+            .trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+        let rgb = UInt64(value, radix: 16) ?? 0xE2A96B
+        return Color(red: Double((rgb >> 16) & 0xff) / 255, green: Double((rgb >> 8) & 0xff) / 255, blue: Double(rgb & 0xff) / 255)
+    }
+
+    private var trimmed: String { model.text.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 14) {
+                Picker("Type", selection: $isTodo) {
+                    Text("Memo").tag(false)
+                    Text("Todo").tag(true)
+                }
+                .pickerStyle(.segmented)
+                .frame(maxWidth: 200)
+
+                ZStack(alignment: .topLeading) {
+                    TextEditor(text: $model.text)
+                        .font(.system(size: 17, design: .serif))
+                        .scrollContentBackground(.hidden)
+                        .focused($focused)
+                    if model.loading {
+                        ProgressView().padding(8)
+                    }
+                }
+                .padding(10)
+                .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+
+                Text("Saved on this iPhone first — syncs to bk.hax429.me when bkemo is next online.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(18)
+            .navigationTitle("Save to bkemo")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel", action: onCancel)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") { onSave(ShareDraft(content: trimmed, isTodo: isTodo)) }
+                        .fontWeight(.semibold)
+                        .disabled(trimmed.isEmpty)
+                }
+            }
+            .onAppear { focused = true }
+        }
+        .tint(accent)
+        .preferredColorScheme(BkemoClient.AppearancePreferences.cached().theme == "light" ? .light : .dark)
     }
 }

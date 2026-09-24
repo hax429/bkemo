@@ -1,123 +1,111 @@
 import SwiftUI
+import BkemoShared
 
 struct SignInView: View {
-    @State private var accessToken = ""
-    @State private var loading = false
-    @FocusState private var focusedField: Field?
-    @ObservedObject var auth = AuthManager.shared
+    var isReconnect = false
 
-    private enum Field { case token }
+    @Environment(Session.self) private var session
+    @Environment(\.dismiss) private var dismiss
+    @State private var token = ""
+    @State private var working = false
+    @State private var error: String?
+    @FocusState private var focused: Bool
 
     var body: some View {
-        GeometryReader { proxy in
-            ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    Spacer(minLength: max(28, proxy.size.height * 0.1))
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                Spacer(minLength: isReconnect ? 24 : 72)
+                Kicker("Private · Fast · Yours")
+                Text("bkemo")
+                    .font(Typo.sans(52, .bold))
+                    .foregroundStyle(Theme.fg)
+                    .padding(.top, 8)
+                Text(isReconnect
+                     ? "Paste a fresh access token. Everything you captured offline will sync right after."
+                     : "Capture before the thought gets away — online or not.")
+                    .font(Typo.sans(17))
+                    .foregroundStyle(Theme.fg2)
+                    .padding(.top, 6)
 
-                    Text("PRIVATE · FAST · YOURS")
-                        .font(.system(size: 11, weight: .medium, design: .monospaced))
-                        .tracking(1.2)
-                        .foregroundStyle(.secondary)
-
-                    HStack(alignment: .center, spacing: 13) {
-                        Image(systemName: "square.and.pencil")
-                            .font(.system(size: 31, weight: .medium))
-                            .foregroundStyle(.tint)
-                        Text("bkemo")
-                            .font(.system(size: 40, weight: .bold, design: .rounded))
-                    }
-                    .padding(.top, 13)
-
-                    Text("Capture before the thought gets away.")
-                        .font(.system(size: 16))
-                        .foregroundStyle(.secondary)
-                        .padding(.top, 7)
-
-                    Text("CONNECT")
-                        .font(.system(size: 11, weight: .medium, design: .monospaced))
-                        .tracking(1)
-                        .foregroundStyle(.secondary)
-                        .padding(.top, 46)
-                        .padding(.bottom, 10)
-
-                    SecureField("Access token", text: $accessToken)
-                        .textContentType(.password)
-                        .focused($focusedField, equals: .token)
-                        .bkemoField()
-                        .autocorrectionDisabled()
-                        .textInputAutocapitalization(.never)
-
-                    Text("No password here — create a token in bkemo → Settings → Security & API on Mac or web, then paste it above.")
-                        .font(.system(size: 12.5))
-                        .foregroundStyle(.secondary)
-                        .padding(.top, 10)
-
-                    if let error = auth.authError {
-                        Label(error, systemImage: "exclamationmark.circle")
-                            .font(.caption)
-                            .foregroundStyle(.red)
-                            .padding(.top, 12)
-                    }
-
-                    Button(action: submit) {
-                        HStack(spacing: 8) {
-                            if loading { ProgressView().controlSize(.small) }
-                            Text("Connect")
-                                .fontWeight(.semibold)
-                            Image(systemName: "arrow.right")
+                VStack(alignment: .leading, spacing: 10) {
+                    Kicker("Access token")
+                    HStack(spacing: 8) {
+                        SecureField("bk_…", text: $token)
+                            .textContentType(.password)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .focused($focused)
+                            .submitLabel(.go)
+                            .onSubmit(connect)
+                        Button {
+                            if let pasted = UIPasteboard.general.string { token = pasted }
+                        } label: {
+                            Text("Paste")
+                                .font(Typo.sans(13, .semibold))
                         }
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 48)
+                        .buttonStyle(.bordered)
+                        .buttonBorderShape(.capsule)
+                        .controlSize(.small)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .buttonBorderShape(.roundedRectangle(radius: 12))
-                    .disabled(!canSubmit)
-                    .padding(.top, 18)
-
-                    Spacer(minLength: 28)
-
-                    Text("bk.hax429.me")
-                        .font(.system(size: 10.5, design: .monospaced))
-                        .foregroundStyle(.tertiary)
-                        .frame(maxWidth: .infinity)
+                    .padding(.horizontal, 14)
+                    .frame(height: 52)
+                    .card()
+                    Text("Create one on bk.hax429.me → Settings → Security & API. It stays in this iPhone's keychain.")
+                        .font(Typo.sans(12.5))
+                        .foregroundStyle(Theme.fg3)
                 }
-                .frame(maxWidth: 430)
-                .frame(minHeight: proxy.size.height, alignment: .top)
-                .padding(.horizontal, 24)
-                .frame(maxWidth: .infinity)
+                .padding(.top, 44)
+
+                if let error {
+                    Label(error, systemImage: "exclamationmark.circle")
+                        .font(Typo.sans(13))
+                        .foregroundStyle(Theme.urgent)
+                        .padding(.top, 14)
+                }
+
+                Button(action: connect) {
+                    HStack(spacing: 8) {
+                        if working { ProgressView().tint(.white) }
+                        Text(isReconnect ? "Reconnect" : "Connect")
+                            .font(Typo.sans(16, .semibold))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 52)
+                }
+                .buttonStyle(.borderedProminent)
+                .buttonBorderShape(.roundedRectangle(radius: 14))
+                .disabled(working || token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .padding(.top, 22)
+
+                Text(BkemoServer.endpoint.replacingOccurrences(of: "https://", with: ""))
+                    .font(Typo.kicker(11))
+                    .foregroundStyle(Theme.fg3)
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 40)
             }
-            .scrollDismissesKeyboard(.interactively)
-            .background(Color(.systemBackground).ignoresSafeArea())
-            .onAppear { focusedField = .token }
+            .padding(.horizontal, 26)
+            .frame(maxWidth: 460)
+            .frame(maxWidth: .infinity)
         }
+        .scrollDismissesKeyboard(.interactively)
+        .background(Theme.bg.ignoresSafeArea())
+        .onAppear { focused = true }
     }
 
-    private var canSubmit: Bool {
-        !loading && !accessToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-
-    private func submit() {
-        guard canSubmit else { return }
+    private func connect() {
+        guard !working else { return }
+        working = true
+        error = nil
         Task {
-            loading = true
-            await auth.pairWithAccessToken(accessToken)
-            loading = false
-        }
-    }
-}
-
-private extension View {
-    func bkemoField() -> some View {
-        self
-            .textFieldStyle(.plain)
-            .font(.system(size: 16))
-            .padding(.horizontal, 14)
-            .frame(height: 50)
-            .background(Color(.secondarySystemBackground))
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(Color.primary.opacity(0.11), lineWidth: 0.75)
+            do {
+                try await session.pair(with: token)
+                Haptics.success()
+                SyncEngine.shared.enterForeground()
+                if isReconnect { dismiss() }
+            } catch {
+                self.error = error.localizedDescription
             }
+            working = false
+        }
     }
 }

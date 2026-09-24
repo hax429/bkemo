@@ -22,15 +22,41 @@ targets:
     deploymentTarget: "17.0"
     sources:
       - path: bkemo
+      - path: Widget/OpenBkemoIntent.swift
     info:
       path: bkemo/Info.plist
       properties:
+        CFBundleShortVersionString: "2.0"
+        CFBundleVersion: "1"
         NSFaceIDUsageDescription: "Optionally verify your identity on this device before showing captures. Face ID is handled by iOS; bkemo never receives biometric data."
         UILaunchScreen:
           UIColorName: BkemoLaunchBackground
         UIRequiresFullScreen: true
+        UIAppFonts:
+          - SNPro-Regular.ttf
+          - SNPro-Medium.ttf
+          - SNPro-Semibold.ttf
+          - SNPro-Bold.ttf
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
+        UIBackgroundModes:
+          - fetch
+        BGTaskSchedulerPermittedIdentifiers:
+          - me.hax429.bk.sync
+        CFBundleURLTypes:
+          - CFBundleURLName: me.hax429.bk
+            CFBundleURLSchemes:
+              - bkemo
+        UIApplicationShortcutItems:
+          - UIApplicationShortcutItemType: me.hax429.bk.newMemo
+            UIApplicationShortcutItemTitle: New Memo
+            UIApplicationShortcutItemIconSymbolName: square.and.pencil
+          - UIApplicationShortcutItemType: me.hax429.bk.newTodo
+            UIApplicationShortcutItemTitle: New Todo
+            UIApplicationShortcutItemIconSymbolName: checkmark.circle
+          - UIApplicationShortcutItemType: me.hax429.bk.search
+            UIApplicationShortcutItemTitle: Search
+            UIApplicationShortcutItemIconSymbolName: magnifyingglass
     entitlements:
       path: bkemo/bkemo.entitlements
       properties:
@@ -51,8 +77,11 @@ targets:
         SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
         SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD: NO
         TARGETED_DEVICE_FAMILY: 1
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) BKEMO_APP"
     dependencies:
       - package: BkemoShared
+      - target: ShareExtension
+      - target: Widget
     systemCapabilities:
       com.apple.ApplicationGroups.iOS:
         enabled: 1
@@ -68,6 +97,18 @@ targets:
       - path: ShareExtension
     info:
       path: ShareExtension/Info.plist
+      properties:
+        CFBundleDisplayName: bkemo
+        CFBundleShortVersionString: "2.0"
+        CFBundleVersion: "1"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.share-services
+          NSExtensionPrincipalClass: ShareViewController
+          NSExtensionAttributes:
+            NSExtensionActivationRule:
+              NSExtensionActivationSupportsText: true
+              NSExtensionActivationSupportsWebURLWithMaxCount: 1
+              NSExtensionActivationSupportsWebPageWithMaxCount: 1
     entitlements:
       path: ShareExtension/ShareExtension.entitlements
       properties:
@@ -84,7 +125,6 @@ targets:
         CODE_SIGN_ENTITLEMENTS: ShareExtension/ShareExtension.entitlements
     dependencies:
       - package: BkemoShared
-      - target: bkemo
     systemCapabilities:
       com.apple.ApplicationGroups.iOS:
         enabled: 1
@@ -99,6 +139,12 @@ targets:
       - path: Widget
     info:
       path: Widget/Info.plist
+      properties:
+        CFBundleDisplayName: bkemo
+        CFBundleShortVersionString: "2.0"
+        CFBundleVersion: "1"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
     entitlements:
       path: Widget/Widget.entitlements
       properties:
@@ -115,7 +161,6 @@ targets:
         CODE_SIGN_ENTITLEMENTS: Widget/Widget.entitlements
     dependencies:
       - package: BkemoShared
-      - target: bkemo
     systemCapabilities:
       com.apple.ApplicationGroups.iOS:
         enabled: 1

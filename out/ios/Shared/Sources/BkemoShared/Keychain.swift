@@ -12,6 +12,8 @@ public enum Keychain {
         SecItemDelete(query as CFDictionary)
         var add = query
         add[kSecValueData as String] = data
+        // Background sync (BGAppRefresh, share hand-off) runs while the device is locked.
+        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
         SecItemAdd(add as CFDictionary, nil)
     }
 
