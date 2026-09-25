@@ -22,6 +22,7 @@ import QuickNotePage from "./pages/quicknote";
 import { useQuicknoteHotkey } from "./hooks/useQuicknoteHotkey";
 import { bootstrapNativeSession } from "@/lib/nativeSession";
 import { eventBus } from "@/lib/event";
+import { pathHasComposer, requestComposerFocus } from "@/lib/composerFocus";
 import { deleteNotesFromCache, upsertNotesToCache } from "@/lib/noteCache";
 import { applyExternalNoteChange } from "@/lib/noteChange";
 import { applyNoteSyncPayload, createNoteSyncController } from "@/lib/noteSync";
@@ -274,8 +275,10 @@ function AppRoutes() {
     if (windowType === 'main') {
       listeners.push(
         listen('native-new-note', () => {
-          navigate('/', { replace: true });
-          setTimeout(() => eventBus.emit('bkemo:quick-capture', {}), 0);
+          // ⌘N focuses the inline composer rather than opening the
+          // full-window editor; go home first only if there's no composer.
+          if (!pathHasComposer(window.location.pathname)) navigate('/', { replace: true });
+          requestComposerFocus();
         }),
         listen('native-search', () => {
           setTimeout(() => eventBus.emit('bkemo:search'), 0);

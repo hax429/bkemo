@@ -30,6 +30,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { isDesktop, isInTauri } from '@/lib/tauriHelper';
 import { useSharedDraft } from '@/lib/useSharedDraft';
 import { ComposerToolbar } from './ComposerToolbar';
+import { consumeComposerFocus } from '@/lib/composerFocus';
 
 const MAIN_WINDOW_PIN_KEY = 'bkemo.mainWindowPinned';
 
@@ -96,6 +97,21 @@ const Composer = observer(function Composer({
   const due = shared.draft.dueDate ? dayjs(shared.draft.dueDate).format('YYYY-MM-DD') : '';
 
   const reset = () => { att.clear(); };
+
+  // ⌘N / "New memo": focus this composer with the caret at the end.
+  useEffect(() => {
+    const focusComposer = () => {
+      if (!consumeComposerFocus()) return;
+      // After mount/navigation the editor may still be initialising.
+      requestAnimationFrame(() => {
+        ref.current?.editor?.chain().focus('end').run();
+        ref.current?.editor?.view.dom.closest('.bk-composer-shell')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      });
+    };
+    focusComposer();
+    eventBus.on('bkemo:focus-composer', focusComposer);
+    return () => { eventBus.off('bkemo:focus-composer', focusComposer); };
+  }, []);
 
   // Live-reflect inline task syntax (`- [ ]` checkbox, `due:…`) in the toolbar so
   // the user sees the memo turning into a task as they type.
@@ -243,11 +259,10 @@ const Composer = observer(function Composer({
               <button
                 onClick={send}
                 disabled={!canSend}
+                className="bk-glass-btn is-filled"
                 style={{
-                  background: 'var(--accent)', border: 'none', color: '#fff', padding: '6px 14px',
-                  borderRadius: 'var(--radius-lg, 8px)', fontSize: 12.5, fontWeight: 600,
-                  opacity: canSend ? 1 : 0.55, transition: 'all 0.15s ease',
-                  flexShrink: 0
+                  padding: '6px 16px', borderRadius: 999, fontSize: 12.5, fontWeight: 600,
+                  opacity: canSend ? 1 : 0.55, flexShrink: 0
                 }}
               >
                 {isTodo ? 'Add task' : 'Send'}
@@ -344,7 +359,7 @@ const MemoRow = observer(function MemoRow({ note, onOpen, selected, selectionAct
 
   return (
     <div
-      className="bk-memo"
+      className={`bk-memo${selected || note.isTop ? ' is-emphasised' : ''}`}
       onContextMenu={(e) => {
         e.preventDefault();
         if (blinko.isOnline) onContext(e, note);
@@ -726,7 +741,7 @@ export const Stream = observer(function Stream({ onOpen, onNew, onExpand, tag }:
   return (
     <div className="v-stack" style={{ flex: 1, height: '100%', overflow: 'hidden' }}>
       {/* topbar */}
-      <div className={`h-stack bk-stream-topbar${composerFocus ? ' is-dimmed' : ''}`} style={{ height: 44, padding: '0 14px', borderBottom: '1px solid var(--border)', gap: 10, background: 'var(--bg)' }}>
+      <div className={`h-stack bk-stream-topbar bk-glass-bar${composerFocus ? ' is-dimmed' : ''}`} style={{ height: 44, padding: '0 14px', borderBottom: '1px solid var(--border)', gap: 10 }}>
         <span style={{ color: 'var(--fg)', fontSize: 13, fontWeight: 500 }}>{tag ? '#' : '✦ '}{tag ?? 'Home'}</span>
         <span style={{ color: 'var(--fg-3)' }}>/</span>
         <span style={{ color: 'var(--fg-2)', fontSize: 13 }}>{tag ? 'Project' : 'Stream'}</span>

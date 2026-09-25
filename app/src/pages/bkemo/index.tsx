@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { observer } from 'mobx-react-lite';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useMediaQuery } from 'usehooks-ts';
 import { RootStore } from '@/store';
@@ -33,13 +33,14 @@ import { NoteModal } from '@/components/bkemo/NoteModal';
 import { SearchOverlay } from '@/components/bkemo/SearchOverlay';
 import { UserStore } from '@/store/user';
 import { pathForRoute, pathForSettingsSection, routeFromPath, settingsSectionFromPath } from '@/lib/bkemoRoutes';
+import { pathHasComposer, requestComposerFocus } from '@/lib/composerFocus';
 import { isAiDebugAvailable } from '@/lib/aiDebug';
 import { getNoteFromCache, upsertNotesToCache } from '@/lib/noteCache';
 
 function ComingSoon({ title }: { title: string }) {
   return (
     <div className="v-stack" style={{ flex: 1, height: '100%', overflow: 'hidden' }}>
-      <div className="h-stack" style={{ height: 44, padding: '0 18px', borderBottom: '1px solid var(--border)', gap: 10, background: 'var(--bg)' }}>
+      <div className="h-stack bk-glass-bar" style={{ height: 44, padding: '0 18px', borderBottom: '1px solid var(--border)', gap: 10 }}>
         <span style={{ color: 'var(--fg)', fontSize: 13, fontWeight: 500 }}>{title}</span>
       </div>
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--fg-3)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
@@ -200,6 +201,12 @@ const BkemoPage = observer(function BkemoPage() {
   }, [prefs.taskReminders, RootStore.Get(BlinkoStore).updateTicker]);
 
   const newMemo = () => setEditing({ content: '', type: 2 } as Note);
+  // Desktop "New memo" (sidebar, labelled ⌘N) matches the ⌘N menu item:
+  // focus the inline composer, going home first if this view has none.
+  const focusNewMemo = () => {
+    if (!pathHasComposer(location.pathname)) navigate('/', { replace: true });
+    requestComposerFocus();
+  };
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -212,7 +219,32 @@ const BkemoPage = observer(function BkemoPage() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
-  const render = () => {
+  // Settings floats over whatever was open before it (desktop web); that
+  // view keeps rendering underneath as the glass panel's backdrop.
+  const floatingSettings = route === 'settings' && !nativeSettings && !isMobile;
+  const backdropRoute = useRef<BkemoRoute>('home');
+  if (route !== 'settings') backdropRoute.current = route;
+  const closeSettings = () => navigate(pathForRoute(backdropRoute.current), { replace: true });
+  const settingsPanel = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!floatingSettings) return;
+    // Focus the panel so Tab starts inside it and Esc reaches it.
+    settingsPanel.current?.focus({ preventScroll: true });
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      // Esc belongs to whatever sits above Settings (search, editor, a
+      // dialog); only close when focus is in the panel or nowhere.
+      const active = document.activeElement;
+      const inPanel = !active || active === document.body || !!settingsPanel.current?.contains(active);
+      if (inPanel) closeSettings();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [floatingSettings]);
+
+  const render = () => renderRoute(floatingSettings ? backdropRoute.current : route);
+  const renderRoute = (route: BkemoRoute) => {
     if (route === 'home') return <Stream onOpen={setEditing} onNew={newMemo} onExpand={setEditing} />;
     if (route === 'random') return <Random onOpen={setEditing} />;
     if (route === 'trash') return <Trash />;
@@ -258,12 +290,19 @@ const BkemoPage = observer(function BkemoPage() {
             </div>
           ) : (
             <div className="h-stack" style={{ height: '100%', width: '100%' }}>
-              <Sidebar activeRoute={route} onNav={navigateTo} onNewMemo={newMemo} onSearch={() => setShowSearch(true)} />
+              <Sidebar activeRoute={route} onNav={navigateTo} onNewMemo={focusNewMemo} onSearch={() => setShowSearch(true)} />
               {render()}
             </div>
           )}
         </div>
       </div>
+      {floatingSettings && (
+        <div className="bk-settings-scrim" onMouseDown={closeSettings}>
+          <div ref={settingsPanel} tabIndex={-1} className="bk-settings-float bk-glass" role="dialog" aria-modal="true" aria-label="Settings" onMouseDown={(e) => e.stopPropagation()}>
+            <SettingsScreen prefs={prefs} onChange={updatePrefs} onNavigate={navigateTo} onSearch={() => setShowSearch(true)} section={settingsSection} onSectionChange={navigateSettings} onClose={closeSettings} />
+          </div>
+        </div>
+      )}
       {editing && <NoteModal note={editing} onClose={() => { setEditing(null); if (/^\/n\/\d+$/.test(location.pathname)) navigate('/', { replace: true }); }} />}
       {showSearch && <SearchOverlay onOpen={setEditing} onClose={() => setShowSearch(false)} />}
       {isAiDebugAvailable() ? <AIDebugPanel /> : null}

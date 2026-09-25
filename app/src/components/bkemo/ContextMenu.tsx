@@ -78,7 +78,7 @@ export function ContextMenu({ x, y, items, onClose }: { x: number; y: number; it
   return createPortal(
     <div
       ref={ref}
-      className="bkemo"
+      className="bkemo bk-context-menu"
       data-theme={prefs.theme}
       data-preset={preset}
       onMouseDown={(e) => e.stopPropagation()}

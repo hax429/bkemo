@@ -1,4 +1,5 @@
 import { observer } from 'mobx-react-lite';
+import { pressable } from '@/lib/pressable';
 import { useEffect, useState } from 'react';
 import { signOut, navigate } from '@/components/Auth/auth-client';
 import { eventBus } from '@/lib/event';
@@ -29,17 +30,9 @@ function NavRow({ icon, title, count, active, onClick }: { icon: string; title: 
   return (
     <div
       onClick={onClick}
-      className="h-stack"
-      style={{
-        gap: 10, padding: '8px 12px', borderRadius: 'var(--radius-lg, 12px)',
-        background: active ? 'var(--hover)' : 'transparent',
-        color: active ? 'var(--fg)' : 'var(--fg-2)',
-        fontSize: 13.5, cursor: 'pointer', userSelect: 'none',
-        borderLeft: active ? '2px solid var(--accent)' : '2px solid transparent',
-        transition: 'all 0.12s ease-in-out',
-      }}
-      onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = 'var(--hover)'; }}
-      onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = 'transparent'; }}
+      {...pressable(onClick, !!active)}
+      className={`h-stack bk-glass-nav${active ? ' is-active' : ''}`}
+      style={{ gap: 10, padding: '8px 12px', borderRadius: 'var(--radius-lg, 12px)', fontSize: 13.5, cursor: 'pointer', userSelect: 'none' }}
     >
       <span style={{ width: 16, fontSize: 13, textAlign: 'center', color: active ? 'var(--accent)' : 'var(--fg-3)', flexShrink: 0 }}>{icon}</span>
       <span style={{ flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</span>
@@ -64,19 +57,15 @@ function TagNavNode({ node, depth, activeRoute, onNav }: { node: any; depth: num
     <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
       <div
         onClick={() => onNav(route)}
-        className="h-stack"
+        {...pressable(() => onNav(route), active)}
+        className={`h-stack bk-glass-nav${active ? ' is-active' : ''}`}
         style={{
           gap: 8,
           padding: depth === 0 ? '5px 12px' : `4px 12px 4px ${24 + depth * 14}px`,
           borderRadius: 'var(--radius-lg, 12px)',
           fontSize: depth === 0 ? 13.5 : 12.5,
           cursor: 'pointer',
-          transition: 'all 0.12s ease-in-out',
-          color: active ? 'var(--fg)' : 'var(--fg-2)',
-          background: active ? 'var(--hover)' : 'transparent'
         }}
-        onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = 'var(--hover)'; }}
-        onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = 'transparent'; }}
         title={`#${path}`}
       >
         <span style={{ width: 10, fontSize: 9, color: 'var(--fg-3)', flexShrink: 0 }}>{hasChildren ? '▾' : depth === 0 ? ' ' : '└'}</span>
@@ -196,17 +185,14 @@ export const Sidebar = observer(function Sidebar({ activeRoute, onNav, onNewMemo
 
           {/* Dropdown Menu */}
           {showUserMenu && (
-            <div
+            <div className="bk-glass"
               style={{
                 position: 'absolute',
                 top: 36,
                 left: 2,
                 zIndex: 70,
                 width: 160,
-                background: 'var(--bg-2)',
-                border: '1px solid var(--border-2)',
                 borderRadius: 'var(--radius-lg)',
-                boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
                 padding: '4px',
                 display: 'flex',
                 flexDirection: 'column',
@@ -280,19 +266,13 @@ export const Sidebar = observer(function Sidebar({ activeRoute, onNav, onNewMemo
         </div>
 
         {/* search */}
-        <div onClick={onSearch} className="h-stack" style={{ margin: '0 4px 8px', padding: '7px 12px', background: 'var(--bg-2)', border: '1px solid var(--border-2)', borderRadius: 'var(--radius-lg, 12px)', gap: 10, color: 'var(--fg-3)', fontSize: 13, cursor: 'pointer', transition: 'all 0.12s ease-in-out' }}
-             onMouseEnter={(e) => e.currentTarget.style.borderColor = 'var(--border)'}
-             onMouseLeave={(e) => e.currentTarget.style.borderColor = 'var(--border-2)'}
-        >
+        <div onClick={onSearch} {...pressable(onSearch)} aria-label="Search" className="h-stack bk-glass-btn" style={{ margin: '0 4px 8px', padding: '7px 12px', borderRadius: 'var(--radius-lg, 12px)', gap: 10, color: 'var(--fg-3)', fontSize: 13, cursor: 'pointer' }}>
           <span>⌕</span><span style={{ flex: 1 }}>Search…</span>
           <span className="bk-kbd" style={{ fontSize: 10 }}>⌘K</span>
         </div>
 
         {/* new memo */}
-        <div onClick={onNewMemo} className="h-stack" style={{ margin: '0 4px 14px', padding: '8px 12px', background: 'var(--accent-soft)', border: '1px solid color-mix(in srgb, var(--accent) 30%, transparent)', borderRadius: 'var(--radius-lg, 12px)', gap: 10, color: 'var(--accent)', fontSize: 13.5, cursor: 'pointer', fontWeight: 600, transition: 'all 0.12s ease-in-out' }}
-             onMouseEnter={(e) => e.currentTarget.style.filter = 'brightness(1.06)'}
-             onMouseLeave={(e) => e.currentTarget.style.filter = 'none'}
-        >
+        <div onClick={onNewMemo} {...pressable(onNewMemo)} aria-label="New memo" className="h-stack bk-glass-btn is-accent" style={{ margin: '0 4px 14px', padding: '8px 12px', borderRadius: 'var(--radius-lg, 12px)', gap: 10, fontSize: 13.5, cursor: 'pointer', fontWeight: 600 }}>
           <span>＋</span><span style={{ flex: 1 }}>New memo</span>
           <span className="bk-kbd" style={{ fontSize: 10, background: 'rgba(255,255,255,0.08)' }}>⌘N</span>
         </div>

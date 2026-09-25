@@ -7,9 +7,49 @@ and class names is `app/src/styles/bkemo-theme.css`. Preferences live in
 ## Design language
 
 bkemo UI is dark-first and Linear / Issue-inspired: sparse surfaces, hairline
-borders, mono kickers, compact rows. Prefer native controls + `bk-*` CSS over
-HeroUI chrome. Do not ship purple HeroUI panel look, marketing card grids with
-arrows, or glossy multi-layer shadows.
+borders, mono kickers, compact rows, finished with a macOS 26–style **liquid
+glass** layer (below). Prefer native controls + `bk-*` CSS over HeroUI chrome.
+Do not ship purple HeroUI panel look or marketing card grids with arrows.
+
+## Liquid glass
+
+Surfaces and buttons are translucent, blurred, and lit from above. Use the
+shared recipes in the "Liquid glass" section of `bkemo-theme.css` instead of
+hand-rolled shadows:
+
+| Class / token | Use |
+|---|---|
+| `.bk-glass` | Floating surfaces: dropdowns, popovers, panels |
+| `.bk-glass-btn` (+ `is-accent` tinted, `is-filled` primary) | Buttons and button-like rows; includes hover lift and press squish |
+| `.bk-glass-bar` | Top bars / sticky chrome over scrolling content |
+| `--glass-fill(-strong/-hover)`, `--glass-stroke(-soft)`, `--glass-highlight`, `--glass-sheen`, `--glass-shadow(-lift)`, `--glass-blur` | Building blocks when a recipe doesn't fit |
+
+**The note list is not glass.** Memo cards and the inline composer stay flat
+Linear UI. Glass is for controls and floating chrome:
+
+- `.bk-glass-nav` (+ `is-active`) — sidebar rows (Home, Today, tags) and the
+  settings nav: transparent at rest, glass pill on hover/selected.
+- Primary actions (Save, Send, Done) use `.bk-glass-btn is-filled`.
+- `.bk-native-button`, `.bk-ai-dialog`, `.bk-context-menu` and the mobile tab
+  bar are on the recipe via `!important` (their chrome is inline).
+- On desktop web, Settings is a floating glass panel (`.bk-settings-float`)
+  over the previously open view, which keeps rendering behind it; Esc, the
+  ✕ button, or clicking outside closes it. Its header (`.bk-float-header`)
+  and reading area stay solid. Mobile keeps full-page Settings. The app root
+(`.bk-app-root`) paints accent glows so the blur has colour to refract.
+Everything falls back to opaque surfaces under `prefers-reduced-transparency`.
+
+**Refraction.** `app/src/lib/liquidGlass.ts` (adapted from
+nikdelvin/liquid-glass, MIT) adds true lensing to glass buttons and floating
+surfaces in Chromium: a per-element SVG displacement map applied through
+`backdrop-filter: url()`, then blur, brightness and saturation. It adds
+`bk-lg-on` to `<html>`, which thins the glass fill and adds a rim light.
+Safari and the macOS app's WebKit view don't support `backdrop-filter: url()`
+and keep the plain blur glass. Its `SELECTOR` list is the opt-in; keep memo
+cards out of it (one GPU filter per element).
+
+**Headers stay opaque.** Top bars (`.bk-glass-bar`) and the native Settings
+toolbar are solid, never translucent over scrolling content.
 
 Priority signals are separate from brand accent:
 

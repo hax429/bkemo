@@ -1,4 +1,5 @@
 import { observer } from 'mobx-react-lite';
+import { pressable } from '@/lib/pressable';
 import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { RootStore } from '@/store';
@@ -496,14 +497,17 @@ function Tools({ onNavigate, onSearch }: { onNavigate: (route: BkemoRoute) => vo
   );
 }
 
-export const SettingsScreen = observer(function SettingsScreen({ prefs, onChange, onNavigate, onSearch, section, onSectionChange }: {
+export const SettingsScreen = observer(function SettingsScreen({ prefs, onChange, onNavigate, onSearch, section, onSectionChange, onClose }: {
   prefs: BkemoPrefs;
   onChange: (p: Partial<BkemoPrefs>) => void;
   onNavigate: (route: BkemoRoute) => void;
   onSearch: () => void;
   section: string;
   onSectionChange: (section: string) => void;
+  /** Set when shown as the floating glass panel (desktop web). */
+  onClose?: () => void;
 }) {
+  const floating = !!onClose;
   const { t } = useTranslation();
   const user = RootStore.Get(UserStore);
   const blinko = RootStore.Get(BlinkoStore);
@@ -556,10 +560,16 @@ export const SettingsScreen = observer(function SettingsScreen({ prefs, onChange
 
   return (
     <div className="v-stack" style={{ flex: 1, height: '100%', overflow: 'hidden' }}>
-      <div className="h-stack" style={{ height: 44, padding: '0 18px', borderBottom: '1px solid var(--border)', gap: 10, background: 'var(--bg)' }}>
+      <div className={`h-stack ${floating ? 'bk-float-header' : 'bk-glass-bar'}`} style={{ height: 44, padding: '0 18px', borderBottom: '1px solid var(--border)', gap: 10 }}>
         <span style={{ color: 'var(--fg)', fontSize: 13, fontWeight: 500 }}>Settings</span>
         <span style={{ color: 'var(--fg-3)' }}>/</span>
         <span style={{ color: 'var(--fg-2)', fontSize: 13 }}>{displayTitle(active)}</span>
+        {floating && (
+          <>
+            <span className="spacer" />
+            <button type="button" className="bk-glass-btn bk-float-close" onClick={onClose} aria-label="Close settings" title="Close (Esc)">✕</button>
+          </>
+        )}
       </div>
       <div className={isMobile ? 'v-stack' : 'h-stack'} style={{ flex: 1, overflow: 'hidden', alignItems: 'stretch' }}>
         {/* nav */}
@@ -573,7 +583,8 @@ export const SettingsScreen = observer(function SettingsScreen({ prefs, onChange
             gap: isMobile ? 4 : 1,
             overflowX: isMobile ? 'auto' : 'hidden',
             overflowY: isMobile ? 'hidden' : 'auto',
-            background: 'var(--bg)',
+            // Floating: the glass panel shows through the nav column.
+            background: floating ? 'transparent' : 'var(--bg)',
             flexShrink: 0,
           }}
         >
@@ -584,7 +595,7 @@ export const SettingsScreen = observer(function SettingsScreen({ prefs, onChange
               <div key={g.id} style={isMobile ? { display: 'contents' } : undefined}>
                 {isMobile ? null : <div style={{ ...mono, padding: '10px 12px 6px' }}>{g.label}</div>}
                 {items.map((s) => (
-                  <div key={s.key} onClick={() => onSectionChange(s.key)} className="h-stack" style={{ gap: 8, padding: isMobile ? '7px 10px' : '6px 10px', borderRadius: 'var(--radius)', background: normalizedSection === s.key ? 'var(--accent-soft)' : 'transparent', color: normalizedSection === s.key ? 'var(--accent)' : 'var(--fg-2)', borderLeft: !isMobile && normalizedSection === s.key ? '2px solid var(--accent)' : '2px solid transparent', borderBottom: isMobile && normalizedSection === s.key ? '2px solid var(--accent)' : '2px solid transparent', fontSize: 13, cursor: 'pointer', flexShrink: 0 }}>
+                  <div key={s.key} onClick={() => onSectionChange(s.key)} {...pressable(() => onSectionChange(s.key), normalizedSection === s.key)} className={`h-stack bk-glass-nav${normalizedSection === s.key ? ' is-active' : ''}`} style={{ gap: 8, padding: isMobile ? '7px 10px' : '7px 10px', borderRadius: 'var(--radius)', fontSize: 13, cursor: 'pointer', flexShrink: 0 }}>
                     <Icon icon={s.icon} width={16} height={16} style={{ color: normalizedSection === s.key ? 'var(--accent)' : 'var(--fg-3)', flexShrink: 0 }} />
                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayTitle(s)}</span>
                   </div>
@@ -594,7 +605,7 @@ export const SettingsScreen = observer(function SettingsScreen({ prefs, onChange
           })}
         </div>
         {/* body — bkemo-native views rendered bare with native styles. */}
-        <div className="bk-scroll" style={{ flex: 1, overflow: 'auto', padding: isMobile ? '18px 16px 36px' : '24px 28px 48px' }}>
+        <div className={`bk-scroll${floating ? ' bk-float-body' : ''}`} style={{ flex: 1, overflow: 'auto', padding: isMobile ? '18px 16px 36px' : '24px 28px 48px' }}>
           <div
             key={active.key}
             style={{ maxWidth: 860 }}

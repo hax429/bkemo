@@ -45,7 +45,7 @@ export const BkemoLayout = observer(function BkemoLayout({
 
   return (
     <div
-      className="bkemo"
+      className="bkemo bk-app-root"
       data-density={density}
       data-theme={theme}
       data-preset={preset}

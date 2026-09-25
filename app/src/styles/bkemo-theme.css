@@ -1988,3 +1988,280 @@
   line-height: 1.4;
   color: var(--fg-2);
 }
+
+/* ───────────────────────── Liquid glass ─────────────────────────
+ * Translucent, blurred surfaces with a specular top edge, a soft inner
+ * shade at the bottom, and a lifted shadow, in the spirit of macOS 26.
+ * Glass needs something to refract, so BkemoLayout paints accent glows
+ * behind the app. Buttons get a lensing highlight and a press squish.
+ * Everything falls back to opaque surfaces under "Reduce transparency".
+ */
+.bkemo {
+  --glass-fill: color-mix(in srgb, var(--bg-2) 56%, transparent);
+  --glass-fill-strong: color-mix(in srgb, var(--bg-2) 76%, transparent);
+  --glass-fill-hover: color-mix(in srgb, var(--bg-3) 66%, transparent);
+  --glass-stroke: color-mix(in srgb, var(--fg) 13%, transparent);
+  --glass-stroke-soft: color-mix(in srgb, var(--fg) 8%, transparent);
+  --glass-highlight:
+    inset 0 1px 0 color-mix(in srgb, #fff 16%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, #000 24%, transparent);
+  --glass-shadow: 0 1px 1px rgba(0, 0, 0, 0.18), 0 12px 32px -14px rgba(0, 0, 0, 0.6);
+  --glass-shadow-lift: 0 2px 3px rgba(0, 0, 0, 0.2), 0 22px 44px -18px rgba(0, 0, 0, 0.7);
+  --glass-blur: saturate(175%) blur(22px);
+  /* Specular sheen: brightest along the top edge, gone by mid-height. */
+  --glass-sheen: linear-gradient(180deg, color-mix(in srgb, #fff 9%, transparent) 0%, color-mix(in srgb, #fff 2%, transparent) 38%, transparent 60%);
+  --glass-accent-fill: color-mix(in srgb, var(--accent) 82%, transparent);
+}
+.bkemo[data-theme="light"] {
+  --glass-fill: color-mix(in srgb, #fff 58%, transparent);
+  --glass-fill-strong: color-mix(in srgb, #fff 78%, transparent);
+  --glass-fill-hover: color-mix(in srgb, #fff 72%, transparent);
+  --glass-stroke: rgba(28, 29, 33, 0.12);
+  --glass-stroke-soft: rgba(28, 29, 33, 0.07);
+  --glass-highlight:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    inset 0 -1px 0 rgba(28, 29, 33, 0.05);
+  --glass-shadow: 0 1px 1px rgba(28, 29, 33, 0.05), 0 10px 28px -14px rgba(28, 29, 33, 0.28);
+  --glass-shadow-lift: 0 2px 3px rgba(28, 29, 33, 0.06), 0 20px 40px -18px rgba(28, 29, 33, 0.34);
+  --glass-sheen: linear-gradient(180deg, rgba(255, 255, 255, 0.7) 0%, rgba(255, 255, 255, 0.15) 40%, transparent 62%);
+}
+
+/* Shared recipes */
+.bkemo .bk-glass,
+.bk-glass {
+  background: var(--glass-sheen), var(--glass-fill);
+  border: 1px solid var(--glass-stroke);
+  box-shadow: var(--glass-highlight), var(--glass-shadow);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+}
+.bkemo .bk-glass-btn {
+  position: relative;
+  background: var(--glass-sheen), var(--glass-fill);
+  border: 1px solid var(--glass-stroke);
+  box-shadow: var(--glass-highlight), 0 1px 2px rgba(0, 0, 0, 0.16);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  transition: background 0.18s ease, box-shadow 0.18s ease, transform 0.18s cubic-bezier(.3, 1.4, .5, 1), border-color 0.18s ease;
+}
+.bkemo .bk-glass-btn:hover {
+  background: var(--glass-sheen), var(--glass-fill-hover);
+  border-color: color-mix(in srgb, var(--fg) 20%, transparent);
+  box-shadow: var(--glass-highlight), var(--glass-shadow);
+}
+.bkemo .bk-glass-btn:active { transform: scale(0.975); }
+/* Tinted glass for primary actions: accent shows through, sheen stays on top. */
+.bkemo .bk-glass-btn.is-accent {
+  color: var(--accent);
+  background: var(--glass-sheen), color-mix(in srgb, var(--accent) 22%, var(--glass-fill));
+  border-color: color-mix(in srgb, var(--accent) 38%, transparent);
+}
+.bkemo .bk-glass-btn.is-accent:hover {
+  background: var(--glass-sheen), color-mix(in srgb, var(--accent) 30%, var(--glass-fill));
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+.bkemo .bk-glass-btn.is-filled {
+  color: #fff;
+  background: var(--glass-sheen), var(--glass-accent-fill);
+  border-color: color-mix(in srgb, var(--accent) 70%, #fff 12%);
+  box-shadow: var(--glass-highlight), 0 6px 18px -8px color-mix(in srgb, var(--accent) 70%, transparent);
+}
+
+/* Existing controls, restyled onto the glass recipe */
+.bk-native-button,
+.bk-native-mini-button,
+.bk-ai-dialog-button {
+  background: var(--glass-sheen), var(--glass-fill) !important;
+  border-color: var(--glass-stroke) !important;
+  box-shadow: var(--glass-highlight), 0 1px 2px rgba(0, 0, 0, 0.14);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  transition: background 0.18s ease, box-shadow 0.18s ease, transform 0.18s cubic-bezier(.3, 1.4, .5, 1), border-color 0.18s ease;
+}
+.bk-native-button:hover,
+.bk-native-mini-button:hover,
+.bk-ai-dialog-button:hover {
+  background: var(--glass-sheen), color-mix(in srgb, var(--accent) 10%, var(--glass-fill-hover)) !important;
+  box-shadow: var(--glass-highlight), var(--glass-shadow);
+}
+.bk-native-button:active:not(:disabled),
+.bk-native-mini-button:active:not(:disabled),
+.bk-ai-dialog-button:active:not(:disabled) { transform: scale(0.975); }
+.bk-native-button.is-primary,
+.bk-ai-dialog-button.is-primary {
+  color: #fff;
+  background: var(--glass-sheen), var(--glass-accent-fill) !important;
+  border-color: color-mix(in srgb, var(--accent) 70%, #fff 12%) !important;
+  box-shadow: var(--glass-highlight), 0 6px 18px -8px color-mix(in srgb, var(--accent) 70%, transparent);
+}
+.bk-native-button.is-ghost { background: transparent !important; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; border-color: transparent !important; }
+.bk-native-button.is-ghost:hover { background: var(--glass-sheen), var(--glass-fill) !important; border-color: var(--glass-stroke) !important; }
+
+.bkemo .bk-composer-tool { transition: color 0.12s ease, background 0.15s ease, box-shadow 0.15s ease, transform 0.15s cubic-bezier(.3, 1.4, .5, 1); border-radius: 9px; }
+.bkemo .bk-composer-tool:hover {
+  background: var(--glass-sheen), var(--glass-fill-hover);
+  box-shadow: var(--glass-highlight);
+}
+.bkemo .bk-composer-tool:active { transform: scale(0.92); }
+.bkemo .bk-more-btn:hover { background: var(--glass-fill-hover); box-shadow: var(--glass-highlight); }
+.bkemo .bk-kbd {
+  background: color-mix(in srgb, var(--fg) 7%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent), inset 0 -1px 0 color-mix(in srgb, #000 20%, transparent);
+}
+
+/* The note list (memo cards + composer) stays flat Linear UI — no glass. */
+
+/* Headers stay opaque: glass is for controls and floating surfaces, not
+   for chrome that content scrolls beneath. */
+.bkemo .bk-glass-bar {
+  background: var(--bg) !important;
+  box-shadow: inset 0 -1px 0 var(--glass-stroke-soft), 0 1px 0 color-mix(in srgb, #fff 3%, transparent);
+}
+.bkemo .bk-mobile-tabs {
+  background: var(--glass-sheen), var(--glass-fill-strong);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-highlight), var(--glass-shadow);
+}
+
+/* Portaled surfaces: dialogs, menus, toasts */
+.bk-ai-dialog,
+.bkemo.bk-context-menu {
+  background: var(--glass-sheen), var(--glass-fill-strong) !important;
+  border: 1px solid var(--glass-stroke) !important;
+  box-shadow: var(--glass-highlight), var(--glass-shadow-lift) !important;
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+}
+
+/* Refraction on (Chromium, see lib/liquidGlass.ts): thin the fill so the
+   bent backdrop reads through, and add the soft rim light of real glass. */
+.bk-lg-on .bkemo {
+  --glass-fill: color-mix(in srgb, var(--bg-2) 30%, transparent);
+  --glass-fill-strong: color-mix(in srgb, var(--bg-2) 52%, transparent);
+  --glass-fill-hover: color-mix(in srgb, var(--bg-3) 40%, transparent);
+  --glass-highlight:
+    inset 0 1px 0 color-mix(in srgb, #fff 18%, transparent),
+    inset 0 0 4px 0 color-mix(in srgb, #fafafa 22%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, #000 22%, transparent);
+}
+.bk-lg-on .bkemo[data-theme="light"] {
+  --glass-fill: color-mix(in srgb, #fff 34%, transparent);
+  --glass-fill-strong: color-mix(in srgb, #fff 56%, transparent);
+  --glass-fill-hover: color-mix(in srgb, #fff 46%, transparent);
+}
+.bk-lg-on .bkemo .bk-glass-btn:hover,
+.bk-lg-on .bk-native-button:hover:not(:disabled) { transform: scale(1.02); }
+
+/* Navigation rows (sidebar + settings): quiet at rest, glass pill when
+   hovered or selected. */
+.bkemo .bk-glass-nav {
+  color: var(--fg-2);
+  background: transparent;
+  border: 1px solid transparent;
+  transition: background 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease, color 0.12s ease, transform 0.16s cubic-bezier(.3, 1.4, .5, 1);
+}
+.bkemo .bk-glass-nav:hover {
+  color: var(--fg);
+  background: var(--glass-sheen), var(--glass-fill);
+  border-color: var(--glass-stroke-soft);
+  box-shadow: var(--glass-highlight);
+}
+.bkemo .bk-glass-nav:active { transform: scale(0.985); }
+.bkemo .bk-glass-nav.is-active {
+  color: var(--fg);
+  background: var(--glass-sheen), color-mix(in srgb, var(--accent) 16%, var(--glass-fill));
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--glass-stroke));
+  box-shadow: var(--glass-highlight), 0 4px 14px -8px color-mix(in srgb, var(--accent) 60%, transparent);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+}
+
+/* Settings as a floating glass panel over the notes (desktop web). */
+.bkemo .bk-settings-scrim {
+  position: absolute;
+  inset: 0;
+  /* Below the note editor (60) and search (90) that Settings can open. */
+  z-index: 55;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 36px 44px;
+  background: color-mix(in srgb, var(--bg) 22%, transparent);
+  animation: bk-scrim-in 0.2s ease both;
+}
+.bkemo .bk-settings-float {
+  width: min(1180px, 100%);
+  height: min(820px, 100%);
+  border-radius: 22px;
+  overflow: hidden;
+  display: flex;
+  background: var(--glass-sheen), var(--glass-fill-strong);
+  box-shadow: var(--glass-highlight), 0 30px 80px -24px rgba(0, 0, 0, 0.7), 0 0 0 1px var(--glass-stroke);
+  animation: bk-float-in 0.26s cubic-bezier(.2, .9, .3, 1.15) both;
+}
+.bkemo .bk-settings-float > * { min-width: 0; }
+/* Header is solid, not see-through. */
+.bkemo .bk-float-header { background: var(--bg-2); flex-shrink: 0; }
+/* The reading area is denser than the glass rim so text stays crisp. */
+.bkemo .bk-float-body { background: color-mix(in srgb, var(--bg) 72%, transparent); }
+.bkemo .bk-float-close {
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  color: var(--fg-2);
+  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.bkemo .bk-settings-float:focus { outline: none; }
+
+/* Keyboard focus: an accent ring outside the glass edge. */
+.bkemo .bk-glass-nav:focus-visible,
+.bkemo .bk-glass-btn:focus-visible,
+.bk-native-button:focus-visible {
+  outline: none;
+  box-shadow: var(--glass-highlight), 0 0 0 2px var(--bg), 0 0 0 4px color-mix(in srgb, var(--accent) 70%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bkemo .bk-settings-scrim,
+  .bkemo .bk-settings-float { animation: none; }
+  .bkemo .bk-glass-btn,
+  .bkemo .bk-glass-nav,
+  .bk-native-button { transition: none; }
+  .bkemo .bk-glass-btn:active,
+  .bkemo .bk-glass-nav:active,
+  .bk-lg-on .bkemo .bk-glass-btn:hover,
+  .bk-lg-on .bk-native-button:hover:not(:disabled) { transform: none; }
+}
+
+@keyframes bk-scrim-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes bk-float-in { from { opacity: 0; transform: translateY(10px) scale(0.985); } to { opacity: 1; transform: none; } }
+
+@media (prefers-reduced-transparency: reduce) {
+  .bkemo {
+    --glass-fill: var(--bg-2);
+    --glass-fill-strong: var(--bg-2);
+    --glass-fill-hover: var(--bg-3);
+    --glass-blur: none;
+  }
+}
+
+/* Ambient light behind the app so glass has colour to refract. A chosen
+   background gradient (inline style from BkemoLayout) takes precedence. */
+.bkemo.bk-app-root {
+  background:
+    radial-gradient(1100px 620px at 6% -14%, color-mix(in srgb, var(--accent) 18%, transparent), transparent 62%),
+    radial-gradient(900px 720px at 106% 110%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 60%),
+    radial-gradient(760px 520px at 62% 38%, color-mix(in srgb, var(--important) 5%, transparent), transparent 70%),
+    var(--bg);
+}
+.bkemo.bk-app-root[data-theme="light"] {
+  background:
+    radial-gradient(1100px 620px at 6% -14%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 62%),
+    radial-gradient(900px 720px at 106% 110%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 60%),
+    var(--bg);
+}

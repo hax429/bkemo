@@ -344,7 +344,8 @@ const QuickNotePage = observer(() => {
         <button
           onClick={send}
           disabled={sending || att.uploading > 0}
-          style={{ background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 'var(--radius)', padding: '4px 14px', fontSize: 12, fontWeight: 500, opacity: (sending || att.uploading > 0) ? 0.6 : 1, cursor: 'pointer' }}
+          className="bk-glass-btn is-filled"
+          style={{ borderRadius: 999, padding: '5px 16px', fontSize: 12, fontWeight: 600, opacity: (sending || att.uploading > 0) ? 0.6 : 1, cursor: 'pointer' }}
         >Done</button>
       </div>
     </div>

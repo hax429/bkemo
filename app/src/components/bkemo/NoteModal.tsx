@@ -544,7 +544,7 @@ export const NoteModal = observer(function NoteModal({ note, onClose, startFulls
           />
           <span className="spacer" />
           {note.id && <button onClick={trash} style={{ background: 'transparent', border: '1px solid #5C2A2A', color: '#E0696B', padding: '5px 12px', borderRadius: 'var(--radius)', fontSize: 12 }}>Trash</button>}
-          <button onClick={save} disabled={saving} style={{ background: 'var(--accent)', border: 'none', color: '#fff', padding: '5px 14px', borderRadius: 'var(--radius)', fontSize: 12, fontWeight: 500, opacity: saving ? 0.6 : 1 }}>Save · ⌘↵</button>
+          <button onClick={save} disabled={saving} className="bk-glass-btn is-filled" style={{ padding: '6px 16px', borderRadius: 999, fontSize: 12, fontWeight: 600, opacity: saving ? 0.6 : 1 }}>Save · ⌘↵</button>
         </div>
       </div>
       )}
