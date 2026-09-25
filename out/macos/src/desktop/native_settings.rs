@@ -92,6 +92,7 @@ fn handle(app: &AppHandle, request: Value) -> Result<Value, String> {
             serde_json::to_value(settings).map_err(|e| e.to_string())
         },
         "desktop.save" => serde_json::to_value(save_settings(app, serde_json::from_value(request["input"].clone()).map_err(|e| e.to_string())?)?).map_err(|e| e.to_string()),
+        "app.buildInfo" => Ok(crate::build_info()),
         "settings.changed" => { app.emit("native-settings-changed", ()).map_err(|e| e.to_string())?; Ok(json!(true)) },
         "main.show" => {
             if let Some(window) = app.get_webview_window("main") { super::set_dock_visible(app, true); let _ = window.show(); let _ = window.set_focus(); }

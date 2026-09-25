@@ -12,16 +12,13 @@ final class SettingsWindowController {
     func show(token: String?, endpoint: String?, section: String?) {
         model.configure(token: token, endpoint: endpoint, section: section)
         if window == nil {
-            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 940, height: 720), styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
+            // A regular opaque window with a solid title bar/toolbar: nothing
+            // behind the window shows through the header.
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 900, height: 660), styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
             window.title = "bkemo Settings"
-            window.titlebarAppearsTransparent = true
+            window.toolbarStyle = .unified
             window.isReleasedWhenClosed = false
             window.minSize = NSSize(width: 760, height: 520)
-            // Glass window: opaque+clear background lets the NSVisualEffectView
-            // behind the SwiftUI content (see NativeSettingsView) show the
-            // desktop blur through, instead of a flat system-color panel.
-            window.isOpaque = false
-            window.backgroundColor = .clear
             window.contentView = NSHostingView(rootView: NativeSettingsView(model: model))
             window.setFrameAutosaveName("bkemo.native.settings")
             window.center()
@@ -32,24 +29,24 @@ final class SettingsWindowController {
         Task { await model.refresh() }
     }
 }
-private struct SidebarSection { let id: String; let title: String; let icon: String; let tint: Color }
+private typealias SidebarSection = SettingsSectionInfo
 
 struct NativeSettingsView: View {
     @ObservedObject var model: SettingsModel
     @AppStorage("nativeAppearance") private var appearance = "system"
     private let sections: [SidebarSection] = [
-        .init(id: "desktop", title: "This Mac", icon: "desktopcomputer", tint: .gray),
-        .init(id: "prefs", title: "Preferences", icon: "slider.horizontal.3", tint: .gray),
-        .init(id: "appear", title: "Workspace appearance", icon: "paintpalette.fill", tint: .pink),
-        .init(id: "account", title: "Account", icon: "person.crop.circle.fill", tint: .blue),
-        .init(id: "security", title: "Security & API", icon: "key.fill", tint: .orange),
-        .init(id: "ai", title: "AI", icon: "sparkles", tint: .purple),
-        .init(id: "task", title: "Schedule Task", icon: "clock.fill", tint: .green),
-        .init(id: "storage", title: "Storage", icon: "externaldrive.fill", tint: .indigo),
-        .init(id: "mcp", title: "MCP connections", icon: "point.3.connected.trianglepath.dotted", tint: .teal),
-        .init(id: "data", title: "Data Transfer", icon: "arrow.up.arrow.down", tint: .cyan),
-        .init(id: "apidocs", title: "API Docs", icon: "curlybraces", tint: .gray),
-        .init(id: "about", title: "About", icon: "info.circle.fill", tint: .gray),
+        .init(id: "desktop", title: "This Mac", icon: "desktopcomputer", tint: .gray, summary: "Shortcuts, menu bar icon, and startup for this Mac."),
+        .init(id: "prefs", title: "Preferences", icon: "slider.horizontal.3", tint: .gray, summary: "How memos are listed, folded, and timestamped."),
+        .init(id: "appear", title: "Workspace appearance", icon: "paintpalette.fill", tint: .pink, summary: "Theme, accent, and fonts across your devices."),
+        .init(id: "account", title: "Account", icon: "person.crop.circle.fill", tint: .blue, summary: "Your profile and linked accounts."),
+        .init(id: "security", title: "Security & API", icon: "key.fill", tint: .orange, summary: "Access tokens, token alerts, and connected apps."),
+        .init(id: "ai", title: "AI", icon: "sparkles", tint: .purple, summary: "Providers, models, and embeddings."),
+        .init(id: "task", title: "Schedule Task", icon: "clock.fill", tint: .green, summary: "Scheduled jobs and weekly knowledge export."),
+        .init(id: "storage", title: "Storage", icon: "externaldrive.fill", tint: .indigo, summary: "Where attachments live, usage, and transfers."),
+        .init(id: "mcp", title: "MCP connections", icon: "point.3.connected.trianglepath.dotted", tint: .teal, summary: "Tools bkemo's AI can reach."),
+        .init(id: "data", title: "Data Transfer", icon: "arrow.up.arrow.down", tint: .cyan, summary: "Export, import, and back up your notes."),
+        .init(id: "apidocs", title: "API Docs", icon: "curlybraces", tint: .gray, summary: "Use a scoped access token with the bkemo API."),
+        .init(id: "about", title: "About", icon: "info.circle.fill", tint: .gray, summary: "Version and build information."),
     ]
     private var available: [SidebarSection] {
         sections.filter { section in
@@ -91,6 +88,10 @@ struct NativeSettingsView: View {
                     .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                     .padding(.horizontal, 20).padding(.top, 16)
                 }
+                if model.snapshot?.limitedByToken == true {
+                    TokenLimitBanner(openSecurity: model.openSecurityInBrowser)
+                        .padding(.horizontal, 20).padding(.top, 16)
+                }
                 detail
             }
             .navigationTitle(sections.first(where: { $0.id == model.selection })?.title ?? "Settings")
@@ -105,7 +106,11 @@ struct NativeSettingsView: View {
             }
             .searchable(text: $model.search, prompt: "Search settings")
         }
-        .background(VisualEffectBackground())
+        // Extend under the toolbar too; otherwise that strip is fully clear
+        // and shows whatever is behind the window.
+        // Hard scroll edges: content stops at an opaque header with a divider
+        // instead of blurring through a translucent toolbar.
+        .scrollEdgeEffectStyle(.hard, for: .all)
         .preferredColorScheme(appearance == "system" ? nil : appearance == "dark" ? .dark : .light)
         .onChange(of: appearance) { _, next in NSApp.appearance = next == "system" ? nil : NSAppearance(named: next == "dark" ? .darkAqua : .aqua) }
     }
@@ -127,32 +132,55 @@ struct NativeSettingsView: View {
                 Text("bkemo").font(.largeTitle.bold())
                 Text("A place for your notes and tasks.").foregroundStyle(.secondary)
                 Text("Native Settings and Quick Note · macOS 26 or later").font(.caption)
+                AppBuildCard(build: model.appBuild)
             }.frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if model.selection == "apidocs" && model.search.isEmpty {
             Form { Section("API reference") { Text("Use a scoped access token with the bkemo API."); Text(model.endpoint + "/docs").textSelection(.enabled); Button("Open API reference") { if let url = URL(string: model.endpoint + "/docs") { NSWorkspace.shared.open(url) } } } }.formStyle(.grouped).scrollContentBackground(.hidden)
-        } else if let snapshot = model.snapshot, snapshot.version == 1 {
-            Form {
-                let config = snapshot.config.filter { matches($0.section, $0.title) }
-                let operations = snapshot.operations.filter { matches($0.section, $0.title) }
-                if config.isEmpty && operations.isEmpty { Text("No available settings match this view.").foregroundStyle(.secondary) }
-                // One card for every row on this page — not one card per
-                // field — with a single page-level Save (toolbar) instead
-                // of a save button per row.
-                if !config.isEmpty {
-                    Section {
-                        ForEach(config) { setting in SettingEditor(setting: setting, model: model).id("\(snapshot.account.id):\(setting.key)") }
-                    }
-                }
-                if !operations.isEmpty {
-                    Section("Manage") { ForEach(operations) { operation in SettingsActionView(operation: operation, model: model).id("\(snapshot.account.id):\(operation.id)") } }
-                }
-            }.formStyle(.grouped).scrollContentBackground(.hidden).disabled(model.busy)
+        } else if let snapshot = model.snapshot, snapshot.version == 1,
+                  let section = sections.first(where: { $0.id == model.selection }) ?? sections.first(where: { $0.id == "account" }) {
+            SettingsSectionPage(section: section, snapshot: snapshot, model: model)
         } else {
             ContentUnavailableView("Account settings", systemImage: "person.crop.circle", description: Text("Connect through the main bkemo window, then refresh."))
         }
     }
     private func matches(_ section: String, _ title: String) -> Bool {
         model.search.isEmpty ? section == model.selection : title.localizedCaseInsensitiveContains(model.search)
+    }
+}
+private struct AppBuildCard: View {
+    let build: SettingsValue
+    var body: some View {
+        VStack(spacing: 4) {
+            if build.isNull {
+                Text("Build info unavailable").foregroundStyle(.secondary)
+            } else {
+                Text("v\(build["version"].string) · build \(build["build"].string) · \(build["commit"].string)")
+                    .font(.system(.callout, design: .monospaced).weight(.semibold))
+                    .textSelection(.enabled)
+                if let date = ISO8601DateFormatter().date(from: build["builtAt"].string) {
+                    Text("built \(date.formatted(date: .abbreviated, time: .shortened))").font(.caption).foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(.horizontal, 18).padding(.vertical, 12)
+        .glassEffect(.regular, in: Capsule())
+    }
+}
+private struct TokenLimitBanner: View {
+    let openSecurity: () -> Void
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "key.slash").font(.title3).foregroundStyle(.orange)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("This Mac's access token can't manage settings").font(.headline)
+                Text("Its scopes don't include Manage settings, so only your profile shows here. Create a token with the Read & write preset (which now includes Manage settings) or Full access, then paste it into the main bkemo window.")
+                    .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 8)
+            Button("Security & API", action: openSecurity).buttonStyle(.glass)
+        }
+        .padding(14)
+        .glassEffect(.regular.tint(.orange.opacity(0.12)), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 }
 private struct SidebarRow: View {

@@ -35,7 +35,10 @@ export const nativeSettingsRouter = router({
         value: isSettingsSecret(item.key) ? null : redactSettingsResult((values as any)[item.key]) ?? null,
         configured: isSettingsSecret(item.key) && Boolean((values as any)[item.key]),
       })) : [];
-      return { version: 1, account: { id: ctx.settingsAccount.id, name: ctx.settingsAccount.name }, config, operations };
+      // Lets the client explain an empty view instead of silently showing
+      // almost nothing when the token (not the account) is the limit.
+      const access = { scoped: ctx.permissions !== undefined, canManageSettings: allowsSettingsPath(ctx.permissions, 'config.update') };
+      return { version: 1, account: { id: ctx.settingsAccount.id, name: ctx.settingsAccount.name }, access, config, operations };
     }),
   perform: settingsProcedure
     .meta({ openapi: { method: 'POST', path: '/v1/native/settings/action', protect: true, tags: ['Config'], summary: 'Perform an authorized native settings action' } })

@@ -85,7 +85,7 @@ actor CaptureQueue {
             guard let job = readAll().first else { break }
             let client = BkemoClient(endpoint: job.endpoint, token: job.token)
             do {
-                _ = try await client.noteUpsert(.init(
+                _ = try await client.upsert(Memo(
                     content: job.content,
                     type: job.type,
                     isImportant: job.isImportant,

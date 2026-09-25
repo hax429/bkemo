@@ -82,8 +82,13 @@ struct SettingsOperation: Decodable, Identifiable {
 }
 struct SettingsSnapshot: Decodable {
     struct Account: Decodable { let id: Int; let name: String }
+    /// Absent on older servers; treat as unrestricted.
+    struct Access: Decodable { let scoped: Bool; let canManageSettings: Bool }
     let version: Int
     let account: Account
+    var access: Access? = nil
+    /// The token (not the account) is what hides most settings.
+    var limitedByToken: Bool { access.map { $0.scoped && !$0.canManageSettings } ?? false }
     let config: [NativeSetting]
     let operations: [SettingsOperation]
 }

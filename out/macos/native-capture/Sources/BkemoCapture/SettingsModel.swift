@@ -15,6 +15,8 @@ final class SettingsModel: ObservableObject {
     @Published var selection: String? = "desktop"
     @Published var search = ""
     @Published var desktop: SettingsValue = .object([:])
+    /// The main app's compile-time stamp (version, build, commit, builtAt).
+    @Published var appBuild: SettingsValue = .null
     @Published var results: [String: SettingsValue] = [:]
     /// Edited-but-unsaved config values, keyed by config key. Rows read
     /// through this before falling back to the last-fetched snapshot value,
@@ -34,6 +36,7 @@ final class SettingsModel: ObservableObject {
             generation += 1
             snapshot = nil
             results = [:]
+            loadErrors = [:]
             message = nil
             online = false
             busy = false
@@ -69,6 +72,7 @@ final class SettingsModel: ObservableObject {
         let revision = generation
         do { desktop = try await ParentBridge.request("desktop.get") }
         catch { if snapshot == nil { message = error.localizedDescription } }
+        if appBuild.isNull { appBuild = (try? await ParentBridge.request("app.buildInfo")) ?? .null }
         guard token != nil else { message = "Sign in through the main bkemo window to manage account settings."; return }
         busy = true
         defer { if revision == generation { busy = false } }
@@ -132,11 +136,36 @@ final class SettingsModel: ObservableObject {
         _ = try? await ParentBridge.request("settings.changed")
         return result
     }
+    /// Read-only lookups that render inline (profile, usage, lists). They
+    /// don't take the `busy` lock, so a page can load several at once while
+    /// actions stay serialized through `perform`.
+    @Published var loading: Set<String> = []
+    @Published var loadErrors: [String: String] = [:]
+    func query(_ operation: String, input: SettingsValue = .null) async {
+        guard online, snapshot?.version == 1, !loading.contains(operation) else { return }
+        let revision = generation
+        loading.insert(operation)
+        defer { if revision == generation { loading.remove(operation) } }
+        do {
+            var body: SettingsValue = .object(["operation": .string(operation), "confirmed": .bool(false)])
+            if !input.isNull { body["input"] = input }
+            let data = try await request(path: "/api/v1/native/settings/action", body: body)
+            guard revision == generation else { return }
+            results[operation] = try JSONDecoder().decode(SettingsValue.self, from: data)
+            loadErrors[operation] = nil
+        } catch {
+            if revision == generation { loadErrors[operation] = error.localizedDescription }
+        }
+    }
     func saveDesktop(_ value: SettingsValue) async throws {
         desktop = try await ParentBridge.request("desktop.save", input: value)
     }
     func openBrowser() {
         guard let url = URL(string: endpoint + "/settings"), ["https", "http"].contains(url.scheme ?? "") else { return }
+        NSWorkspace.shared.open(url)
+    }
+    func openSecurityInBrowser() {
+        guard let url = URL(string: endpoint + "/settings/security"), ["https", "http"].contains(url.scheme ?? "") else { return }
         NSWorkspace.shared.open(url)
     }
     func chooseUpload() async throws -> String {

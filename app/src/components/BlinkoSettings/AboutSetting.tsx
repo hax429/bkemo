@@ -5,6 +5,7 @@ import { Icon } from '@/components/Common/Iconify/icons';
 import { RootStore } from "@/store";
 import { ToastPlugin } from "@/store/module/Toast/Toast";
 import { api } from '@/lib/trpc';
+import { isInTauri } from '@/lib/tauriHelper';
 
 type BuildInfo = typeof __BKEMO_BUILD__;
 const WEB_BUILD: BuildInfo = typeof __BKEMO_BUILD__ !== 'undefined'
@@ -20,14 +21,23 @@ export const AboutSetting = observer(() => {
   const { t } = useTranslation();
   const [clearing, setClearing] = useState(false);
   const [server, setServer] = useState<BuildInfo | null>(null);
+  const [desktop, setDesktop] = useState<BuildInfo | null>(null);
+  const inDesktop = isInTauri();
 
   useEffect(() => {
     api.public.buildInfo.query().then(setServer).catch(() => setServer(null));
-  }, []);
+    if (inDesktop) {
+      import('@tauri-apps/api/core')
+        .then(({ invoke }) => invoke<BuildInfo>('app_build_info'))
+        .then(setDesktop)
+        .catch(() => setDesktop(null));
+    }
+  }, [inDesktop]);
 
   // A cached (service-worker) bundle older than the server means the new
   // deploy has not reached this client yet — Clear Cache below fixes it.
-  const stale = server && server.build !== 'dev' && WEB_BUILD.build !== 'dev' && server.commit !== WEB_BUILD.commit;
+  // Build numbers only grow, so this ignores docs-only or "-dirty" commit noise.
+  const stale = !!server && Number(server.build) > Number(WEB_BUILD.build);
 
   const clearBrowserCache = async () => {
     setClearing(true);
@@ -74,8 +84,17 @@ export const AboutSetting = observer(() => {
       <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: 24 }}>
         <div style={{ fontSize: 14, color: 'var(--fg)', fontWeight: 500, marginBottom: 12 }}>Version Information</div>
         <div className="v-stack" style={{ gap: 12 }}>
+          {inDesktop && (
+            <div className="h-stack" style={rowStyle}>
+              <span style={{ fontSize: 13, color: 'var(--fg-2)' }}>macOS app</span>
+              <span style={{ textAlign: 'right' }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--accent)', fontFamily: 'var(--font-mono)' }}>{desktop ? formatBuild(desktop) : 'older app (no stamp)'}</span>
+                {desktop && <div style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 2 }}>built {formatBuiltAt(desktop.builtAt)}</div>}
+              </span>
+            </div>
+          )}
           <div className="h-stack" style={rowStyle}>
-            <span style={{ fontSize: 13, color: 'var(--fg-2)' }}>Web build</span>
+            <span style={{ fontSize: 13, color: 'var(--fg-2)' }}>{inDesktop ? 'Web build (bundled)' : 'Web build'}</span>
             <span style={{ textAlign: 'right' }}>
               <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--accent)', fontFamily: 'var(--font-mono)' }}>{formatBuild(WEB_BUILD)}</span>
               <div style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 2 }}>built {formatBuiltAt(WEB_BUILD.builtAt)}</div>
@@ -90,7 +109,9 @@ export const AboutSetting = observer(() => {
           </div>
           {stale && (
             <div style={{ fontSize: 12, color: 'var(--important)', padding: '0 4px' }}>
-              This page is running an older cached build than the server. Use Clear Cache below to load the latest.
+              {inDesktop
+                ? 'This app bundles an older web build than the server. Rebuild the macOS app to pick up the latest interface.'
+                : 'This page is running an older cached build than the server. Use Clear Cache below to load the latest.'}
             </div>
           )}
           <div className="h-stack" style={{ justifyContent: 'space-between', padding: '12px 16px', background: 'var(--bg-2)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
