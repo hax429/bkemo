@@ -60,7 +60,8 @@ struct SettingsField: View {
                 GroupBox(title) {
                     VStack(alignment: .leading, spacing: 12) {
                         let required = Set(shape["required"].array.map(\.string))
-                        ForEach(shape["properties"].object.keys.sorted(), id: \.self) { name in
+                        // The sidebar layout has its own editor (SidebarLayoutEditor).
+                        ForEach(shape["properties"].object.keys.sorted().filter { key != "bkemoPrefs" || !$0.hasPrefix("sidebar") }, id: \.self) { name in
                             SettingsField(title: settingTitle(name), key: name, schema: shape["properties"][name],
                                           value: Binding(get: { value[name] }, set: { new in
                                               var object = value.object

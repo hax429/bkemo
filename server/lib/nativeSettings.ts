@@ -93,7 +93,9 @@ const overrides: Record<string, z.ZodType> = {
   timeFormat: z.enum(['relative', 'YYYY-MM-DD', 'YYYY-MM-DD HH:mm', 'HH:mm', 'YYYY-MM-DD HH:mm:ss', 'MM-DD HH:mm', 'MMM DD, YYYY', 'MMM DD, YYYY HH:mm', 'dddd, MMM DD, YYYY']),
   smallDeviceCardColumns: z.number().int().min(1).max(2), mediumDeviceCardColumns: z.number().int().min(1).max(4), largeDeviceCardColumns: z.number().int().min(1).max(6),
   language: z.string().min(2).max(32), theme: z.enum(['light', 'dark', 'system']),
-  bkemoPrefs: z.object({theme: z.enum(['light', 'dark']), accent: z.string().regex(/^#[a-fA-F0-9]{6}$/), density: z.enum(['compact', 'regular', 'comfy']), bgGradient: z.enum(['none', 'dusk', 'warm', 'aurora']).optional(), graphShowAll: z.boolean().optional(), taskReminders: z.boolean().optional()}),
+  bkemoPrefs: z.object({theme: z.enum(['light', 'dark']), accent: z.string().regex(/^#[a-fA-F0-9]{6}$/), density: z.enum(['compact', 'regular', 'comfy']), bgGradient: z.enum(['none', 'dusk', 'warm', 'aurora']).optional(), graphShowAll: z.boolean().optional(), taskReminders: z.boolean().optional(),
+    sidebarTools: z.array(z.enum(['home', 'today', 'trash', 'week', 'matrix', 'files', 'graph', 'calendar'])).max(5).optional(),
+    sidebarWidth: z.number().int().min(200).max(420).optional(), sidebarHeatmap: z.boolean().optional()}),
   tavilyMaxResult: z.number().int().min(1).max(100),
 };
 const excludedConfig = new Set(['desktopHotkeys', 'systemTray', 's3AccessKeyId', 's3AccessKeySecret', 's3Endpoint', 's3Bucket', 's3Region', 's3CustomPath', 's3ForcePathStyle', 'localCustomPath', 'objectStorage', 's3CredentialsConfigured', 's3AccessKeyIdMasked', 's3SecretAccessKeyMasked']);

@@ -32,6 +32,16 @@ struct SettingsSectionPage: View {
                     }
                 }
             }
+            if section.id == "appear", model.search.isEmpty,
+               let prefs = snapshot.config.first(where: { $0.key == "bkemoPrefs" }) {
+                Section {
+                    SidebarLayoutEditor(setting: prefs, model: model).id("\(snapshot.account.id):sidebar")
+                } header: {
+                    Text("Sidebar")
+                } footer: {
+                    Text("Applies to the main bkemo window. Drag the sidebar's edge there to resize it too.")
+                }
+            }
             if !actions.isEmpty {
                 Section("Actions") {
                     ForEach(actions) { operation in

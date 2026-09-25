@@ -19,7 +19,6 @@ const SELECTOR = [
   '.bk-glass',
   '.bk-native-button:not(.is-ghost)',
   '.bk-ai-dialog-button',
-  '.bk-settings-float',
   '.bk-glass-nav.is-active',
   '.bk-context-menu',
   '.bk-mobile-tabs',
@@ -117,6 +116,9 @@ export function startLiquidGlass(): void {
   });
   const attach = (el: Element) => {
     if (!(el instanceof HTMLElement) || el.dataset.lgBound) return;
+    // Settings is opaque and filter-free (see .bk-settings-float); refracting
+    // its many buttons cost a GPU pass each on every section switch.
+    if (el.closest('.bk-settings-float')) return;
     el.dataset.lgBound = '1';
     sized.observe(el);
     paint(el);
@@ -135,14 +137,28 @@ export function startLiquidGlass(): void {
   };
 
   scan(document);
+  // Coalesce DOM churn into one pass per frame: a page switch adds thousands
+  // of nodes, and scanning each mutation synchronously stalled rendering.
+  const added = new Set<Element>();
+  const toggled = new Set<HTMLElement>();
+  let frame = 0;
+  const flush = () => {
+    frame = 0;
+    added.forEach((node) => { if (node.isConnected) scan(node); });
+    // Class toggles (e.g. is-ghost → primary) change eligibility.
+    toggled.forEach((el) => {
+      if (!el.isConnected) return;
+      if (el.matches(SELECTOR)) attach(el);
+      else if (el.dataset.lgBound) detach(el);
+    });
+    added.clear();
+    toggled.clear();
+  };
   new MutationObserver((mutations) => {
     for (const m of mutations) {
-      m.addedNodes.forEach((node) => { if (node instanceof Element) scan(node); });
-      // Class toggles (e.g. is-ghost → primary) change eligibility.
-      if (m.type === 'attributes' && m.target instanceof HTMLElement) {
-        if (m.target.matches(SELECTOR)) attach(m.target);
-        else if (m.target.dataset.lgBound) detach(m.target);
-      }
+      m.addedNodes.forEach((node) => { if (node instanceof Element) added.add(node); });
+      if (m.type === 'attributes' && m.target instanceof HTMLElement) toggled.add(m.target);
     }
+    if (!frame && (added.size || toggled.size)) frame = requestAnimationFrame(flush);
   }).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
 }

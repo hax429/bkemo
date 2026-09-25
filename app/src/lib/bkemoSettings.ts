@@ -27,7 +27,41 @@ export type BkemoPrefs = {
   graphShowAll?: boolean;
   /** Native app: schedule local OS notifications for tasks at their due time. */
   taskReminders?: boolean;
+  /** Desktop sidebar: ordered icon toolbar (at most SIDEBAR_TOOL_LIMIT). */
+  sidebarTools?: SidebarToolId[];
+  /** Desktop sidebar width in px (dragged from its right edge). */
+  sidebarWidth?: number;
+  /** Desktop sidebar: show this month's activity heatmap above the tags. */
+  sidebarHeatmap?: boolean;
 };
+
+export type SidebarToolId = 'home' | 'today' | 'trash' | 'week' | 'matrix' | 'files' | 'graph' | 'calendar';
+
+export const SIDEBAR_TOOL_OPTIONS: { id: SidebarToolId; label: string }[] = [
+  { id: 'home', label: 'Home' },
+  { id: 'today', label: 'Today' },
+  { id: 'week', label: 'This week' },
+  { id: 'matrix', label: 'Matrix' },
+  { id: 'calendar', label: 'Calendar' },
+  { id: 'graph', label: 'Graph' },
+  { id: 'files', label: 'Files' },
+  { id: 'trash', label: 'Trash' },
+];
+export const SIDEBAR_TOOL_LIMIT = 5;
+export const DEFAULT_SIDEBAR_TOOLS: SidebarToolId[] = ['home', 'today', 'week', 'calendar', 'trash'];
+export const SIDEBAR_WIDTH = { min: 200, max: 420, default: 248 };
+
+/** Known, de-duplicated, capped tool list; falls back to the default set. */
+export function sidebarTools(prefs: BkemoPrefs): SidebarToolId[] {
+  const known = new Set(SIDEBAR_TOOL_OPTIONS.map((o) => o.id));
+  const list = Array.isArray(prefs.sidebarTools) ? prefs.sidebarTools : DEFAULT_SIDEBAR_TOOLS;
+  return [...new Set(list)].filter((id) => known.has(id)).slice(0, SIDEBAR_TOOL_LIMIT);
+}
+
+export function clampSidebarWidth(width: number | undefined): number {
+  if (typeof width !== 'number' || !Number.isFinite(width)) return SIDEBAR_WIDTH.default;
+  return Math.round(Math.min(SIDEBAR_WIDTH.max, Math.max(SIDEBAR_WIDTH.min, width)));
+}
 
 export type BkemoPreset = {
   key: string;

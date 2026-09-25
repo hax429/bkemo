@@ -141,7 +141,12 @@ public struct BkemoClient: Sendable {
         guard let value = try JSONSerialization.jsonObject(with: valueData) as? [String: Any] else {
             throw APIError.decode("invalid appearance preferences")
         }
-        _ = try await call("/api/v1/config/update", body: ["key": "bkemoPrefs", "value": value])
+        // bkemoPrefs also carries settings this app doesn't model (desktop
+        // sidebar layout, graph, reminders); merge over them, don't replace.
+        let listData = try await call("/api/v1/config/list", method: "GET")
+        var merged = ((try json(listData) as? [String: Any])?["bkemoPrefs"] as? [String: Any]) ?? [:]
+        merged.merge(value) { _, new in new }
+        _ = try await call("/api/v1/config/update", body: ["key": "bkemoPrefs", "value": merged])
     }
 
     // MARK: Notes

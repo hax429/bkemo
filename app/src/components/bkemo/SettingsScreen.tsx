@@ -20,11 +20,12 @@ import { TaskSetting } from '@/components/BlinkoSettings/TaskSetting';
 import { AboutSetting } from '@/components/BlinkoSettings/AboutSetting';
 import { DataTransfer } from './DataTransfer';
 import { StorageScreen } from './StorageScreen';
-import { ACCENT_SWATCHES, MOBILE_TOOL_OPTIONS, PRESET_THEMES, type BkemoPreset, type BkemoPrefs, type BkemoTheme, type BkemoDensity } from '@/lib/bkemoSettings';
+import { ACCENT_SWATCHES, MOBILE_TOOL_OPTIONS, PRESET_THEMES, SIDEBAR_TOOL_OPTIONS, SIDEBAR_TOOL_LIMIT, SIDEBAR_WIDTH, sidebarTools, clampSidebarWidth, type SidebarToolId, type BkemoPreset, type BkemoPrefs, type BkemoTheme, type BkemoDensity } from '@/lib/bkemoSettings';
 import { isAiDebugAvailable } from '@/lib/aiDebug';
 import { isInTauri } from '@/lib/tauriHelper';
 import { ensureNotificationPermission, clearTaskNotifications } from '@/lib/taskNotifications';
 import type { BkemoRoute } from './Sidebar';
+import { SidebarIcon } from './SidebarIcons';
 import { useMediaQuery } from 'usehooks-ts';
 import { DeveloperAiDebugSettings } from './ai/AIDebugPanel';
 import { HotkeySetting } from '@/components/BlinkoSettings/HotkeySetting';
@@ -262,9 +263,119 @@ const Appearance = observer(function Appearance({
           <Toggle on={prefs.taskReminders !== false} onChange={(v) => { onChange({ taskReminders: v }); if (v) ensureNotificationPermission(); else clearTaskNotifications(); }} />
         } />
       )}
+      <SidebarSettings prefs={prefs} onChange={onChange} />
     </div>
   );
 });
+
+/** Sidebar layout: pick and order up to five toolbar shortcuts, heatmap, width. */
+function SidebarSettings({ prefs, onChange }: { prefs: BkemoPrefs; onChange: (p: Partial<BkemoPrefs>) => void }) {
+  const tools = sidebarTools(prefs);
+  const [dragging, setDragging] = useState<SidebarToolId | null>(null);
+  const full = tools.length >= SIDEBAR_TOOL_LIMIT;
+  const hidden = SIDEBAR_TOOL_OPTIONS.filter((o) => !tools.includes(o.id));
+  const label = (id: SidebarToolId) => SIDEBAR_TOOL_OPTIONS.find((o) => o.id === id)?.label ?? id;
+  const setTools = (next: SidebarToolId[]) => onChange({ sidebarTools: next });
+  const move = (id: SidebarToolId, to: number) => {
+    const next = tools.filter((t) => t !== id);
+    next.splice(Math.max(0, Math.min(next.length, to)), 0, id);
+    setTools(next);
+  };
+  const width = clampSidebarWidth(prefs.sidebarWidth);
+  const iconBtn: React.CSSProperties = { width: 26, height: 26, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', border: '1px solid var(--border-2)', borderRadius: 6, background: 'var(--bg-2)', color: 'var(--fg-2)', cursor: 'pointer', padding: 0 };
+
+  return (
+    <div className="v-stack" style={{ gap: 0, marginTop: 8 }}>
+      <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--fg)', padding: '8px 0 4px' }}>Sidebar</div>
+      <div style={{ fontSize: 12, color: 'var(--fg-2)', lineHeight: 1.5 }}>Applies to the desktop web and macOS app. Right-click the sidebar toolbar to jump here.</div>
+
+      <div style={{ padding: '16px 0', borderBottom: '1px solid var(--border)' }}>
+        <div className="h-stack" style={{ justifyContent: 'space-between', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
+          <div>
+            <div style={{ fontSize: 14, color: 'var(--fg)', fontWeight: 500 }}>Toolbar shortcuts</div>
+            <div style={{ fontSize: 12, color: 'var(--fg-2)', marginTop: 4 }}>Choose up to {SIDEBAR_TOOL_LIMIT}. Drag or use the arrows to reorder.</div>
+          </div>
+          <span style={{ ...mono, color: full ? 'var(--accent)' : 'var(--fg-3)' }}>{tools.length}/{SIDEBAR_TOOL_LIMIT}</span>
+        </div>
+
+        {/* live preview */}
+        <div aria-hidden="true" style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.max(1, tools.length)}, 1fr)`, gap: 4, margin: '14px 0 12px', padding: 6, maxWidth: 260, borderRadius: 'var(--radius-lg)', background: 'var(--bg-2)', border: '1px solid var(--border)' }}>
+          {tools.length === 0
+            ? <span style={{ fontSize: 12, color: 'var(--fg-3)', padding: '8px 6px' }}>Toolbar hidden</span>
+            : tools.map((id) => (
+              <span key={id} className="v-stack" style={{ alignItems: 'center', gap: 3, padding: '6px 0', color: 'var(--fg-2)' }}>
+                <SidebarIcon name={id} size={18} />
+                <span style={{ fontSize: 9.5, color: 'var(--fg-3)', whiteSpace: 'nowrap' }}>{label(id)}</span>
+              </span>
+            ))}
+        </div>
+
+        <div className="v-stack" role="list" aria-label="Shown in toolbar" style={{ gap: 4, maxWidth: 420 }}>
+          {tools.map((id, index) => (
+            <div
+              key={id}
+              role="listitem"
+              draggable
+              onDragStart={(e) => { setDragging(id); e.dataTransfer.effectAllowed = 'move'; }}
+              onDragEnd={() => setDragging(null)}
+              onDragOver={(e) => { if (dragging) e.preventDefault(); }}
+              onDrop={(e) => { e.preventDefault(); if (dragging && dragging !== id) move(dragging, index); setDragging(null); }}
+              className="h-stack"
+              style={{ gap: 10, padding: '6px 8px', borderRadius: 'var(--radius)', background: 'var(--bg-2)', border: `1px solid ${dragging === id ? 'var(--accent)' : 'var(--border)'}`, opacity: dragging === id ? 0.6 : 1, cursor: 'grab' }}
+            >
+              <span style={{ color: 'var(--fg-3)', fontSize: 12, width: 10, textAlign: 'center' }} aria-hidden="true">⋮⋮</span>
+              <span style={{ color: 'var(--accent)' }}><SidebarIcon name={id} size={17} /></span>
+              <span style={{ flex: 1, fontSize: 13, color: 'var(--fg)' }}>{label(id)}</span>
+              <button type="button" style={{ ...iconBtn, opacity: index === 0 ? 0.35 : 1 }} disabled={index === 0} aria-label={`Move ${label(id)} left`} onClick={() => move(id, index - 1)}>
+                <SidebarIcon name="chevron" size={12} style={{ transform: 'rotate(-90deg)' }} />
+              </button>
+              <button type="button" style={{ ...iconBtn, opacity: index === tools.length - 1 ? 0.35 : 1 }} disabled={index === tools.length - 1} aria-label={`Move ${label(id)} right`} onClick={() => move(id, index + 1)}>
+                <SidebarIcon name="chevron" size={12} style={{ transform: 'rotate(90deg)' }} />
+              </button>
+              <button type="button" style={iconBtn} aria-label={`Remove ${label(id)}`} onClick={() => setTools(tools.filter((t) => t !== id))}>✕</button>
+            </div>
+          ))}
+        </div>
+
+        {hidden.length > 0 && (
+          <div className="h-stack" style={{ gap: 6, flexWrap: 'wrap', marginTop: 12, maxWidth: 420 }}>
+            {hidden.map((o) => (
+              <button
+                key={o.id}
+                type="button"
+                disabled={full}
+                title={full ? `Remove one first — up to ${SIDEBAR_TOOL_LIMIT}` : `Add ${o.label}`}
+                onClick={() => setTools([...tools, o.id])}
+                className="h-stack"
+                style={{ gap: 6, padding: '5px 10px 5px 8px', borderRadius: 100, border: '1px dashed var(--border-2)', background: 'transparent', color: 'var(--fg-2)', fontSize: 12, cursor: full ? 'not-allowed' : 'pointer', opacity: full ? 0.45 : 1 }}
+              >
+                <SidebarIcon name={o.id} size={14} />
+                <span>{o.label}</span>
+                <span style={{ color: 'var(--fg-3)' }}>＋</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <Row title="Monthly heatmap" sub="Show this month between the toolbar and your tags, tinted by how many memos you wrote each day." control={
+        <Toggle on={!!prefs.sidebarHeatmap} onChange={(v) => onChange({ sidebarHeatmap: v })} />
+      } />
+      <Row title="Sidebar width" sub="You can also drag the sidebar's right edge; double-click it to reset." control={
+        <span className="h-stack" style={{ gap: 10 }}>
+          <input
+            type="range" min={SIDEBAR_WIDTH.min} max={SIDEBAR_WIDTH.max} step={4} value={width}
+            aria-label="Sidebar width"
+            onChange={(e) => onChange({ sidebarWidth: clampSidebarWidth(Number(e.target.value)) })}
+            style={{ width: 150, accentColor: 'var(--accent)' }}
+          />
+          <span style={{ ...mono, width: 44, textAlign: 'right' }}>{width}px</span>
+          <button type="button" onClick={() => onChange({ sidebarWidth: SIDEBAR_WIDTH.default })} style={{ ...fieldStyle, cursor: 'pointer' }}>Reset</button>
+        </span>
+      } />
+    </div>
+  );
+}
 
 // ── bkemo-native form controls (themed to the bkemo palette) ──
 function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {

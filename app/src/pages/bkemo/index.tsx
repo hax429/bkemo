@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { observer } from 'mobx-react-lite';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useMediaQuery } from 'usehooks-ts';
 import { RootStore } from '@/store';
@@ -9,7 +9,7 @@ import { BlinkoStore } from '@/store/blinkoStore';
 import { eventBus } from '@/lib/event';
 import { api } from '@/lib/trpc';
 import type { Note } from '@shared/lib/types';
-import { loadPrefs, savePrefs, hydratePrefs, type BkemoPrefs } from '@/lib/bkemoSettings';
+import { loadPrefs, savePrefs, hydratePrefs, sidebarTools, clampSidebarWidth, type BkemoPrefs } from '@/lib/bkemoSettings';
 import { getBkemoConfig } from '@/lib/bkemoConfig';
 import { isInTauri, isMacOS } from '@/lib/tauriHelper';
 import { isTask } from '@/lib/taskFilters';
@@ -243,7 +243,7 @@ const BkemoPage = observer(function BkemoPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [floatingSettings]);
 
-  const render = () => renderRoute(floatingSettings ? backdropRoute.current : route);
+  const render = () => (floatingSettings ? frozenBackdrop : renderRoute(route));
   const renderRoute = (route: BkemoRoute) => {
     if (route === 'home') return <Stream onOpen={setEditing} onNew={newMemo} onExpand={setEditing} />;
     if (route === 'random') return <Random onOpen={setEditing} />;
@@ -263,6 +263,15 @@ const BkemoPage = observer(function BkemoPage() {
     }
     return <ComingSoon title="bkemo" />;
   };
+  // Behind floating Settings the previous view is only a backdrop; build it
+  // once so switching Settings sections doesn't re-render the whole stream.
+  // Views are MobX observers, so they still update from store changes.
+  const backdropKey = floatingSettings ? backdropRoute.current : null;
+  const frozenBackdrop = useMemo(
+    () => (backdropKey ? renderRoute(backdropKey) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [backdropKey, prefs.graphShowAll],
+  );
 
   return (
     <BkemoLayout density={prefs.density} accent={prefs.accent} theme={prefs.theme} bgGradient={prefs.bgGradient}>
@@ -290,7 +299,17 @@ const BkemoPage = observer(function BkemoPage() {
             </div>
           ) : (
             <div className="h-stack" style={{ height: '100%', width: '100%' }}>
-              <Sidebar activeRoute={route} onNav={navigateTo} onNewMemo={focusNewMemo} onSearch={() => setShowSearch(true)} />
+              <Sidebar
+                activeRoute={route}
+                onNav={navigateTo}
+                onNewMemo={focusNewMemo}
+                onSearch={() => setShowSearch(true)}
+                tools={sidebarTools(prefs)}
+                width={clampSidebarWidth(prefs.sidebarWidth)}
+                showHeatmap={!!prefs.sidebarHeatmap}
+                onWidthChange={(sidebarWidth) => updatePrefs({ sidebarWidth })}
+                onCustomize={() => navigateSettings('appear')}
+              />
               {render()}
             </div>
           )}

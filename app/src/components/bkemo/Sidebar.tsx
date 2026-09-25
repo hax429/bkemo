@@ -1,6 +1,6 @@
 import { observer } from 'mobx-react-lite';
 import { pressable } from '@/lib/pressable';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { signOut, navigate } from '@/components/Auth/auth-client';
 import { eventBus } from '@/lib/event';
 import { RootStore } from '@/store';
@@ -9,6 +9,9 @@ import { BlinkoStore } from '@/store/blinkoStore';
 import { BaseStore } from '@/store/baseStore';
 import { UserStore } from '@/store/user';
 import { getBlinkoEndpoint } from '@/lib/blinkoEndpoint';
+import { SIDEBAR_TOOL_OPTIONS, SIDEBAR_WIDTH, clampSidebarWidth, type SidebarToolId } from '@/lib/bkemoSettings';
+import { SidebarIcon } from './SidebarIcons';
+import { SidebarHeatmap } from './SidebarHeatmap';
 
 export type BkemoRoute =
   | 'home' | 'daily' | 'random' | 'trash'
@@ -16,42 +19,41 @@ export type BkemoRoute =
   | 'analytics' | 'stats' | 'calendar' | 'graph' | 'files' | 'ai' | 'settings'
   | string; // tag:<id>
 
-const NOTES_NAV: { id: BkemoRoute; icon: string; title: string }[] = [
-  { id: 'home', icon: '✦', title: 'Home' },
-  { id: 'today', icon: '●', title: 'Today' },
-  { id: 'trash', icon: '⌫', title: 'Trash' },
-];
-const TODOS_NAV: { id: BkemoRoute; icon: string; title: string }[] = [
-  { id: 'week', icon: '▦', title: 'This week' },
-  { id: 'matrix', icon: '⊞', title: 'Matrix' },
-];
+const TOOL_LABEL = Object.fromEntries(SIDEBAR_TOOL_OPTIONS.map((o) => [o.id, o.label])) as Record<SidebarToolId, string>;
 
-function NavRow({ icon, title, count, active, onClick }: { icon: string; title: string; count?: number | null; active?: boolean; onClick?: () => void }) {
+const sectionLbl: React.CSSProperties = {
+  fontSize: 11.5, fontWeight: 600, color: 'var(--fg-3)',
+  padding: '14px 10px 4px', userSelect: 'none',
+};
+
+/** Notion-style flat row: icon, label, optional trailing hint. */
+function SideRow({ icon, label, hint, active, accent, onClick }: {
+  icon: React.ReactNode; label: string; hint?: React.ReactNode; active?: boolean; accent?: boolean; onClick?: () => void;
+}) {
   return (
     <div
       onClick={onClick}
-      {...pressable(onClick, !!active)}
+      {...pressable(onClick, active)}
+      aria-label={label}
       className={`h-stack bk-glass-nav${active ? ' is-active' : ''}`}
-      style={{ gap: 10, padding: '8px 12px', borderRadius: 'var(--radius-lg, 12px)', fontSize: 13.5, cursor: 'pointer', userSelect: 'none' }}
+      style={{ gap: 9, padding: '6px 10px', borderRadius: 'var(--radius-lg, 10px)', fontSize: 13.5, cursor: 'pointer', userSelect: 'none', color: accent ? 'var(--accent)' : undefined, fontWeight: accent ? 600 : 500 }}
     >
-      <span style={{ width: 16, fontSize: 13, textAlign: 'center', color: active ? 'var(--accent)' : 'var(--fg-3)', flexShrink: 0 }}>{icon}</span>
-      <span style={{ flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</span>
-      {count != null && <span style={{ color: 'var(--fg-3)', fontSize: 11, fontFamily: 'var(--font-mono)' }}>{count}</span>}
+      <span style={{ width: 18, display: 'flex', justifyContent: 'center', color: accent ? 'var(--accent)' : 'var(--fg-3)' }}>{icon}</span>
+      <span style={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
+      {hint}
     </div>
   );
 }
 
-const sectionLbl: React.CSSProperties = {
-  fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '.06em',
-  color: 'var(--fg-3)', textTransform: 'lowercase', fontWeight: 500,
-  padding: '16px 12px 6px',
-};
-
-function TagNavNode({ node, depth, activeRoute, onNav }: { node: any; depth: number; activeRoute: BkemoRoute; onNav: (route: BkemoRoute) => void }) {
+function TagNavNode({ node, depth, activeRoute, onNav, collapsed, onToggle }: {
+  node: any; depth: number; activeRoute: BkemoRoute; onNav: (route: BkemoRoute) => void;
+  collapsed: Set<string>; onToggle: (path: string) => void;
+}) {
   const path = node.metadata?.path || node.name;
   const route = `tag:${path}`;
   const active = activeRoute === route;
   const hasChildren = !!node.children?.length;
+  const open = hasChildren && !collapsed.has(path);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
@@ -59,103 +61,119 @@ function TagNavNode({ node, depth, activeRoute, onNav }: { node: any; depth: num
         onClick={() => onNav(route)}
         {...pressable(() => onNav(route), active)}
         className={`h-stack bk-glass-nav${active ? ' is-active' : ''}`}
-        style={{
-          gap: 8,
-          padding: depth === 0 ? '5px 12px' : `4px 12px 4px ${24 + depth * 14}px`,
-          borderRadius: 'var(--radius-lg, 12px)',
-          fontSize: depth === 0 ? 13.5 : 12.5,
-          cursor: 'pointer',
-        }}
+        style={{ gap: 6, padding: `5px 10px 5px ${6 + depth * 14}px`, borderRadius: 'var(--radius-lg, 10px)', fontSize: 13.5, cursor: 'pointer', userSelect: 'none' }}
         title={`#${path}`}
       >
-        <span style={{ width: 10, fontSize: 9, color: 'var(--fg-3)', flexShrink: 0 }}>{hasChildren ? '▾' : depth === 0 ? ' ' : '└'}</span>
-        <span style={{ color: 'var(--accent)', opacity: depth === 0 ? 1 : 0.72, fontFamily: 'var(--font-mono)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          #{node.name}
+        <span
+          onClick={(e) => { if (!hasChildren) return; e.stopPropagation(); onToggle(path); }}
+          aria-label={hasChildren ? (open ? `Collapse ${node.name}` : `Expand ${node.name}`) : undefined}
+          className={hasChildren ? 'bk-side-mini' : undefined}
+          style={{ width: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--fg-3)', flexShrink: 0 }}
+        >
+          {hasChildren
+            ? <SidebarIcon name="chevron" size={12} style={{ transform: open ? 'rotate(90deg)' : undefined, transition: 'transform .15s' }} />
+            : <SidebarIcon name="hash" size={13} />}
+        </span>
+        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: active ? 'var(--fg)' : undefined }}>
+          {node.name}
         </span>
       </div>
-      {node.children?.map((child: any) => (
-        <TagNavNode key={`${path}/${child.name}`} node={child} depth={depth + 1} activeRoute={activeRoute} onNav={onNav} />
+      {open && node.children.map((child: any) => (
+        <TagNavNode key={`${path}/${child.name}`} node={child} depth={depth + 1} activeRoute={activeRoute} onNav={onNav} collapsed={collapsed} onToggle={onToggle} />
       ))}
     </div>
   );
 }
 
-export const Sidebar = observer(function Sidebar({ activeRoute, onNav, onNewMemo, onSearch }: {
+const COLLAPSE_KEY = 'bkemoSidebarCollapsed';
+function loadCollapsed(): Set<string> {
+  try { return new Set(JSON.parse(localStorage.getItem(COLLAPSE_KEY) || '[]')); } catch { return new Set(); }
+}
+
+export const Sidebar = observer(function Sidebar({ activeRoute, onNav, onNewMemo, onSearch, tools, width, showHeatmap, onWidthChange, onCustomize }: {
   activeRoute: BkemoRoute;
   onNav: (route: BkemoRoute) => void;
   onNewMemo?: () => void;
   onSearch?: () => void;
+  tools: SidebarToolId[];
+  width: number;
+  showHeatmap?: boolean;
+  onWidthChange: (width: number) => void;
+  onCustomize?: () => void;
 }) {
   const blinko = RootStore.Get(BlinkoStore);
   const base = RootStore.Get(BaseStore);
   const user = RootStore.Get(UserStore);
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const [showMore, setShowMore] = useState(true);
+  const [tagsOpen, setTagsOpen] = useState(() => localStorage.getItem('bkemoSidebarTagsOpen') !== '0');
+  const [collapsed, setCollapsed] = useState(loadCollapsed);
+  // Live width while dragging; committed to prefs on release.
+  const [dragWidth, setDragWidth] = useState<number | null>(null);
+  const drag = useRef<{ x: number; w: number } | null>(null);
 
   useEffect(() => {
     if (!blinko.tagList.value) blinko.tagList.call();
   }, []);
 
+  const toggleTags = () => setTagsOpen((open) => {
+    try { localStorage.setItem('bkemoSidebarTagsOpen', open ? '0' : '1'); } catch { /* ignore */ }
+    return !open;
+  });
+  const toggleTag = (path: string) => setCollapsed((prev) => {
+    const next = new Set(prev);
+    if (next.has(path)) next.delete(path); else next.add(path);
+    try { localStorage.setItem(COLLAPSE_KEY, JSON.stringify([...next])); } catch { /* ignore */ }
+    return next;
+  });
+
+  const onResizeStart = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    drag.current = { x: e.clientX, w: width };
+    setDragWidth(width);
+  };
+  const onResizeMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!drag.current) return;
+    setDragWidth(clampSidebarWidth(drag.current.w + e.clientX - drag.current.x));
+  };
+  const onResizeEnd = () => {
+    if (!drag.current) return;
+    drag.current = null;
+    if (dragWidth != null && dragWidth !== width) onWidthChange(dragWidth);
+    setDragWidth(null);
+  };
+  const onResizeKey = (e: React.KeyboardEvent) => {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    e.preventDefault();
+    onWidthChange(clampSidebarWidth(width + (e.key === 'ArrowRight' ? 16 : -16)));
+  };
+
   const tree = blinko.tagList.value?.listTags ?? [];
   const initials = (user?.nickname || user?.name || 'BK').slice(0, 2).toUpperCase();
   const pending = blinko.offlineNotes.length + (blinko.offlinePendingOps.list?.length ?? 0);
-  // Collapsible logic to make sidebar breathe
-  const notesToShow = showMore ? NOTES_NAV : NOTES_NAV.filter((n) => n.id === 'home');
-  const todosToShow = showMore ? TODOS_NAV : TODOS_NAV.filter((t) => t.id === 'today');
-  const tagsToShow = showMore ? tree : tree.slice(0, 3);
+  const shownWidth = dragWidth ?? width;
+  const nativeChrome = isInTauri() && isMacOS();
 
   return (
-    <div className="bk-nav-rail" style={{ width: 248, height: '100%', flexShrink: 0, position: 'relative', background: 'color-mix(in srgb, var(--bg) 60%, #000 6%)', borderRight: '1px solid var(--border)' }}>
-      {isInTauri() && isMacOS() && (
-        <div
-          data-tauri-drag-region
-          style={{
-            height: 36,
-            display: 'flex',
-            alignItems: 'flex-end',
-            padding: '0 12px 6px 78px',
-            boxSizing: 'border-box',
-          }}
-        >
-          <span
-            data-tauri-drag-region
-            style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: 11,
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase',
-              color: 'var(--fg-3)',
-              userSelect: 'none',
-            }}
-          >
-            bkemo
-          </span>
-        </div>
-      )}
-      <div className="v-stack bk-scroll" style={{ height: isInTauri() && isMacOS() ? 'calc(100% - 36px)' : '100%', overflow: 'auto', padding: '12px 8px 12px', gap: 2 }}>
-        {/* workspace trigger */}
-        <div style={{ position: 'relative' }}>
+    <div
+      className="bk-nav-rail"
+      data-resizing={dragWidth != null ? '1' : undefined}
+      style={{ width: shownWidth, height: '100%', flexShrink: 0, position: 'relative', background: 'color-mix(in srgb, var(--bg) 60%, #000 6%)', borderRight: '1px solid var(--border)' }}
+    >
+      {nativeChrome && <div data-tauri-drag-region style={{ height: 36 }} />}
+      <div className="v-stack bk-scroll" style={{ height: nativeChrome ? 'calc(100% - 36px)' : '100%', overflowY: 'auto', overflowX: 'hidden', padding: nativeChrome ? '0 8px 10px' : '10px 8px', gap: 1 }}>
+        {/* workspace switcher */}
+        <div style={{ position: 'relative', marginBottom: 4 }}>
           <div
             onClick={() => setShowUserMenu(!showUserMenu)}
-            className="h-stack"
-            style={{
-              gap: 8,
-              padding: '8px 10px',
-              margin: '0 2px 10px',
-              borderRadius: 'var(--radius-lg, 12px)',
-              cursor: 'pointer',
-              userSelect: 'none',
-              alignItems: 'center',
-              background: showUserMenu ? 'var(--hover)' : 'transparent',
-              transition: 'background .15s'
-            }}
-            onMouseEnter={(e) => { if (!showUserMenu) e.currentTarget.style.background = 'var(--hover)'; }}
-            onMouseLeave={(e) => { if (!showUserMenu) e.currentTarget.style.background = 'transparent'; }}
+            {...pressable(() => setShowUserMenu(!showUserMenu))}
+            className={`h-stack bk-glass-nav${showUserMenu ? ' is-active' : ''}`}
+            style={{ gap: 9, padding: '6px 8px', borderRadius: 'var(--radius-lg, 10px)', cursor: 'pointer', userSelect: 'none', alignItems: 'center' }}
           >
             {user?.image ? (
               <img
                 src={getBlinkoEndpoint(`${user.image}?token=${user.tokenData.value?.token}`)}
-                alt="avatar"
+                alt=""
                 style={{ width: 22, height: 22, borderRadius: 6, objectFit: 'cover', flexShrink: 0 }}
               />
             ) : (
@@ -163,79 +181,38 @@ export const Sidebar = observer(function Sidebar({ activeRoute, onNav, onNewMemo
                 {initials}
               </div>
             )}
-            <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', margin: '0 4px' }}>
-              <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--fg)', lineHeight: 1.2 }}>bkemo</div>
-              <div style={{ fontSize: 10, color: 'var(--fg-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%', textAlign: 'left', lineHeight: 1.2 }}>{user?.nickname || user?.name || 'Guest'}</div>
-            </div>
-            <span style={{ color: 'var(--fg-3)', fontSize: 9, flexShrink: 0 }}>▼</span>
+            <span style={{ flex: 1, minWidth: 0, fontWeight: 600, fontSize: 13.5, color: 'var(--fg)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {user?.nickname || user?.name || 'bkemo'}
+            </span>
+            <SidebarIcon name="chevron" size={12} style={{ color: 'var(--fg-3)', transform: 'rotate(90deg)' }} />
           </div>
 
-          {/* Back-drop overlay */}
           {showUserMenu && (
-            <div
-              onClick={() => setShowUserMenu(false)}
-              style={{
-                position: 'fixed',
-                inset: 0,
-                zIndex: 69,
-                background: 'transparent'
-              }}
-            />
+            <div onClick={() => setShowUserMenu(false)} style={{ position: 'fixed', inset: 0, zIndex: 69, background: 'transparent' }} />
           )}
-
-          {/* Dropdown Menu */}
           {showUserMenu && (
             <div className="bk-glass"
-              style={{
-                position: 'absolute',
-                top: 36,
-                left: 2,
-                zIndex: 70,
-                width: 160,
-                borderRadius: 'var(--radius-lg)',
-                padding: '4px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 1
-              }}
+              style={{ position: 'absolute', top: 38, left: 0, zIndex: 70, width: 200, borderRadius: 'var(--radius-lg)', padding: 4, display: 'flex', flexDirection: 'column', gap: 1 }}
             >
               {[
-                { id: 'graph' as BkemoRoute, icon: '⊚', label: 'Graph' },
-                { id: 'calendar' as BkemoRoute, icon: '▦', label: 'Calendar' },
-                { id: 'files' as BkemoRoute, icon: '◳', label: 'Files' },
-                { id: 'analytics' as BkemoRoute, icon: '▥', label: 'Analytics' },
-                { id: 'ai' as BkemoRoute, icon: '✧', label: 'AI' },
-                { id: 'settings' as BkemoRoute, icon: '⚙', label: 'Settings' },
+                { id: 'analytics' as BkemoRoute, label: 'Analytics' },
+                { id: 'ai' as BkemoRoute, label: 'AI' },
+                { id: 'graph' as BkemoRoute, label: 'Graph' },
+                { id: 'calendar' as BkemoRoute, label: 'Calendar' },
+                { id: 'files' as BkemoRoute, label: 'Files' },
+                { id: 'settings' as BkemoRoute, label: 'Settings' },
               ].map((item) => (
                 <div
                   key={item.id}
                   onClick={() => { onNav(item.id); setShowUserMenu(false); }}
-                  style={{
-                    padding: '8px 12px',
-                    fontSize: 12.5,
-                    color: 'var(--fg)',
-                    borderRadius: 'var(--radius)',
-                    cursor: 'pointer',
-                    userSelect: 'none',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
-                    fontWeight: 500
-                  }}
-                  onMouseEnter={(e) => e.currentTarget.style.background = 'var(--hover)'}
-                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                  {...pressable(() => { onNav(item.id); setShowUserMenu(false); })}
+                  className="bk-glass-nav"
+                  style={{ padding: '7px 10px', fontSize: 12.5, borderRadius: 'var(--radius)', cursor: 'pointer', userSelect: 'none', fontWeight: 500 }}
                 >
-                  <span style={{ fontSize: 13, width: 16, textAlign: 'center' }}>{item.icon}</span>
-                  <span>{item.label}</span>
+                  {item.label}
                 </div>
               ))}
-              <div
-                style={{
-                  height: 1,
-                  background: 'var(--border)',
-                  margin: '3px 0'
-                }}
-              />
+              <div style={{ height: 1, background: 'var(--border)', margin: '3px 0' }} />
               <div
                 onClick={async () => {
                   setShowUserMenu(false);
@@ -243,79 +220,96 @@ export const Sidebar = observer(function Sidebar({ activeRoute, onNav, onNewMemo
                   eventBus.emit('user:signout');
                   navigate('/signin');
                 }}
-                style={{
-                  padding: '8px 12px',
-                  fontSize: 12.5,
-                  color: '#E0696B',
-                  borderRadius: 'var(--radius)',
-                  cursor: 'pointer',
-                  userSelect: 'none',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  fontWeight: 500
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.background = 'var(--hover)'}
-                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                className="bk-glass-nav"
+                style={{ padding: '7px 10px', fontSize: 12.5, color: '#E0696B', borderRadius: 'var(--radius)', cursor: 'pointer', userSelect: 'none', fontWeight: 500 }}
               >
-                <span style={{ fontSize: 13 }}>🚪</span>
-                <span>Log out</span>
+                Log out
               </div>
             </div>
           )}
         </div>
 
-        {/* search */}
-        <div onClick={onSearch} {...pressable(onSearch)} aria-label="Search" className="h-stack bk-glass-btn" style={{ margin: '0 4px 8px', padding: '7px 12px', borderRadius: 'var(--radius-lg, 12px)', gap: 10, color: 'var(--fg-3)', fontSize: 13, cursor: 'pointer' }}>
-          <span>⌕</span><span style={{ flex: 1 }}>Search…</span>
-          <span className="bk-kbd" style={{ fontSize: 10 }}>⌘K</span>
-        </div>
+        <SideRow icon={<SidebarIcon name="search" size={17} />} label="Search" onClick={onSearch} hint={<span className="bk-kbd" style={{ fontSize: 10 }}>⌘K</span>} />
+        <SideRow icon={<SidebarIcon name="plus" size={17} />} label="New memo" accent onClick={onNewMemo} hint={<span className="bk-kbd" style={{ fontSize: 10 }}>⌘N</span>} />
 
-        {/* new memo */}
-        <div onClick={onNewMemo} {...pressable(onNewMemo)} aria-label="New memo" className="h-stack bk-glass-btn is-accent" style={{ margin: '0 4px 14px', padding: '8px 12px', borderRadius: 'var(--radius-lg, 12px)', gap: 10, fontSize: 13.5, cursor: 'pointer', fontWeight: 600 }}>
-          <span>＋</span><span style={{ flex: 1 }}>New memo</span>
-          <span className="bk-kbd" style={{ fontSize: 10, background: 'rgba(255,255,255,0.08)' }}>⌘N</span>
-        </div>
-
-        <div style={sectionLbl}>journal</div>
-        {notesToShow.map((n) => (
-          <NavRow key={n.id} icon={n.icon} title={n.title} active={activeRoute === n.id} onClick={() => onNav(n.id)} />
-        ))}
-
-        <div style={sectionLbl}>tasks</div>
-        {todosToShow.map((n) => (
-          <NavRow key={n.id} icon={n.icon} title={n.title} active={activeRoute === n.id} onClick={() => onNav(n.id)} />
-        ))}
-
-        <div style={sectionLbl}>projects</div>
-        {tagsToShow.map((t: any) => <TagNavNode key={t.metadata?.path || t.name} node={t} depth={0} activeRoute={activeRoute} onNav={onNav} />)}
-
-        {/* Collapsible trigger */}
-        {(NOTES_NAV.length > notesToShow.length || TODOS_NAV.length > todosToShow.length || tree.length > tagsToShow.length) && (
+        {/* customizable toolbar */}
+        {tools.length > 0 && (
           <div
-            onClick={() => setShowMore(!showMore)}
-            className="h-stack"
-            style={{
-              gap: 10, padding: '8px 12px', marginTop: 8, borderRadius: 'var(--radius-lg, 12px)',
-              color: 'var(--fg-3)', fontSize: 13, cursor: 'pointer', userSelect: 'none',
-              transition: 'all 0.12s ease-in-out',
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.background = 'var(--hover)'}
-            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+            role="toolbar"
+            aria-label="Sidebar shortcuts"
+            className="bk-side-toolbar"
+            onContextMenu={onCustomize ? (e) => { e.preventDefault(); onCustomize(); } : undefined}
+            style={{ display: 'grid', gridTemplateColumns: `repeat(${tools.length}, 1fr)`, gap: 4, margin: '8px 0 4px' }}
           >
-            <span style={{ width: 16, fontSize: 12, textAlign: 'center' }}>{showMore ? '▴' : '▾'}</span>
-            <span>{showMore ? 'Show less' : 'More…'}</span>
+            {tools.map((id) => {
+              const active = activeRoute === id;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  aria-label={TOOL_LABEL[id]}
+                  aria-current={active ? 'page' : undefined}
+                  data-tip={TOOL_LABEL[id]}
+                  onClick={() => onNav(id)}
+                  className={`bk-side-tool bk-glass-nav${active ? ' is-active' : ''}`}
+                >
+                  <SidebarIcon name={id} size={18} />
+                </button>
+              );
+            })}
           </div>
+        )}
+
+        {showHeatmap && <SidebarHeatmap onOpenCalendar={() => onNav('calendar')} />}
+
+        {/* tags */}
+        <div
+          onClick={toggleTags}
+          {...pressable(toggleTags)}
+          aria-expanded={tagsOpen}
+          className="h-stack bk-side-section"
+          style={{ ...sectionLbl, gap: 4, cursor: 'pointer' }}
+        >
+          <span style={{ flex: 1 }}>Tags</span>
+          <SidebarIcon name="chevron" size={11} style={{ transform: tagsOpen ? 'rotate(90deg)' : undefined, transition: 'transform .15s' }} />
+        </div>
+        {tagsOpen && tree.map((t: any) => (
+          <TagNavNode key={t.metadata?.path || t.name} node={t} depth={0} activeRoute={activeRoute} onNav={onNav} collapsed={collapsed} onToggle={toggleTag} />
+        ))}
+        {tagsOpen && tree.length === 0 && (
+          <div style={{ padding: '4px 10px', fontSize: 12, color: 'var(--fg-3)' }}>Tags you write, like #idea, show up here.</div>
         )}
 
         <div style={{ flex: 1 }} />
 
-        {/* footer sync status */}
-        <div className="h-stack" style={{ padding: '12px 12px 4px', borderTop: '1px solid var(--border)', gap: 8, fontSize: 12, color: 'var(--fg-3)' }}>
+        {/* footer */}
+        <div className="h-stack" style={{ padding: '10px 10px 2px', marginTop: 8, borderTop: '1px solid var(--border)', gap: 8, fontSize: 12, color: 'var(--fg-3)' }}>
           <span style={{ width: 6, height: 6, borderRadius: 50, background: base.isOnline ? '#3FCB7E' : '#E0696B' }} />
-          <span>{base.isOnline ? 'Synced' : 'Offline'}{pending > 0 ? ` · ${pending} pending` : ''}</span>
+          <span style={{ flex: 1 }}>{base.isOnline ? 'Synced' : 'Offline'}{pending > 0 ? ` · ${pending} pending` : ''}</span>
+          <button type="button" className="bk-side-mini" aria-label="Settings" title="Settings" onClick={() => onNav('settings')}>
+            <SidebarIcon name="settings" size={14} />
+          </button>
         </div>
       </div>
+
+      {/* resize handle */}
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize sidebar"
+        aria-valuenow={shownWidth}
+        aria-valuemin={SIDEBAR_WIDTH.min}
+        aria-valuemax={SIDEBAR_WIDTH.max}
+        tabIndex={0}
+        title="Drag to resize · double-click to reset"
+        className="bk-side-resize"
+        onPointerDown={onResizeStart}
+        onPointerMove={onResizeMove}
+        onPointerUp={onResizeEnd}
+        onPointerCancel={onResizeEnd}
+        onDoubleClick={() => onWidthChange(SIDEBAR_WIDTH.default)}
+        onKeyDown={onResizeKey}
+      />
     </div>
   );
 });
