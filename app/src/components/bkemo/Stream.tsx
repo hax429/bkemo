@@ -377,7 +377,6 @@ const MemoRow = observer(function MemoRow({ note, onOpen, selected, selectionAct
         minWidth: 0,
         overflow: 'hidden',
         cursor: 'pointer',
-        transition: 'all 0.15s ease-in-out',
         boxShadow: note.isTop && !selected
           ? '0 4px 16px var(--accent-soft)'
           : undefined,

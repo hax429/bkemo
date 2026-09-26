@@ -50,8 +50,9 @@ capture windows and shared settings still import them.
   is at `/api/openapi.json`, Swagger at `/api-doc`, and the readable reference at
   `/docs`.
 - Connect MCP clients to `/mcp`, which uses stateless Streamable HTTP and its
-  own audience-bound OAuth 2.1 tokens. Settings -> Security & API manages
-  connected applications. Settings -> MCP connections controls encrypted,
+  own audience-bound OAuth 2.1 tokens. Settings -> Security & API only
+  creates, lists, and revokes access tokens (no MCP, Obsidian, or native
+  preset cards; OAuth clients are listed via `oauth.connections`). Settings -> MCP connections controls encrypted,
   allowlisted outbound Streamable HTTP connectors. See
   [`MCP.md`](./MCP.md).
 - Use the native SwiftUI iOS app (local-first timeline, every edit queued

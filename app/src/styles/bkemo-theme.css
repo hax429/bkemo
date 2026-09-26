@@ -123,9 +123,14 @@
   }
 }
 
-/* Soft card transitions & elevations for journal stream */
+/* Soft card transitions & elevations for journal stream.
+   Only compositor-cheap properties animate (not `all`): cards slide under the
+   pointer while scrolling, and animating every property repainted each one.
+   Off-screen cards skip layout and paint; long streams hold hundreds. */
 .bkemo .bk-memo {
-  transition: all 0.2s ease-in-out;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 180px;
 }
 .bkemo .bk-memo:hover {
   border-color: var(--border-2) !important;

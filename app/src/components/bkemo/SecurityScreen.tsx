@@ -1,13 +1,11 @@
 import { observer } from 'mobx-react-lite';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import dayjs from '@/lib/dayjs';
 import { api } from '@/lib/trpc';
-import { getBlinkoEndpoint } from '@/lib/blinkoEndpoint';
 import { ACCESS_SCOPES, type AccessScope } from '@shared/lib/accessTokenScopes';
 import {
   ACCESS_TOKEN_PLATFORMS,
   ACCESS_TOKEN_PLATFORM_LABELS,
-  APP_FULL_SCOPE,
   type AccessTokenPlatform,
 } from '@shared/lib/accessTokenPlatform';
 
@@ -24,17 +22,6 @@ const EXPIRY_OPTIONS = [
   { v: 90, label: '90 days' },
   { v: 365, label: '1 year' },
   { v: 0, label: 'No expiry' },
-];
-
-const OBSIDIAN_SCOPES: AccessScope[] = [
-  'notes:read', 'notes:write', 'tags:read', 'attachments:read', 'attachments:write',
-];
-
-const NATIVE_VIEW_ONLY_SCOPES: AccessScope[] = [
-  'notes:read', 'tags:read', 'attachments:read', 'comments:read',
-];
-const NATIVE_READ_WRITE_SCOPES: AccessScope[] = [
-  ...NATIVE_VIEW_ONLY_SCOPES, 'notes:write', 'tags:write', 'attachments:write', 'comments:write', 'settings',
 ];
 
 function Chip({ children, tone = 'var(--fg-2)' }: { children: React.ReactNode; tone?: string }) {
@@ -63,11 +50,6 @@ export const SecurityScreen = observer(function SecurityScreen() {
   const [creating, setCreating] = useState(false);
   const [created, setCreated] = useState<{ token: string; name: string } | null>(null);
   const [error, setError] = useState('');
-  const [connections, setConnections] = useState<any[]>([]);
-
-  const apiBase = getBlinkoEndpoint('/api');
-  const docsUrl = getBlinkoEndpoint('/docs');
-  const mcpUrl = getBlinkoEndpoint('/mcp');
 
   const load = async () => {
     setLoading(true);
@@ -76,26 +58,7 @@ export const SecurityScreen = observer(function SecurityScreen() {
     finally { setLoading(false); }
   };
   useEffect(() => { load(); }, []);
-  const loadConnections = async () => {
-    try { setConnections(await api.oauth.connections.query() as any[]); }
-    catch (e) { console.error('[security] OAuth connections failed:', e); }
-  };
-  useEffect(() => { loadConnections(); }, []);
-
   const toggleScope = (s: AccessScope) => setScopes((prev) => prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]);
-
-  const applyObsidianPreset = () => {
-    setPlatform('obsidian');
-    setScopes([...OBSIDIAN_SCOPES]);
-    if (!name.trim()) setName('Obsidian');
-  };
-
-  const applyNativePreset = (preset: 'view' | 'readwrite' | 'full') => {
-    if (platform !== 'ios' && platform !== 'macos') setPlatform('macos');
-    if (preset === 'view') setScopes([...NATIVE_VIEW_ONLY_SCOPES]);
-    else if (preset === 'readwrite') setScopes([...NATIVE_READ_WRITE_SCOPES]);
-    else setScopes([APP_FULL_SCOPE]);
-  };
 
   const create = async () => {
     setError('');
@@ -125,103 +88,11 @@ export const SecurityScreen = observer(function SecurityScreen() {
     catch (e) { console.error('[security] revoke failed:', e); }
   };
 
-  const curlExample = useMemo(() => (
-    `curl -X POST ${apiBase}/v1/note/list \\\n  -H "Authorization: Bearer <YOUR_TOKEN>" \\\n  -H "X-Bkemo-Platform: api" \\\n  -H "Content-Type: application/json" \\\n  -d '{"page":1,"size":20}'`
-  ), [apiBase]);
-
   return (
     <div>
       <h2 style={{ fontSize: 24, fontWeight: 600, color: 'var(--fg)', letterSpacing: '-0.02em', margin: 0 }}>Security & API</h2>
       <div style={{ color: 'var(--fg-2)', fontSize: 13, marginTop: 4, marginBottom: 22 }}>
-        Create platform-bound access tokens for iOS, macOS, Obsidian, and scripts. Each token is shown once — store it safely. Using a token from the wrong platform soft-allows the request and warns on Mac and Web.
-      </div>
-
-      <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', background: 'var(--bg-2)', padding: 16, marginBottom: 24 }}>
-        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--fg)', marginBottom: 8 }}>Obsidian companion</div>
-        <div style={{ color: 'var(--fg-2)', fontSize: 12, lineHeight: 1.5, marginBottom: 10 }}>
-          Create an access token with platform <span style={mono}>Obsidian</span> and recommended scopes
-          {' '}<span style={mono}>notes:read notes:write tags:read attachments:read attachments:write</span>,
-          then paste it in the plugin settings. Pairing codes are retired — every Obsidian install needs a new token.
-        </div>
-        <button
-          type="button"
-          onClick={applyObsidianPreset}
-          style={{ background: 'var(--accent)', border: 'none', color: '#fff', padding: '7px 16px', borderRadius: 'var(--radius)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}
-        >Fill Obsidian preset</button>
-      </div>
-
-      <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', background: 'var(--bg-2)', padding: 16, marginBottom: 24 }}>
-        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--fg)', marginBottom: 8 }}>iOS / macOS app</div>
-        <div style={{ color: 'var(--fg-2)', fontSize: 12, lineHeight: 1.5, marginBottom: 10 }}>
-          Neither app accepts a password. Pick a scope preset below (it also sets Platform to{' '}
-          <span style={mono}>macOS</span> — switch it to <span style={mono}>iOS</span> if you're
-          pairing the phone), create the token, then paste it into the app's sign-in screen.
-        </div>
-        <div className="h-stack" style={{ gap: 8, flexWrap: 'wrap' }}>
-          <button
-            type="button"
-            onClick={() => applyNativePreset('view')}
-            style={{ background: 'var(--bg)', border: '1px solid var(--border-2)', color: 'var(--fg)', padding: '7px 16px', borderRadius: 'var(--radius)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}
-          >View only</button>
-          <button
-            type="button"
-            onClick={() => applyNativePreset('readwrite')}
-            style={{ background: 'var(--bg)', border: '1px solid var(--border-2)', color: 'var(--fg)', padding: '7px 16px', borderRadius: 'var(--radius)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}
-          >Read & write</button>
-          <button
-            type="button"
-            onClick={() => applyNativePreset('full')}
-            style={{ background: 'var(--accent)', border: 'none', color: '#fff', padding: '7px 16px', borderRadius: 'var(--radius)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}
-          >Full access</button>
-        </div>
-      </div>
-
-      <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', background: 'var(--bg-2)', padding: 16, marginBottom: 24 }}>
-        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--fg)', marginBottom: 8 }}>MCP server</div>
-        <div style={{ color: 'var(--fg-2)', fontSize: 12, lineHeight: 1.5, marginBottom: 10 }}>
-          Streamable HTTP with OAuth 2.1 and scoped access. Compatible clients discover authorization automatically.
-        </div>
-        <div className="h-stack" style={{ gap: 8 }}>
-          <code style={{ flex: 1, background: 'var(--bg)', border: '1px solid var(--border-2)', borderRadius: 'var(--radius)', padding: '6px 10px', fontSize: 12, color: 'var(--fg)', overflow: 'auto', whiteSpace: 'nowrap' }}>{mcpUrl}</code>
-          <CopyButton text={mcpUrl} />
-        </div>
-        {connections.length > 0 && (
-          <div style={{ marginTop: 16, borderTop: '1px solid var(--border)', paddingTop: 12 }}>
-            <div style={{ ...mono, marginBottom: 8 }}>Connected applications</div>
-            {connections.map((connection) => (
-              <div key={connection.id} className="h-stack" style={{ gap: 10, padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ color: 'var(--fg)', fontSize: 12.5 }}>{connection.client.clientName}</div>
-                  <div className="h-stack" style={{ gap: 5, flexWrap: 'wrap', marginTop: 5 }}>
-                    {(connection.scopes as string[]).map((scope) => <Chip key={scope} tone="var(--accent)">{scope}</Chip>)}
-                  </div>
-                </div>
-                <button
-                  onClick={async () => {
-                    if (!window.confirm(`Disconnect ${connection.client.clientName}?`)) return;
-                    await api.oauth.revoke.mutate({ clientId: connection.client.id });
-                    await loadConnections();
-                  }}
-                  style={{ background: 'transparent', border: '1px solid #5C2A2A', color: '#E0696B', padding: '5px 12px', borderRadius: 'var(--radius)', fontSize: 12, cursor: 'pointer' }}
-                >Disconnect</button>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', background: 'var(--bg-2)', padding: 16, marginBottom: 24 }}>
-        <div className="h-stack" style={{ gap: 10, marginBottom: 10, alignItems: 'center' }}>
-          <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--fg)' }}>REST API</span>
-          <a href={docsUrl} target="_blank" rel="noreferrer" style={{ ...mono, color: 'var(--accent)' }}>open API reference ↗</a>
-        </div>
-        <div style={{ ...mono, marginBottom: 8 }}>Base URL</div>
-        <div className="h-stack" style={{ gap: 8, marginBottom: 12 }}>
-          <code style={{ flex: 1, background: 'var(--bg)', border: '1px solid var(--border-2)', borderRadius: 'var(--radius)', padding: '6px 10px', fontSize: 12, color: 'var(--fg)', overflow: 'auto', whiteSpace: 'nowrap' }}>{apiBase}</code>
-          <CopyButton text={apiBase} />
-        </div>
-        <div style={{ ...mono, marginBottom: 8 }}>Example</div>
-        <pre style={{ background: 'var(--bg)', border: '1px solid var(--border-2)', borderRadius: 'var(--radius)', padding: '10px 12px', fontSize: 11.5, color: 'var(--fg-2)', overflow: 'auto', margin: 0, lineHeight: 1.6 }}>{curlExample}</pre>
+        Create platform-bound access tokens. Each token is shown once — store it safely. Using a token from the wrong platform soft-allows the request and warns on Mac and Web.
       </div>
 
       <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', background: 'var(--bg-2)', padding: 16, marginBottom: 24 }}>
